@@ -3,8 +3,21 @@
 #
 
 import boto
+from boto.exception import EC2ResponseError
 
-class EC2_Driver(object):
+import config
+import images
+
+class Config(config.BaseConfig):
+    def __init__(self, awsPublicKey, awsPrivateKey):
+        config.BaseConfig.__init__(self)
+        self.awsPublicKey = awsPublicKey
+        self.awsPrivateKey = awsPrivateKey
+
+class Image(images.BaseImage):
+    "EC2 Image"
+
+class Driver(object):
     __slots__ = [ 'ec2conn' ]
 
     def __init__(self, cfg):
@@ -39,3 +52,11 @@ class EC2_Driver(object):
             return True
         except EC2ResponseError:
             return False
+
+    def getAllImages(self, imageIds = None, owners = None):
+        try:
+            rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
+            return [ Image(id=x.id, location=x.location, state=x.state,
+                isPublic=x.is_public) for x in rs ]
+        except EC2ResponseError:
+            return None

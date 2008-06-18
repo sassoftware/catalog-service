@@ -6,7 +6,7 @@ from rpath_common import xmllib
 
 import xmlNode
 
-class BaseInstance(xmlNode.BaseNode):
+class BaseImage(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'location', 'state', 'isPublic' ]
     def __init__(self, attrs = None, nsMap = None, **kwargs):
@@ -66,8 +66,12 @@ class BaseInstance(xmlNode.BaseNode):
             return None
         return xmllib.BooleanNode.fromString(self.isPublic.getText())
 
+    def __repr__(self):
+        return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
+            id(self))
+
 class Handler(xmllib.DataBinder):
-    instanceClass = BaseInstance
+    instanceClass = BaseImage
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.instanceClass, self.instanceClass.tag)
