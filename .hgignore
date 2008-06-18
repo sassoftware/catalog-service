@@ -1,0 +1,8 @@
+(^|/)\.hg($|/)
+.*\.pyc$
+.*\~$
+.*,cover$
+.*\.o$
+.*\.so$
+^tmp/
+^pylint/reports/
