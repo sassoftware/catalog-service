@@ -17,6 +17,10 @@ class Config(config.BaseConfig):
 class Image(images.BaseImage):
     "EC2 Image"
 
+class Images(images.BaseImages):
+    "EC2 Images"
+
+
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
 
@@ -53,10 +57,14 @@ class Driver(object):
         except EC2ResponseError:
             return False
 
-    def getAllImages(self, imageIds = None, owners = None):
+    def getAllImages(self, imageIds = None, owners = None, prefix = None):
+        def addPrefix(data):
+            if prefix is None:
+                return data
+            return prefix + data
         try:
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
-            return [ Image(id=x.id, location=x.location, state=x.state,
-                isPublic=x.is_public) for x in rs ]
+            return [ Image(id=addPrefix(x.id), location=x.location,
+                           state=x.state, isPublic=x.is_public) for x in rs ]
         except EC2ResponseError:
             return None

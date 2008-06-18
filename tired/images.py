@@ -7,7 +7,7 @@ from rpath_common import xmllib
 import xmlNode
 
 class BaseImage(xmlNode.BaseNode):
-    tag = 'instance'
+    tag = 'image'
     __slots__ = [ 'id', 'location', 'state', 'isPublic' ]
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
@@ -70,8 +70,13 @@ class BaseImage(xmlNode.BaseNode):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
             id(self))
 
+class BaseImages(xmlNode.BaseNodeCollection):
+    tag = "images"
+
 class Handler(xmllib.DataBinder):
-    instanceClass = BaseImage
+    imageClass = BaseImage
+    imagesClass = BaseImages
     def __init__(self):
         xmllib.DataBinder.__init__(self)
-        self.registerType(self.instanceClass, self.instanceClass.tag)
+        self.registerType(self.imageClass, self.imageClass.tag)
+        self.registerType(self.imagesClass, self.imagesClass.tag)

@@ -37,4 +37,5 @@ class BaseNode(xmllib.BaseNode):
         if nodeName in self.__slots__:
             setattr(self, nodeName, node)
 
-
+class BaseNodeCollection(xmllib.SerializableList):
+    "Base class for node collections"
