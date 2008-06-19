@@ -66,7 +66,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/xml")
         self.send_header("Content-Length", len(data))
-        self.end_headers
+        self.end_headers()
         self.wfile.write(data)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
