@@ -8,19 +8,21 @@ import xmlNode
 
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
-    __slots__ = [ 'id', 'location', 'state', 'isPublic' ]
+    __slots__ = [ 'id', 'imageId', 'ownerId', 'location', 'state', 'isPublic' ]
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
         self.setId(kwargs.get('id'))
+        self.setImageId(kwargs.get('imageId'))
         self.setLocation(kwargs.get('location'))
         self.setState(kwargs.get('state'))
         self.setIsPublic(kwargs.get('isPublic'))
+        self.setOwnerId(kwargs.get('ownerId'))
 
     def setId(self, data):
         self.id = None
         if data is None:
-            return
+            return self
         self.id = xmllib.GenericNode().setName('id').characters(data)
         return self
 
@@ -29,10 +31,34 @@ class BaseImage(xmlNode.BaseNode):
             return None
         return self.id.getText()
 
+    def setImageId(self, data):
+        self.imageId = None
+        if data is None:
+            return self
+        self.imageId = xmllib.GenericNode().setName('imageId').characters(data)
+        return self
+
+    def getImageId(self):
+        if self.imageId is None:
+            return None
+        return self.imageId.getText()
+
+    def setOwnerId(self, data):
+        self.ownerId = None
+        if data is None:
+            return self
+        self.ownerId = xmllib.GenericNode().setName('ownerId').characters(data)
+        return self
+
+    def getOwnerId(self):
+        if self.ownerId is None:
+            return None
+        return self.ownerId.getText()
+
     def setLocation(self, data):
         self.location = None
         if data is None:
-            return
+            return self
         self.location = xmllib.GenericNode().setName('location').characters(data)
         return self
 
@@ -44,7 +70,7 @@ class BaseImage(xmlNode.BaseNode):
     def setState(self, data):
         self.state = None
         if data is None:
-            return
+            return self
         self.state = xmllib.GenericNode().setName('state').characters(data)
         return self
 
@@ -56,7 +82,7 @@ class BaseImage(xmlNode.BaseNode):
     def setIsPublic(self, data):
         self.isPublic = None
         if data is None:
-            return
+            return self
         data = xmllib.BooleanNode.toString(data)
         self.isPublic = xmllib.GenericNode().setName('isPublic').characters(data)
         return self

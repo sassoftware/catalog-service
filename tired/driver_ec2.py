@@ -64,7 +64,8 @@ class Driver(object):
             return prefix + data
         try:
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
-            return [ Image(id=addPrefix(x.id), location=x.location,
+            return [ Image(id=addPrefix(x.id), imageId=x.id,
+                           ownerId=x.ownerId, location=x.location,
                            state=x.state, isPublic=x.is_public) for x in rs ]
         except EC2ResponseError:
             return None
