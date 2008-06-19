@@ -50,9 +50,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
-        if self.port == 80:
-            hostport = self.host
-        else:
+        if self.port != 80 or ':' not in hostport:
             hostport = "%s:%s" % (self.host, self.port)
         prefix = "http://%s/%s/clouds/ec2/images/" % (hostport,
                 self.server.toplevel)
