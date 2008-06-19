@@ -53,7 +53,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         hostport = self.host
         if self.port != 80 or ':' not in hostport:
             hostport = "%s:%s" % (self.host, self.port)
-        print "XXXX", hostport
+        print "XXXX", hostport, self.host
         prefix = "http://%s/%s/clouds/ec2/images/" % (hostport,
                 self.server.toplevel)
         imgList = drv.getAllImages(prefix = prefix)
