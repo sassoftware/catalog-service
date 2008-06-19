@@ -7,6 +7,7 @@ from boto.exception import EC2ResponseError
 
 import config
 import images
+import instances
 
 class Config(config.BaseConfig):
     def __init__(self, awsPublicKey, awsPrivateKey):
@@ -20,6 +21,11 @@ class Image(images.BaseImage):
 class Images(images.BaseImages):
     "EC2 Images"
 
+class Instance(instances.BaseInstance):
+    "EC2 Instance"
+
+class Instances(instances.BaseInstances):
+    "EC2 Instances"
 
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
@@ -67,5 +73,36 @@ class Driver(object):
             return [ Image(id=addPrefix(x.id), imageId=x.id,
                            ownerId=x.ownerId, location=x.location,
                            state=x.state, isPublic=x.is_public) for x in rs ]
+        except EC2ResponseError:
+            return None
+
+    def getAllInstances(self, instanceIds = None, prefix = None):
+        def addPrefix(data):
+            if prefix is None:
+                return data
+            return prefix + data
+        try:
+            rs = self.ec2conn.get_all_instances(instance_ids = instanceIds)
+            ret = []
+            for reserv in rs:
+                for x in reserv.instances:
+                    inst = Instance(
+                        id=addPrefix(x.id), dnsName=x.dns_name,
+                        publicDnsName=x.public_dns_name,
+                        privateDnsName=x.private_dns_name,
+                        state=x.state, stateCode=x.state_code,
+                        keyName=x.key_name,
+                        shutdownState=x.shutdown_state,
+                        previousState=x.previous_state,
+                        instanceType=x.instance_type,
+                        launchTime=x.launch_time,
+                        imageId=x.image_id,
+                        placement=x.placement,
+                        kernel=x.kernel,
+                        ramdisk=x.ramdisk,
+                        reservationId=reserv.id,
+                        ownerId=reserv.owner_id)
+                    ret.append(inst)
+            return ret
         except EC2ResponseError:
             return None

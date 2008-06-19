@@ -14,6 +14,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         if self.path == '/%s/clouds/ec2/images' % self.server.toplevel:
             return self.enumerateImages()
+        if self.path == '/%s/clouds/ec2/instances' % self.server.toplevel:
+            return self.enumerateInstances()
 
     def do_PUT(self):
         self._validateHeaders()
@@ -67,6 +69,36 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(data))
         self.end_headers()
         self.wfile.write(data)
+
+    def enumerateInstances(self):
+        import images
+        import driver_ec2
+
+        awsPublicKey = '16CVNRTTWQG9MZ517782'
+        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+
+        cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
+
+        drv = driver_ec2.Driver(cfg)
+
+        hostport = self.host
+        if self.port != 80 and ':' not in hostport:
+            hostport = "%s:%s" % (self.host, self.port)
+        prefix = "http://%s/%s/clouds/ec2/instances/" % (hostport,
+                self.server.toplevel)
+        instList = drv.getAllInstances(prefix = prefix)
+
+        node = driver_ec2.Instances()
+        node.extend(instList)
+        hndlr = images.Handler()
+        data = hndlr.toXml(node)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     toplevel = 'TOPLEVEL'
