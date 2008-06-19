@@ -87,7 +87,8 @@ class Driver(object):
             for reserv in rs:
                 for x in reserv.instances:
                     inst = Instance(
-                        id=addPrefix(x.id), dnsName=x.dns_name,
+                        id=addPrefix(x.id), instanceId=x.id,
+                        dnsName=x.dns_name,
                         publicDnsName=x.public_dns_name,
                         privateDnsName=x.private_dns_name,
                         state=x.state, stateCode=x.state_code,
