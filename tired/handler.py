@@ -12,6 +12,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self._validateHeaders()
         self._auth()
 
+        if self.path == '/crossdomain.xml':
+            return self.serveCrossDomainFile()
         if self.path == '/%s/clouds/ec2/images' % self.server.toplevel:
             return self.enumerateImages()
         if self.path == '/%s/clouds/ec2/instances' % self.server.toplevel:
@@ -99,6 +101,22 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def serveCrossDomainFile(self):
+        path = "crossdomain.xml"
+        f = open(path)
+        f.seek(2)
+        fileSize = f.tell()
+        f.seek(0)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", fileSize)
+        self.end_headers()
+        while 1:
+            buf = f.read(16384)
+            if not buf:
+                break
+            self.wfile.write(buf)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     toplevel = 'TOPLEVEL'
