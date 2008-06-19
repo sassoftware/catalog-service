@@ -99,6 +99,15 @@ class BaseImage(xmlNode.BaseNode):
 class BaseImages(xmlNode.BaseNodeCollection):
     tag = "images"
 
+class BaseImageType(xmlNode.BaseNode):
+    tag = "imageType"
+    __slots__ = [ 'label', 'description' ]
+
+
+
+class BaseImageTypes(xmlNode.BaseNodeCollection):
+    tag = "imageTypes"
+
 class Handler(xmllib.DataBinder):
     imageClass = BaseImage
     imagesClass = BaseImages
