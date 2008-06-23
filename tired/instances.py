@@ -18,6 +18,13 @@ class BaseInstance(xmlNode.BaseNode):
 class BaseInstances(xmlNode.BaseNodeCollection):
     tag = "instances"
 
+class InstanceType(xmlNode.BaseNode):
+    tag = 'instanceType'
+    __slots__ = [ 'id', 'description' ]
+
+class InstanceTypes(xmlNode.BaseNodeCollection):
+    tag = "instanceTypes"
+
 class Handler(xmllib.DataBinder):
     instanceClass = BaseInstance
     instancesClass = BaseInstances

@@ -27,6 +27,20 @@ class Instance(instances.BaseInstance):
 class Instances(instances.BaseInstances):
     "EC2 Instances"
 
+class InstanceType(instances.InstanceType):
+    "EC2 Instance Type"
+
+class InstanceTypes(instances.InstanceTypes):
+    "EC2 Instance Types"
+
+    idMap = [
+        ('m1.small', "Small"),
+        ('m1.large', "Large"),
+        ('m1.xlarge', "Extra Large"),
+        ('c1.medium', "High-CPU Medium"),
+        ('c1.xlarge', "High-CPU Extra Large"),
+    ]
+
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
 
@@ -107,3 +121,9 @@ class Driver(object):
             return ret
         except EC2ResponseError:
             return None
+
+    def getAllInstanceTypes(self):
+        ret = InstanceTypes()
+        ret.extend(InstanceType(id=x, description=y)
+                   for x, y in InstanceTypes.idMap)
+        return ret

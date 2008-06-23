@@ -18,6 +18,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateImages()
         if self.path == '/%s/clouds/ec2/instances' % self.server.toplevel:
             return self.enumerateInstances()
+        if self.path == '/%s/clouds/ec2/instanceTypes' % self.server.toplevel:
+            return self.enumerateInstanceTypes()
+
 
     def do_PUT(self):
         self._validateHeaders()
@@ -100,6 +103,34 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(data))
         self.end_headers()
         self.wfile.write(data)
+
+    def enumerateInstanceTypes(self):
+        import images
+        import driver_ec2
+
+        awsPublicKey = '16CVNRTTWQG9MZ517782'
+        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+
+        cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
+
+        drv = driver_ec2.Driver(cfg)
+
+        hostport = self.host
+        if self.port != 80 and ':' not in hostport:
+            hostport = "%s:%s" % (self.host, self.port)
+        prefix = "http://%s/%s/clouds/ec2/instanceTypes/" % (hostport,
+                self.server.toplevel)
+        node = drv.getAllInstanceTypes()
+
+        hndlr = images.Handler()
+        data = hndlr.toXml(node)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
 
     def serveCrossDomainFile(self):
         path = "crossdomain.xml"
