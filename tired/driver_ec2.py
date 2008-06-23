@@ -77,31 +77,29 @@ class Driver(object):
         except EC2ResponseError:
             return False
 
+    @staticmethod
+    def addPrefix(prefix, data):
+        if prefix is None:
+            return data
+        return prefix + data
+
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
-        def addPrefix(data):
-            if prefix is None:
-                return data
-            return prefix + data
         try:
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
-            return [ Image(id=addPrefix(x.id), imageId=x.id,
+            return [ Image(id=self.addPrefix(prefix, x.id), imageId=x.id,
                            ownerId=x.ownerId, location=x.location,
                            state=x.state, isPublic=x.is_public) for x in rs ]
         except EC2ResponseError:
             return None
 
     def getAllInstances(self, instanceIds = None, prefix = None):
-        def addPrefix(data):
-            if prefix is None:
-                return data
-            return prefix + data
         try:
             rs = self.ec2conn.get_all_instances(instance_ids = instanceIds)
             ret = []
             for reserv in rs:
                 for x in reserv.instances:
                     inst = Instance(
-                        id=addPrefix(x.id), instanceId=x.id,
+                        id=self.addPrefix(prefix, x.id), instanceId=x.id,
                         dnsName=x.dns_name,
                         publicDnsName=x.public_dns_name,
                         privateDnsName=x.private_dns_name,
@@ -122,8 +120,9 @@ class Driver(object):
         except EC2ResponseError:
             return None
 
-    def getAllInstanceTypes(self):
+    def getAllInstanceTypes(self, prefix=None):
         ret = InstanceTypes()
-        ret.extend(InstanceType(id=x, description=y)
+        ret.extend(InstanceType(id=self.addPrefix(prefix, x), imageTypeId=x,
+                   description=y)
                    for x, y in InstanceTypes.idMap)
         return ret

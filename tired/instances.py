@@ -20,7 +20,7 @@ class BaseInstances(xmlNode.BaseNodeCollection):
 
 class InstanceType(xmlNode.BaseNode):
     tag = 'instanceType'
-    __slots__ = [ 'id', 'description' ]
+    __slots__ = [ 'id', 'imageTypeId', 'description' ]
 
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"

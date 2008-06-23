@@ -120,7 +120,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             hostport = "%s:%s" % (self.host, self.port)
         prefix = "http://%s/%s/clouds/ec2/instanceTypes/" % (hostport,
                 self.server.toplevel)
-        node = drv.getAllInstanceTypes()
+        node = drv.getAllInstanceTypes(prefix=prefix)
 
         hndlr = images.Handler()
         data = hndlr.toXml(node)
