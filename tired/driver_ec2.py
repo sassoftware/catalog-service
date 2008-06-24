@@ -84,11 +84,13 @@ class Driver(object):
         return prefix + data
 
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
+        node = Images()
         try:
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
-            return [ Image(id=self.addPrefix(prefix, x.id), imageId=x.id,
-                           ownerId=x.ownerId, location=x.location,
-                           state=x.state, isPublic=x.is_public) for x in rs ]
+            node.extend(Image(id=self.addPrefix(prefix, x.id), imageId=x.id,
+                              ownerId=x.ownerId, location=x.location,
+                              state=x.state, isPublic=x.is_public) for x in rs)
+            return node
         except EC2ResponseError:
             return None
 
@@ -116,7 +118,9 @@ class Driver(object):
                         reservationId=reserv.id,
                         ownerId=reserv.owner_id)
                     ret.append(inst)
-            return ret
+            node = Instances()
+            node.extend(ret)
+            return node
         except EC2ResponseError:
             return None
 

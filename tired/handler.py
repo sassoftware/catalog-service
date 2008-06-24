@@ -62,10 +62,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             hostport = "%s:%s" % (self.host, self.port)
         prefix = "http://%s/%s/clouds/ec2/images/" % (hostport,
                 self.server.toplevel)
-        imgList = drv.getAllImages(prefix = prefix)
-
-        node = driver_ec2.Images()
-        node.extend(imgList)
+        node = drv.getAllImages(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
 
@@ -91,10 +88,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             hostport = "%s:%s" % (self.host, self.port)
         prefix = "http://%s/%s/clouds/ec2/instances/" % (hostport,
                 self.server.toplevel)
-        instList = drv.getAllInstances(prefix = prefix)
-
-        node = driver_ec2.Instances()
-        node.extend(instList)
+        node = drv.getAllInstances(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
 
