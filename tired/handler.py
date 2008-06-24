@@ -12,14 +12,20 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self._validateHeaders()
         self._auth()
 
+        hostport = self.host
+        if self.port != 80 and ':' not in hostport:
+            hostport = "%s:%s" % (self.host, self.port)
+        prefix = "http://%s/%s/clouds/ec2/images/" % (hostport,
+                self.server.toplevel)
+
         if self.path == '/crossdomain.xml':
             return self.serveCrossDomainFile()
         if self.path == '/%s/clouds/ec2/images' % self.server.toplevel:
-            return self.enumerateImages()
+            return self.enumerateImages(prefix)
         if self.path == '/%s/clouds/ec2/instances' % self.server.toplevel:
-            return self.enumerateInstances()
+            return self.enumerateInstances(prefix)
         if self.path == '/%s/clouds/ec2/instanceTypes' % self.server.toplevel:
-            return self.enumerateInstanceTypes()
+            return self.enumerateInstanceTypes(prefix)
 
 
     def do_PUT(self):
@@ -46,7 +52,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _auth(self):
         pass
 
-    def enumerateImages(self):
+    def enumerateImages(self, prefix):
         import images
         import driver_ec2
 
@@ -57,11 +63,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
-        hostport = self.host
-        if self.port != 80 and ':' not in hostport:
-            hostport = "%s:%s" % (self.host, self.port)
-        prefix = "http://%s/%s/clouds/ec2/images/" % (hostport,
-                self.server.toplevel)
         node = drv.getAllImages(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
@@ -83,11 +84,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
-        hostport = self.host
-        if self.port != 80 and ':' not in hostport:
-            hostport = "%s:%s" % (self.host, self.port)
-        prefix = "http://%s/%s/clouds/ec2/instances/" % (hostport,
-                self.server.toplevel)
         node = drv.getAllInstances(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
@@ -108,13 +104,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
         drv = driver_ec2.Driver(cfg)
-
-        hostport = self.host
-        if self.port != 80 and ':' not in hostport:
-            hostport = "%s:%s" % (self.host, self.port)
-        prefix = "http://%s/%s/clouds/ec2/instanceTypes/" % (hostport,
-                self.server.toplevel)
-        node = drv.getAllInstanceTypes(prefix=prefix)
 
         hndlr = images.Handler()
         data = hndlr.toXml(node)
