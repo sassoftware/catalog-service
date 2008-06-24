@@ -5,43 +5,7 @@
 import BaseHTTPServer
 
 class BaseRequest(object):
-    __slots__ = [ '_headersSent' ]
-    BUFFER_SIZE = 16384
-
-    def __init__(self):
-        self._headersSent = False
-
-    def write(self, data):
-        self._sendHeaders()
-        self._write(data)
-
-    def writeFromFile(self, fileObj):
-        self._sendHeaders()
-        while 1:
-            buf = fileObj.read(self.BUFFER_SIZE)
-            if not buf:
-                break
-            self._write(buf)
-
-    def _sendHeaders(self):
-        "Send headers"
-        if self._headersSent:
-            return
-        for key, val in self._iterHeadersOut():
-            if not isinstance(val, list):
-                val = [ val ]
-            for v in val:
-                self._sendHeader(key, v)
-        self._endHeaders(self)
-        self._headersSent = True
-
     #{ Methods to be redefined in subclasses
-    def addHeader(self, key, value):
-        "Add a single header value"
-
-    def addHeaders(self, key, values):
-        "Add a multi-valued header"
-
     def getAbsoluteURI(self):
         "Return the absolute URI for this request"
 
@@ -50,31 +14,14 @@ class BaseRequest(object):
 
     def _read(self, amt = None):
         "Called when reading the request body"
-
-    def _write(self, data):
-        "Called when writing the response body"
-
-    def _sendHeader(self, key, value):
-        "Called when sending a header"
-
-    def _endHeaders(self):
-        "Called when done sending the headers"
-
-    def _iterHeadersOut(self):
-        "Iterate over the outgoing headers"
     #}
 
 class StandaloneRequest(BaseRequest):
-    __slots__ = [ '_headersOut', '_req', '_read', '_write',
-                  '_sendHeader', '_endHeaders' ]
+    __slots__ = [ '_req', '_read' ]
     def __init__(self, req):
         BaseRequest.__init__(self)
-        self._headersOut = {}
         self._req = req
         self._read = self._req.rfile.read
-        self._write = self._req.wfile.write
-        self._sendHeader = self._req.send_header
-        self._endHeaders = self._req.end_headers
 
     def getRelativeURI(self):
         return self._req.path
@@ -85,19 +32,20 @@ class StandaloneRequest(BaseRequest):
             hostport = "%s:%s" % (self._req.host, self._req.port)
         return "http://%s%s" % (hostport, self._req.path)
 
-    def _iterHeadersOut(self):
-        for key, val in self._headersOut.items():
-            if isinstance(val, list):
-                for v in val:
-                    yield key, v
-            else:
-                yield key, val
-
 class Response(object):
     __slots__ = [ '_headersOut', '_data', '_file' ]
-    def __init__(self, headers = None, data = None, fileObj = None)
+    BUFFER_SIZE = 16384
+    def __init__(self, contentType = None, headers = None, data = None,
+                 fileObj = None):
         self._headersOut = {}
-        for k, v in headers:
+        self._data = self._file = None
+
+        if headers is None:
+            headers = {}
+        if contentType is not None:
+            headers['Content-Type'] = contentType
+
+        for k, v in headers.iteritems():
             if isinstance(v, list):
                 self.addHeaders(k, v)
             else:
@@ -116,6 +64,34 @@ class Response(object):
         assert(isinstance(values, list))
         self._headersOut[key] = [ str(x) for x in values ]
 
+    def addContentLength(self):
+        hname = 'Content-Length'
+        if self._data is not None:
+            self.addHeader(hname, len(self._data))
+            return
+        self._file.seek(0, 2)
+        fileSize = self._file.tell()
+        self._file.seek(0)
+        self.addHeader(hname, fileSize)
+
+    def serveResponse(self, write):
+        if self._data is not None:
+            write(self._data)
+            return
+        while 1:
+            buf = self._file.read(self.BUFFER_SIZE)
+            if not buf:
+                break
+            write(buf)
+
+    def iterHeaders(self):
+        for key, val in self._headersOut.items():
+            if isinstance(val, list):
+                for v in val:
+                    yield key, v
+            else:
+                yield key, val
+
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def log_message(self, *args, **kwargs):
         pass
@@ -125,13 +101,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self._auth()
 
         if self.path == '/crossdomain.xml':
-            return self.serveCrossDomainFile()
+            return self._handleResponse(self.serveCrossDomainFile())
         if self.path == '/%s/clouds/ec2/images' % self.server.toplevel:
-            return self.enumerateImages(prefix)
+            return self.enumerateImages(req)
         if self.path == '/%s/clouds/ec2/instances' % self.server.toplevel:
-            return self.enumerateInstances(prefix)
+            return self.enumerateInstances(req)
         if self.path == '/%s/clouds/ec2/instanceTypes' % self.server.toplevel:
-            return self.enumerateInstanceTypes(prefix)
+            return self.enumerateInstanceTypes(req)
 
 
     def do_PUT(self):
@@ -160,7 +136,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _auth(self):
         pass
 
-    def enumerateImages(self, prefix):
+    def _handleResponse(self, response):
+        response.addContentLength()
+        self.send_response(200)
+        for k, v in response.iterHeaders():
+            self.send_header(k, v)
+        self.end_headers()
+
+        response.serveResponse(self.wfile.write)
+
+    def enumerateImages(self, req):
         import images
         import driver_ec2
 
@@ -171,6 +156,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
+        prefix = req.getAbsoluteURI()
         node = drv.getAllImages(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
@@ -181,7 +167,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateInstances(self):
+    def enumerateInstances(self, req):
         import images
         import driver_ec2
 
@@ -192,6 +178,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
+        prefix = req.getAbsoluteURI()
         node = drv.getAllInstances(prefix = prefix)
         hndlr = images.Handler()
         data = hndlr.toXml(node)
@@ -202,7 +189,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateInstanceTypes(self):
+    def enumerateInstanceTypes(self, req):
         import images
         import driver_ec2
 
@@ -213,6 +200,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         drv = driver_ec2.Driver(cfg)
 
+        prefix = req.getAbsoluteURI()
+        node = drv.getAllInstanceTypes(prefix=prefix)
+
         hndlr = images.Handler()
         data = hndlr.toXml(node)
 
@@ -222,23 +212,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-
     def serveCrossDomainFile(self):
         path = "crossdomain.xml"
         f = open(path)
-        f.seek(2)
-        fileSize = f.tell()
-        f.seek(0)
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/xml")
-        self.send_header("Content-Length", fileSize)
-        self.end_headers()
-        while 1:
-            buf = f.read(16384)
-            if not buf:
-                break
-            self.wfile.write(buf)
+        return Response(contentType = 'application/xml', fileObj = f)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     toplevel = 'TOPLEVEL'
