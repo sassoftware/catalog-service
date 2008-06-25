@@ -56,6 +56,9 @@ class BaseRequest(object):
 
     def read(self, amt = None):
         "Called when reading the request body"
+
+    def iterHeaders(self):
+        "Iterate over the headers"
     #}
 
 class StandaloneRequest(BaseRequest):
@@ -76,6 +79,10 @@ class StandaloneRequest(BaseRequest):
 
     def getHeader(self, key):
         return self._req.headers.get(key, None)
+
+    def iterHeaders(self):
+        for k, v in self._req.headers.items():
+            yield k, v
 
 class Response(object):
     __slots__ = [ '_headersOut', '_data', '_file', '_code' ]
@@ -173,6 +180,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             arr = rp.split('/')
             userId = urllib.unquote(arr[0])
             if userId != req.getUser():
+                for k, v in req.iterHeaders():
+                    print "%s: %s" % (k, v)
                 raise Exception("XXX 1", userId, req.getUser())
             if arr[1:] == ['environment']:
                 return self._handleResponse(self.getEnvironment(req,
