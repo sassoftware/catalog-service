@@ -82,5 +82,8 @@ class BaseNodeCollection(xmllib.SerializableList):
     def finalize(self):
         return self
 
+    def characters(self, data):
+        return self
+
     addChild = xmllib.SerializableList.append
     getName = xmllib.SerializableList._getName

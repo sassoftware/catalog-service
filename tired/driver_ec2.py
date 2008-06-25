@@ -6,11 +6,12 @@ import boto
 from boto.exception import EC2ResponseError
 import urllib
 
-import config
-import images
-import instances
-import keypairs
-import securityGroups
+from tired import config
+from tired import environment
+from tired import images
+from tired import instances
+from tired import keypairs
+from tired import securityGroups
 
 class Config(config.BaseConfig):
     def __init__(self, awsPublicKey, awsPrivateKey):
@@ -55,6 +56,12 @@ class SecurityGroup(securityGroups.BaseSecurityGroup):
 
 class SecurityGroups(securityGroups.BaseSecurityGroups):
     "EC2 Security Groups"
+
+class Cloud(environment.BaseCloud):
+    "EC2 Cloud"
+
+class Environment(environment.BaseEnvironment):
+    "EC2 Environment"
 
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
@@ -173,4 +180,20 @@ class Driver(object):
         except EC2ResponseError:
             return None
 
+    def getEnvironment(self, prefix=None):
+        env = Environment()
+        cloud = Cloud()
 
+        instanceTypes = self.getAllInstanceTypes(prefix = prefix)
+        keyPairs = self.getAllKeyPairs(prefix = prefix)
+        securityGroups = self.getAllSecurityGroups(prefix = prefix)
+
+        cloud.setId('XXX-ec2')
+        cloud.setCloudName('ec2')
+        cloud.setInstanceTypes(instanceTypes)
+        cloud.setKeyPairs(keyPairs)
+        cloud.setSecurityGroups(securityGroups)
+
+        env.append(cloud)
+
+        return env
