@@ -7,11 +7,11 @@ from rpath_common import xmllib
 import xmlNode
 
 class BaseKeyPair(xmlNode.BaseNode):
-    tag = 'key-pair'
+    tag = 'keyPair'
     __slots__ = [ 'id', 'keyName', 'keyFingerprint' ]
 
 class BaseKeyPairs(xmlNode.BaseNodeCollection):
-    tag = 'key-pairs'
+    tag = 'keyPairs'
 
 class Handler(xmllib.DataBinder):
     keyPairClass = BaseKeyPair

@@ -56,6 +56,11 @@ class BaseNode(xmllib.BaseNode):
         setattr(self, key, None)
         if value is None:
             return self
+        if hasattr(value, 'getElementTree') and value._getName() == key:
+            # This catches the case where we have a list defined as one of the
+            # sub-nodes for this object
+            setattr(self, key, value)
+            return self
         setattr(self, key, xmllib.GenericNode().setName(key).characters(value))
         return self
 
@@ -63,7 +68,10 @@ class BaseNode(xmllib.BaseNode):
         val = getattr(self, key)
         if val is None:
             return None
-        return val.getText()
+        if hasattr(val, 'getText'):
+            return val.getText()
+        # Well, this may be a list of values. Just return it
+        return val
 
 class BaseNodeCollection(xmllib.SerializableList):
     "Base class for node collections"

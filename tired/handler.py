@@ -5,9 +5,10 @@
 import base64
 import BaseHTTPServer
 import os
+import urllib
 
-import config
-import storage
+from tired import config
+from tired import storage
 
 class StorageConfig(config.BaseConfig):
     def __init__(self, storagePath):
@@ -38,9 +39,14 @@ class BaseRequest(object):
             return int(cl)
         return None
 
-    #{ Methods to be redefined in subclasses
     def getAbsoluteURI(self):
         "Return the absolute URI for this request"
+        schemeNetloc = self.getSchemeNetloc()
+        return "%s%s" % (self.getSchemeNetloc(), self.getRelativeURI())
+
+    #{ Methods to be redefined in subclasses
+    def getSchemeNetloc(self):
+        """Return the scheme and network location for this request"""
 
     def getRelativeURI(self):
         "Return the relative URI for this request"
@@ -62,11 +68,11 @@ class StandaloneRequest(BaseRequest):
     def getRelativeURI(self):
         return self._req.path
 
-    def getAbsoluteURI(self):
+    def getSchemeNetloc(self):
         hostport = self._req.host
         if self._req.port != 80 and ':' not in hostport:
             hostport = "%s:%s" % (self._req.host, self._req.port)
-        return "http://%s%s" % (hostport, self._req.path)
+        return "http://%s" % (hostport, )
 
     def getHeader(self, key):
         return self._req.headers.get(key, None)
@@ -159,6 +165,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             return self._handleResponse(self.getUserData(req, self.path[len(p):]))
+        p = '/%s/clouds/ec2/users/' % self.toplevel
+        if self.path.startswith(p):
+            rp = self.path[len(p):]
+            cloudPrefix = '/%s/clouds/ec2' % self.toplevel
+            # Grab the user part
+            arr = rp.split('/')
+            userId = urllib.unquote(arr[0])
+            if userId != req.getUser():
+                raise Exception("XXX 1")
+            if arr[1:] == ['environment']:
+                return self._handleResponse(self.getEnvironment(req,
+                    cloudPrefix))
 
     def do_PUT(self):
         req = self._createRequest()
@@ -369,6 +387,25 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
             req.getAbsoluteURI(), )
         return Response(contentType = "text/xml", data = response)
+
+    def getEnvironment(self, req, cloudPrefix):
+        import environment
+        import driver_ec2
+
+        awsPublicKey = '16CVNRTTWQG9MZ517782'
+        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+
+        cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
+
+        drv = driver_ec2.Driver(cfg)
+
+        prefix = "%s%s" % (req.getSchemeNetloc(), cloudPrefix)
+        node = drv.getEnvironment(prefix=prefix)
+
+        hndlr = environment.Handler()
+        data = hndlr.toXml(node)
+
+        return Response(contentType="application/xml", data = data)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass

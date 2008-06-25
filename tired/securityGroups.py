@@ -7,11 +7,11 @@ from rpath_common import xmllib
 import xmlNode
 
 class BaseSecurityGroup(xmlNode.BaseNode):
-    tag = 'security-group'
+    tag = 'securityGroup'
     __slots__ = [ 'id', 'ownerId', 'groupName', 'description' ]
 
 class BaseSecurityGroups(xmlNode.BaseNodeCollection):
-    tag = 'security-groups'
+    tag = 'securityGroups'
 
 class Handler(xmllib.DataBinder):
     securityGroupClass = BaseSecurityGroup

@@ -184,11 +184,14 @@ class Driver(object):
         env = Environment()
         cloud = Cloud()
 
-        instanceTypes = self.getAllInstanceTypes(prefix = prefix)
-        keyPairs = self.getAllKeyPairs(prefix = prefix)
-        securityGroups = self.getAllSecurityGroups(prefix = prefix)
+        instanceTypes = self.getAllInstanceTypes(
+            prefix = "%s/instanceTypes/" % prefix)
+        keyPairs = self.getAllKeyPairs(
+            prefix = "%s/keyPairs/" % prefix)
+        securityGroups = self.getAllSecurityGroups(
+            prefix = "%s/securityGroups/" % prefix)
 
-        cloud.setId('XXX-ec2')
+        cloud.setId(prefix)
         cloud.setCloudName('ec2')
         cloud.setInstanceTypes(instanceTypes)
         cloud.setKeyPairs(keyPairs)
