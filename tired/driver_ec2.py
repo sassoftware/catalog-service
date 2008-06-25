@@ -4,11 +4,13 @@
 
 import boto
 from boto.exception import EC2ResponseError
+import urllib
 
 import config
 import images
 import instances
 import keypairs
+import securityGroups
 
 class Config(config.BaseConfig):
     def __init__(self, awsPublicKey, awsPrivateKey):
@@ -48,6 +50,12 @@ class KeyPair(keypairs.BaseKeyPair):
 class KeyPairs(keypairs.BaseKeyPairs):
     "EC2 Key Pairs"
 
+class SecurityGroup(securityGroups.BaseSecurityGroup):
+    "EC2 Security Group"
+
+class SecurityGroups(securityGroups.BaseSecurityGroups):
+    "EC2 Security Groups"
+
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
 
@@ -86,6 +94,7 @@ class Driver(object):
 
     @staticmethod
     def addPrefix(prefix, data):
+        data = urllib.quote(data, safe="")
         if prefix is None:
             return data
         return prefix + data
@@ -150,4 +159,18 @@ class Driver(object):
             return ret
         except EC2ResponseError:
             return None
+
+    def getAllSecurityGroups(self, groupNames = None, prefix = None):
+        try:
+            rs = self.ec2conn.get_all_security_groups(groupnames = groupNames)
+            ret = SecurityGroups()
+            ret.extend(
+                SecurityGroup(id=self.addPrefix(prefix, x.name),
+                        ownerId=x.owner_id, groupName=x.name,
+                        description=x.description)
+                        for x in rs)
+            return ret
+        except EC2ResponseError:
+            return None
+
 
