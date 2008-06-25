@@ -173,7 +173,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             arr = rp.split('/')
             userId = urllib.unquote(arr[0])
             if userId != req.getUser():
-                raise Exception("XXX 1")
+                raise Exception("XXX 1", userId, req.getUser())
             if arr[1:] == ['environment']:
                 return self._handleResponse(self.getEnvironment(req,
                     cloudPrefix))
@@ -332,7 +332,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # Split the arguments
         userData = userData.split('/')
         if userData[0] != req.getUser():
-            raise Exception("XXX 1")
+            raise Exception("XXX 1", userData[0], req.getUser())
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
