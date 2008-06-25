@@ -67,3 +67,20 @@ class BaseNode(xmllib.BaseNode):
 
 class BaseNodeCollection(xmllib.SerializableList):
     "Base class for node collections"
+
+    def __init__(self, attrs = None, nsMap = None):
+        xmllib.SerializableList.__init__(self)
+        self._attrs = attrs or {}
+        self._nsMap = nsMap or {}
+
+    def setName(self, name):
+        "No-op, it should be defined by the class"
+
+    def getNamespaceMap(self):
+        return self._nsMap.copy()
+
+    def finalize(self):
+        return self
+
+    addChild = xmllib.SerializableList.append
+    getName = xmllib.SerializableList._getName

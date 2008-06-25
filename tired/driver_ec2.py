@@ -8,6 +8,7 @@ from boto.exception import EC2ResponseError
 import config
 import images
 import instances
+import keypairs
 
 class Config(config.BaseConfig):
     def __init__(self, awsPublicKey, awsPrivateKey):
@@ -40,6 +41,12 @@ class InstanceTypes(instances.InstanceTypes):
         ('c1.medium', "High-CPU Medium"),
         ('c1.xlarge', "High-CPU Extra Large"),
     ]
+
+class KeyPair(keypairs.BaseKeyPair):
+    "EC2 Key Pair"
+
+class KeyPairs(keypairs.BaseKeyPairs):
+    "EC2 Key Pairs"
 
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
@@ -131,3 +138,16 @@ class Driver(object):
                    description=y)
                    for x, y in InstanceTypes.idMap)
         return ret
+
+    def getAllKeyPairs(self, keynames = None, prefix = None):
+        try:
+            rs = self.ec2conn.get_all_key_pairs(keynames = keynames)
+            ret = KeyPairs()
+            ret.extend(
+                KeyPair(id=self.addPrefix(prefix, x.name),
+                        keyName=x.name, keyFingerprint=x.fingerprint)
+                        for x in rs)
+            return ret
+        except EC2ResponseError:
+            return None
+
