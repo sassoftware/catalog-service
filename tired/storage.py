@@ -121,6 +121,16 @@ class BaseStorage(object):
         self.set(key, val)
         return key
 
+    def delete(self, key):
+        """Delete a key
+        @param key: the key
+        @type key: C{str}
+        @rtype: C{bool}
+        @return: True if the key exists, False otherwise
+        """
+        key = self._sanitizeKey(key)
+        return self._real_delete(key)
+
     #{ Methods that could be overwritten in subclasses
     def _generateString(self, length):
         """Generate a string
@@ -154,6 +164,9 @@ class BaseStorage(object):
     def _real_exists(self, key):
         raise NotImplementedError()
 
+    def _real_delete(self, key):
+        raise NotImplementedError()
+
     #}
 
 class DiskStorage(BaseStorage):
@@ -185,6 +198,11 @@ class DiskStorage(BaseStorage):
     def _real_exists(self, key):
         fpath = self._getFileForKey(key)
         return os.path.exists(fpath)
+
+    def _real_delete(self, key):
+        fpath = self._getFileForKey(key)
+        if os.path.exists(fpath):
+            os.unlink(fpath)
 
     def _getFileForKey(self, key, createDirs = False):
         ret = self.separator.join([self.cfg.storagePath, key])

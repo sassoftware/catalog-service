@@ -72,12 +72,13 @@ class StandaloneRequest(BaseRequest):
         return self._req.headers.get(key, None)
 
 class Response(object):
-    __slots__ = [ '_headersOut', '_data', '_file' ]
+    __slots__ = [ '_headersOut', '_data', '_file', '_code' ]
     BUFFER_SIZE = 16384
     def __init__(self, contentType = None, headers = None, data = None,
-                 fileObj = None):
+                 fileObj = None, code = None):
         self._headersOut = {}
         self._data = self._file = None
+        self._code = code or 200
 
         if headers is None:
             headers = {}
@@ -89,11 +90,12 @@ class Response(object):
                 self.addHeaders(k, v)
             else:
                 self.addHeader(k, v)
+
         if data:
             self._data = data
         elif fileObj:
             self._file = fileObj
-        else:
+        elif self._code == 200:
             assert False, "no data present"
 
     def addHeader(self, key, value):
@@ -131,6 +133,9 @@ class Response(object):
             else:
                 yield key, val
 
+    def getCode(self):
+        return self._code
+
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
@@ -160,6 +165,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if req is None:
             return
 
+        p = '/%s/users/' % self.toplevel
+        if self.path.startswith(p):
+            return self._handleResponse(self.setUserData(req, self.path[len(p):]))
+
     def do_POST(self):
         req = self._createRequest()
         if req is None:
@@ -173,6 +182,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req = self._createRequest()
         if req is None:
             return
+
+        p = '/%s/users/' % self.toplevel
+        if self.path.startswith(p):
+            self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
 
     def _createRequest(self):
         req = self._validateHeaders()
@@ -218,7 +231,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def _handleResponse(self, response):
         response.addContentLength()
-        self.send_response(200)
+        self.send_response(response.getCode())
         for k, v in response.iterHeaders():
             self.send_header(k, v)
         self.end_headers()
@@ -323,7 +336,39 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         store = storage.DiskStorage(self.storageConfig)
         key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         data = store.get(key)
-        return Response(contentType = "application/xml", data = data)
+        code = None
+        if data is None:
+            data = '<?xml version="1.0" encoding="UTF-8"?><error></error>'
+            code = 404
+        return Response(contentType = "application/xml", data = data,
+                        code = code)
+
+    def setUserData(self, req, userData):
+        userData = userData.split('/')
+        if userData[0] != req.getUser():
+            raise Exception("XXX 1")
+
+        dataLen = req.getContentLength()
+        data = req.read(dataLen)
+
+        store = storage.DiskStorage(self.storageConfig)
+        key = '/'.join(x for x in userData if x not in ('', '.', '..'))
+        store.set(key, data)
+        response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
+            req.getAbsoluteURI(), )
+        return Response(contentType = "text/xml", data = response)
+
+    def deleteUserData(self, req, userData):
+        userData = userData.split('/')
+        if userData[0] != req.getUser():
+            raise Exception("XXX 1")
+
+        store = storage.DiskStorage(self.storageConfig)
+        key = '/'.join(x for x in userData if x not in ('', '.', '..'))
+        store.delete(key)
+        response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
+            req.getAbsoluteURI(), )
+        return Response(contentType = "text/xml", data = response)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
