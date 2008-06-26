@@ -3,6 +3,7 @@
 #
 
 import os
+from boto.ec2 import connection as EC2Connection
 import boto
 from boto.exception import EC2ResponseError
 import urllib
@@ -14,6 +15,9 @@ from tired import instances
 from tired import newInstance
 from tired import keypairs
 from tired import securityGroups
+
+class Connection_EC2(EC2Connection.EC2Connection):
+    "EC2 Connection"
 
 class Config(config.BaseConfig):
     def __init__(self, awsPublicKey, awsPrivateKey):
@@ -69,7 +73,7 @@ class Driver(object):
     __slots__ = [ 'ec2conn' ]
 
     def __init__(self, cfg):
-        self.ec2conn = boto.connect_ec2(cfg.awsPublicKey, cfg.awsPrivateKey)
+        self.ec2conn = Connection_EC2(cfg.awsPublicKey, cfg.awsPrivateKey)
 
     def _launchInstance(self, ec2AMIId, minCount=1, maxCount=1,
             keyName=None, securityGroups=None, userData=None,

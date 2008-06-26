@@ -421,6 +421,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
     def newInstance(self, req, prefix):
+        import newInstance
         import driver_ec2
         awsPublicKey = '16CVNRTTWQG9MZ517782'
         awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
@@ -433,7 +434,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = req.read(dataLen)
 
         response = drv.newInstance(data, prefix = prefix)
-        return Response(contentType="application/xml", data = response)
+
+        hndlr = newInstance.Handler()
+        data = hndlr.toXml(response)
+
+        return Response(contentType="application/xml", data = data)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
