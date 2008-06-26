@@ -107,7 +107,7 @@ class Driver(object):
         data = urllib.quote(data, safe="")
         if prefix is None:
             return data
-        return prefix + data
+        return os.path.join(prefix, data)
 
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
         node = Images()
