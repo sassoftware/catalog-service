@@ -189,19 +189,19 @@ class Driver(object):
         # Extract the real IDs
         image = node.getImage()
         imageId = image.getId()
-        imageId = os.path.basename(imageId)
+        imageId = self._extractId(imageId)
 
         minCount = node.getMinCount() or 1
         maxCount = node.getMaxCount() or 1
 
         keyPair = node.getKeyPair()
         keyName = keyPair.getId()
-        keyName = os.path.basename(keyName)
+        keyName = self._extractId(keyName)
 
         securityGroups = []
         for sg in (node.getSecurityGroups() or []):
             sgId = sg.getId()
-            sgId = os.path.basename(sgId)
+            sgId = self._extractId(sgId)
             securityGroups.append(sgId)
 
         userData = node.getUserData()
@@ -211,13 +211,19 @@ class Driver(object):
             instanceType = 'm1.small'
         else:
             instanceType = instanceType.getId() or 'm1.small'
-            instanceType = os.path.basename(instanceType)
+            instanceType = self._extractId(instanceType)
 
         ret = self._launchInstance(imageId, minCount=minCount,
             maxCount=maxCount, keyName=keyName, securityGroups=securityGroups,
             userData=userData, instanceType=instanceType,
             prefix = prefix)
         return ret
+
+    @staticmethod
+    def _extractId(value):
+        if value is None:
+            return None
+        return urllib.unquote(os.path.basename(value))
 
     def _getInstancesFromResultSet(self, resultSet, prefix=None):
         node = Instances()
