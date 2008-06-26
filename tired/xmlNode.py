@@ -61,13 +61,22 @@ class BaseNode(xmllib.BaseNode):
             # sub-nodes for this object
             setattr(self, key, value)
             return self
-        setattr(self, key, xmllib.GenericNode().setName(key).characters(value))
+        if isinstance(value, int):
+            cls = xmllib.IntegerNode
+            value = str(value)
+        else:
+            cls = xmllib.GenericNode
+        setattr(self, key, cls().setName(key).characters(value))
         return self
 
     def _get(self, key):
         val = getattr(self, key)
         if val is None:
             return None
+        if isinstance(val, xmllib.IntegerNode):
+            return val.finalize()
+        if isinstance(val, BaseNode) and val.__slots__:
+            return val
         if hasattr(val, 'getText'):
             return val.getText()
         # Well, this may be a list of values. Just return it

@@ -13,7 +13,10 @@ class BaseInstance(xmlNode.BaseNode):
                   'state', 'stateCode', 'keyName', 'shutdownState',
                   'previousState', 'instanceType', 'launchTime',
                   'imageId', 'placement', 'kernel', 'ramdisk',
-                  'reservationId', 'ownerId']
+                  'reservationId', 'ownerId', 'launchIndex']
+
+class IntegerNode(xmlNode.xmllib.IntegerNode):
+    "Basic integer node"
 
 class BaseInstances(xmlNode.BaseNodeCollection):
     tag = "instances"
@@ -28,7 +31,9 @@ class InstanceTypes(xmlNode.BaseNodeCollection):
 class Handler(xmllib.DataBinder):
     instanceClass = BaseInstance
     instancesClass = BaseInstances
+    launchIndexClass = IntegerNode
     def __init__(self):
         xmllib.DataBinder.__init__(self)
+        self.registerType(self.launchIndexClass, 'launchIndex')
         self.registerType(self.instanceClass, self.instanceClass.tag)
         self.registerType(self.instancesClass, self.instancesClass.tag)

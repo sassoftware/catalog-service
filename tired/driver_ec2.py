@@ -2,6 +2,7 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import os
 import boto
 from boto.exception import EC2ResponseError
 import urllib
@@ -10,6 +11,7 @@ from tired import config
 from tired import environment
 from tired import images
 from tired import instances
+from tired import newInstance
 from tired import keypairs
 from tired import securityGroups
 
@@ -69,18 +71,19 @@ class Driver(object):
     def __init__(self, cfg):
         self.ec2conn = boto.connect_ec2(cfg.awsPublicKey, cfg.awsPrivateKey)
 
-    def launchInstance(self, ec2AMIId, userData=None, useNATAddressing=False):
+    def _launchInstance(self, ec2AMIId, minCount=1, maxCount=1,
+            keyName=None, securityGroups=None, userData=None,
+            instanceType=None, prefix = None):
 
-        # Get the appropriate addressing type to pass into the
-        # Amazon API; 'public' uses NAT, 'direct' is bridged.
-        # The latter method is deprecated and may go away in the
-        # future.
-        addressingType = useNATAddressing and 'public' or 'direct'
+        if instanceType is None:
+            instanceType = "m1.small"
         try:
             ec2Reservation = self.ec2conn.run_instances(ec2AMIId,
-                    user_data=userData, addressing_type=addressingType)
-            ec2Instance = ec2Reservation.instances[0]
-            return str(ec2Instance.id)
+                    min_count=minCount, max_count=maxCount,
+                    key_name=keyName, security_groups=securityGroups,
+                    user_data=userData, instance_type=instanceType)
+            return self._getInstancesFromResultSet([ec2Reservation],
+                prefix = prefix)
         except EC2ResponseError:
             return None
 
@@ -121,30 +124,7 @@ class Driver(object):
     def getAllInstances(self, instanceIds = None, prefix = None):
         try:
             rs = self.ec2conn.get_all_instances(instance_ids = instanceIds)
-            ret = []
-            for reserv in rs:
-                for x in reserv.instances:
-                    inst = Instance(
-                        id=self.addPrefix(prefix, x.id), instanceId=x.id,
-                        dnsName=x.dns_name,
-                        publicDnsName=x.public_dns_name,
-                        privateDnsName=x.private_dns_name,
-                        state=x.state, stateCode=x.state_code,
-                        keyName=x.key_name,
-                        shutdownState=x.shutdown_state,
-                        previousState=x.previous_state,
-                        instanceType=x.instance_type,
-                        launchTime=x.launch_time,
-                        imageId=x.image_id,
-                        placement=x.placement,
-                        kernel=x.kernel,
-                        ramdisk=x.ramdisk,
-                        reservationId=reserv.id,
-                        ownerId=reserv.owner_id)
-                    ret.append(inst)
-            node = Instances()
-            node.extend(ret)
-            return node
+            return self._getInstancesFromResultSet(rs, prefix = prefix)
         except EC2ResponseError:
             return None
 
@@ -200,3 +180,66 @@ class Driver(object):
         env.append(cloud)
 
         return env
+
+    def newInstance(self, launchData, prefix=None):
+        hndlr = newInstance.Handler()
+        node = hndlr.parseString(launchData)
+        assert(isinstance(node, newInstance.BaseNewInstance))
+
+        # Extract the real IDs
+        image = node.getImage()
+        imageId = image.getId()
+        imageId = os.path.basename(imageId)
+
+        minCount = node.getMinCount() or 1
+        maxCount = node.getMaxCount() or 1
+
+        keyPair = node.getKeyPair()
+        keyName = keyPair.getId()
+        keyName = os.path.basename(keyName)
+
+        securityGroups = []
+        for sg in (node.getSecurityGroups() or []):
+            sgId = sg.getId()
+            sgId = os.path.basename(sgId)
+            securityGroups.append(sgId)
+
+        userData = node.getUserData()
+
+        instanceType = node.getInstanceType()
+        if instanceType is None:
+            instanceType = 'm1.small'
+        else:
+            instanceType = instanceType.getId() or 'm1.small'
+            instanceType = os.path.basename(instanceType)
+
+        ret = self._launchInstance(imageId, minCount=minCount,
+            maxCount=maxCount, keyName=keyName, securityGroups=securityGroups,
+            userData=userData, instanceType=instanceType,
+            prefix = prefix)
+        return ret
+
+    def _getInstancesFromResultSet(self, resultSet, prefix=None):
+        node = Instances()
+        for reserv in resultSet:
+            for x in reserv.instances:
+                inst = Instance(
+                    id=self.addPrefix(prefix, x.id), instanceId=x.id,
+                    dnsName=x.dns_name,
+                    publicDnsName=x.public_dns_name,
+                    privateDnsName=x.private_dns_name,
+                    state=x.state, stateCode=x.state_code,
+                    keyName=x.key_name,
+                    shutdownState=x.shutdown_state,
+                    previousState=x.previous_state,
+                    instanceType=x.instance_type,
+                    launchTime=x.launch_time,
+                    imageId=x.image_id,
+                    placement=x.placement,
+                    kernel=x.kernel,
+                    ramdisk=x.ramdisk,
+                    reservationId=reserv.id,
+                    ownerId=reserv.owner_id,
+                    launchIndex=int(x.ami_launch_index))
+                node.append(inst)
+        return node

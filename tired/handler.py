@@ -204,6 +204,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             self._handleResponse(self.addUserData(req, self.path[len(p):]))
+        p = '/%s/clouds/ec2/instances' % self.toplevel
+        if self.path == p:
+            self._handleResponse(self.newInstance(req, p))
 
     def do_DELETE(self):
         req = self._createRequest()
@@ -415,6 +418,22 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = hndlr.toXml(node)
 
         return Response(contentType="application/xml", data = data)
+
+
+    def newInstance(self, req, prefix):
+        import driver_ec2
+        awsPublicKey = '16CVNRTTWQG9MZ517782'
+        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+
+        cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
+
+        drv = driver_ec2.Driver(cfg)
+
+        dataLen = req.getContentLength()
+        data = req.read(dataLen)
+
+        response = drv.newInstance(data, prefix = prefix)
+        return Response(contentType="application/xml", data = response)
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
