@@ -96,7 +96,7 @@ class Response(object):
         if headers is None:
             headers = {}
         if contentType is not None:
-            headers['Content-Type'] = contentType
+            headers['Content-Type'] = contentType or 'application/xml'
 
         for k, v in headers.iteritems():
             if isinstance(v, list):
@@ -157,10 +157,30 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        return self.processRequest(self._do_GET)
+
+    def do_POST(self):
+        return self.processRequest(self._do_POST)
+
+    def do_PUT(self):
+        return self.processRequest(self._do_PUT)
+
+    def do_DELETE(self):
+        return self.processRequest(self._do_DELETE)
+
+    def processRequest(self, method):
         req = self._createRequest()
         if req is None:
+            # _createRequest does all the work to send back the error codes
             return
 
+        try:
+            return method(req)
+        except:
+            # XXX
+            raise
+
+    def _do_GET(self, req):
         if self.path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         if self.path == '/%s/clouds/ec2/images' % self.toplevel:
@@ -187,20 +207,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 return self._handleResponse(self.getEnvironment(req,
                     cloudPrefix))
 
-    def do_PUT(self):
-        req = self._createRequest()
-        if req is None:
-            return
-
+    def _do_PUT(self, req):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             return self._handleResponse(self.setUserData(req, self.path[len(p):]))
 
-    def do_POST(self):
-        req = self._createRequest()
-        if req is None:
-            return
-
+    def _do_POST(self, req):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             self._handleResponse(self.addUserData(req, self.path[len(p):]))
@@ -208,11 +220,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.path == p:
             self._handleResponse(self.newInstance(req))
 
-    def do_DELETE(self):
-        req = self._createRequest()
-        if req is None:
-            return
-
+    def _do_DELETE(self, req):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             self._handleResponse(self.deleteUserData(req, self.path[len(p):]))

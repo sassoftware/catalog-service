@@ -136,7 +136,7 @@ class Driver(object):
 
     def getAllInstanceTypes(self, prefix=None):
         ret = InstanceTypes()
-        ret.extend(InstanceType(id=self.addPrefix(prefix, x), imageTypeId=x,
+        ret.extend(InstanceType(id=self.addPrefix(prefix, x), instanceTypeId=x,
                    description=y)
                    for x, y in InstanceTypes.idMap)
         return ret

@@ -23,7 +23,7 @@ class BaseInstances(xmlNode.BaseNodeCollection):
 
 class InstanceType(xmlNode.BaseNode):
     tag = 'instanceType'
-    __slots__ = [ 'id', 'imageTypeId', 'description' ]
+    __slots__ = [ 'id', 'instanceTypeId', 'description' ]
 
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
@@ -32,8 +32,12 @@ class Handler(xmllib.DataBinder):
     instanceClass = BaseInstance
     instancesClass = BaseInstances
     launchIndexClass = IntegerNode
+    instanceTypeClass = InstanceType
+    instanceTypesClass = InstanceTypes
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.launchIndexClass, 'launchIndex')
         self.registerType(self.instanceClass, self.instanceClass.tag)
         self.registerType(self.instancesClass, self.instancesClass.tag)
+        self.registerType(self.instanceTypeClass, self.instanceTypeClass.tag)
+        self.registerType(self.instanceTypesClass, self.instanceTypesClass.tag)
