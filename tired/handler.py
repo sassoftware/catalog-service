@@ -9,6 +9,8 @@ import urllib
 
 from tired import config
 from tired import storage
+from tired import userData
+from tired import xmlNode
 
 class StorageConfig(config.BaseConfig):
     def __init__(self, storagePath):
@@ -109,7 +111,12 @@ class Response(object):
                 self.addHeader(k, v)
 
         if data:
-            self._data = data
+            # We can pass a node directly
+            if hasattr(data, 'getElementTree'):
+                hndlr = xmlNode.Handler()
+                self._data = hndlr.toXml(data)
+            else:
+                self._data = data
         elif fileObj:
             self._file = fileObj
         elif self._code == 200:
@@ -188,17 +195,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise
 
     def _do_GET(self, req):
-        if self.path == '/crossdomain.xml':
+        path = req.getRelativeURI()
+        if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
-        if self.path == '/%s/clouds/ec2/images' % self.toplevel:
+        if path == '/%s/clouds/ec2/images' % self.toplevel:
             return self.enumerateImages(req)
-        if self.path == '/%s/clouds/ec2/instances' % self.toplevel:
+        if path == '/%s/clouds/ec2/instances' % self.toplevel:
             return self.enumerateInstances(req)
-        if self.path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
+        if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateInstanceTypes(req)
         p = '/%s/users/' % self.toplevel
-        if self.path.startswith(p):
-            return self._handleResponse(self.getUserData(req, self.path[len(p):]))
+        if path.startswith(p):
+            return self._handleResponse(self.getUserData(req, p, path[len(p):]))
         p = '/%s/clouds/ec2/users/' % self.toplevel
         if self.path.startswith(p):
             rp = self.path[len(p):]
@@ -424,14 +432,37 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             req.getAbsoluteURI(), os.path.basename(newId))
         return Response(contentType = "text/xml", data = response)
 
-    def getUserData(self, req, userData):
+    def getUserData(self, req, prefix, keyPath):
         # Split the arguments
-        userData = userData.split('/')
-        if userData[0] != req.getUser():
-            raise Exception("XXX 1", userData[0], req.getUser())
+        arr = keyPath.split('/')
+        if arr[0] != req.getUser():
+            raise Exception("XXX 1", arr[0], req.getUser())
 
+        prefix = "%s%s" % (req.getSchemeNetloc(), prefix)
         store = storage.DiskStorage(self.storageConfig)
-        key = '/'.join(x for x in userData if x not in ('', '.', '..'))
+
+        key = keyPath.rstrip('/')
+
+        if key != keyPath:
+            # A trailing / means retrieving the contents from a collection
+            if not store.isCollection(key):
+                raise Exception("XXX 2", prefix, keyPath)
+
+        if store.isCollection(key):
+            node = userData.IdsNode()
+            snodes = store.enumerate(keyPrefix = key)
+
+            if key == keyPath:
+                # No trailing /
+                snodes = [ userData.IdNode().characters("%s%s" % (prefix, x))
+                         for x in snodes ]
+                node.extend(snodes)
+                return Response(data = node)
+            # Grab contents and wrap them in some XML
+            data = [ store.get(x) for x in snodes ]
+            data = '<list>%s</list>' % ''.join(data)
+            return Response(data = data)
+
         data = store.get(key)
         code = None
         if data is None:

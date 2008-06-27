@@ -104,3 +104,6 @@ class BaseNodeCollection(xmllib.SerializableList):
 
     addChild = xmllib.SerializableList.append
     getName = xmllib.SerializableList._getName
+
+class Handler(xmllib.DataBinder):
+    "Base xml handler"
