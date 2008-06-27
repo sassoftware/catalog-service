@@ -37,12 +37,16 @@ class BaseRequest(object):
         cl = self.getHeader('Content-Length')
         if cl is not None:
             return int(cl)
-        return None
+        return 0
 
     def getAbsoluteURI(self):
         "Return the absolute URI for this request"
         schemeNetloc = self.getSchemeNetloc()
         return "%s%s" % (self.getSchemeNetloc(), self.getRelativeURI())
+
+    def getAbsoluteURIPath(self):
+        uri = self.getAbsoluteURI()
+        return urllib.splitquery(uri)[0]
 
     #{ Methods to be redefined in subclasses
     def getSchemeNetloc(self):
@@ -217,8 +221,19 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def _do_POST(self, req):
         p = '/%s/users/' % self.toplevel
-        if self.path.startswith(p):
-            self._handleResponse(self.addUserData(req, self.path[len(p):]))
+        # Look for a method
+        path, method = self._get_method(req.getRelativeURI(), 'POST')
+
+        if path.startswith(p):
+            pRest = path[len(p):]
+            if method == 'POST':
+                self._handleResponse(self.addUserData(req, pRest))
+            elif method == 'DELETE':
+                self._handleResponse(self.deleteUserData(req, pRest))
+            elif method == 'PUT':
+                self._handleResponse(self.setUserData(req, pRest))
+            return
+
         p = '/%s/clouds/ec2/instances' % self.toplevel
         if self.path == p:
             self._handleResponse(self.newInstance(req))
@@ -235,6 +250,28 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 instanceId = arr[0]
                 self._handleResponse(self.terminateInstance(req, instanceId,
                                      prefix = p))
+
+    @classmethod
+    def _get_method(cls, path, defaultMethod):
+        """
+        Given a path, retrieve the method from it (part of the query)
+        Return path and method (None if no method)
+        """
+        path, query = urllib.splitquery(path)
+        if not query:
+            return path, defaultMethod
+        rMap = cls._split_query(query)
+        return path, rMap.get('_method', defaultMethod)
+
+    @staticmethod
+    def _split_query(query):
+        rMap = {}
+        for v in query.split('&'):
+            arr = v.split('=', 1)
+            if len(arr) != 2:
+                continue
+            rMap[arr[0]] = arr[1]
+        return rMap
 
     def _createRequest(self):
         req = self._validateHeaders()
@@ -404,7 +441,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         store.set(key, data)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
-            req.getAbsoluteURI(), )
+            req.getAbsoluteURIPath(), )
         return Response(contentType = "text/xml", data = response)
 
     def deleteUserData(self, req, userData):
@@ -416,7 +453,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         store.delete(key)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
-            req.getAbsoluteURI(), )
+            req.getAbsoluteURIPath(), )
         return Response(contentType = "text/xml", data = response)
 
     def getEnvironment(self, req, cloudPrefix):
