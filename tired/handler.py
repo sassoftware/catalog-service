@@ -235,8 +235,19 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return
 
         p = '/%s/clouds/ec2/instances' % self.toplevel
-        if self.path == p:
+        if path == p:
             self._handleResponse(self.newInstance(req))
+            return
+        p += '/'
+        if path.startswith(p):
+            pRest = path[len(p):]
+            if method == 'DELETE':
+                arr = pRest.split('/')
+                if arr:
+                    instanceId = arr[0]
+                    self._handleResponse(self.terminateInstance(req, instanceId,
+                                         prefix = p))
+            return
 
     def _do_DELETE(self, req):
         p = '/%s/users/' % self.toplevel
