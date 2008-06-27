@@ -99,10 +99,12 @@ class Driver(object):
         except EC2ResponseError:
             return "unknown", ""
 
-    def terminateInstance(self, ec2InstanceId):
+    def _terminateInstances(self, instanceIds, prefix = None):
+        node = instances.BaseInstances()
         try:
-            self.ec2conn.terminate_instances(instance_ids=[ec2InstanceId])
-            return True
+            rs = self.ec2conn.terminate_instances(instance_ids=instanceIds)
+            node.extend(self._genInstances(rs, prefix = prefix))
+            return node
         except EC2ResponseError:
             return False
 
@@ -223,33 +225,47 @@ class Driver(object):
             prefix = prefix)
         return ret
 
+    def terminateInstance(self, instanceId, prefix = None):
+        ret = self._terminateInstances([instanceId], prefix = prefix)
+        return ret[0]
+
     @staticmethod
     def _extractId(value):
         if value is None:
             return None
         return urllib.unquote(os.path.basename(value))
 
+    def _genInstances(self, iList, reservation = None, prefix = None):
+        for x in iList:
+            ownerId = reservationId = launchIndex = None
+            if reservation:
+                ownerId = reservation.owner_id
+                reservationId = reservation.id
+            if hasattr(x, 'ami_launch_index'):
+                launchIndex = int(x.ami_launch_index)
+            inst = Instance(
+                id=self.addPrefix(prefix, x.id), instanceId=x.id,
+                dnsName=x.dns_name,
+                publicDnsName=x.public_dns_name,
+                privateDnsName=x.private_dns_name,
+                state=x.state, stateCode=x.state_code,
+                keyName=x.key_name,
+                shutdownState=x.shutdown_state,
+                previousState=x.previous_state,
+                instanceType=x.instance_type,
+                launchTime=x.launch_time,
+                imageId=x.image_id,
+                placement=x.placement,
+                kernel=x.kernel,
+                ramdisk=x.ramdisk,
+                reservationId=reservationId,
+                ownerId=ownerId,
+                launchIndex=launchIndex)
+            yield inst
+
     def _getInstancesFromResultSet(self, resultSet, prefix=None):
         node = Instances()
         for reserv in resultSet:
-            for x in reserv.instances:
-                inst = Instance(
-                    id=self.addPrefix(prefix, x.id), instanceId=x.id,
-                    dnsName=x.dns_name,
-                    publicDnsName=x.public_dns_name,
-                    privateDnsName=x.private_dns_name,
-                    state=x.state, stateCode=x.state_code,
-                    keyName=x.key_name,
-                    shutdownState=x.shutdown_state,
-                    previousState=x.previous_state,
-                    instanceType=x.instance_type,
-                    launchTime=x.launch_time,
-                    imageId=x.image_id,
-                    placement=x.placement,
-                    kernel=x.kernel,
-                    ramdisk=x.ramdisk,
-                    reservationId=reserv.id,
-                    ownerId=reserv.owner_id,
-                    launchIndex=int(x.ami_launch_index))
-                node.append(inst)
+            node.extend(self._genInstances(reserv.instances, reserv,
+                        prefix = prefix))
         return node

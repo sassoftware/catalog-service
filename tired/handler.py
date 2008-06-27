@@ -217,6 +217,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.path.startswith(p):
             self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
 
+        p = '/%s/clouds/ec2/instances/' % self.toplevel
+        if self.path.startswith(p):
+            arr = self.path[len(p):].split('/')
+            if arr:
+                instanceId = arr[0]
+                self._handleResponse(self.terminateInstance(req, instanceId,
+                                     prefix = p))
+
     def _createRequest(self):
         req = self._validateHeaders()
         if req is None:
@@ -440,6 +448,25 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = hndlr.toXml(response)
 
         return Response(contentType="application/xml", data = data)
+
+    def terminateInstance(self, req, instanceId, prefix):
+        import driver_ec2
+
+        awsPublicKey = '16CVNRTTWQG9MZ517782'
+        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+
+        cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
+
+        drv = driver_ec2.Driver(cfg)
+
+        prefix = req.getSchemeNetloc() + prefix
+        response = drv.terminateInstance(instanceId, prefix = prefix)
+
+        hndlr = driver_ec2.instances.Handler()
+        data = hndlr.toXml(response)
+
+        return Response(contentType="application/xml", data = data)
+
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
