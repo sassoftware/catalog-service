@@ -152,9 +152,12 @@ class Response(object):
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
+    logLevel = 1
 
-#    def log_message(self, *args, **kwargs):
-#        pass
+    def log_message(self, *args, **kwargs):
+        if self.logLevel > 0:
+            BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
+                *args, **kwargs)
 
     def do_GET(self):
         return self.processRequest(self._do_GET)
