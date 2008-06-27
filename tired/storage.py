@@ -87,6 +87,11 @@ class BaseStorage(object):
             return default
         return self.__getitem__(key)
 
+    def enumerate(self, keyPrefix):
+        """Enumerate keys"""
+        keyPrefix = self._sanitizeKey(keyPrefix)
+        return self._real_enumerate(keyPrefix)
+
     def exists(self, key):
         """Check for a key's existance
         @param key: the key
@@ -96,6 +101,10 @@ class BaseStorage(object):
         """
         key = self._sanitizeKey(key)
         return self._real_exists(key)
+
+    def isCollection(self, key):
+        key = self._sanitizeKey(key)
+        return self._real_is_collection(key)
 
     def store(self, val, keyPrefix = None):
         """Generate a new key, and store the value.
@@ -167,6 +176,12 @@ class BaseStorage(object):
     def _real_delete(self, key):
         raise NotImplementedError()
 
+    def _real_enumerate(self, keyPrefix):
+        raise NotImplementedError()
+
+    def _real_is_collection(self, key):
+        raise NotImplementedError()
+
     #}
 
 class DiskStorage(BaseStorage):
@@ -203,6 +218,19 @@ class DiskStorage(BaseStorage):
         fpath = self._getFileForKey(key)
         if os.path.exists(fpath):
             os.unlink(fpath)
+
+    def _real_enumerate(self, keyPrefix):
+        # Get rid of trailing /
+        keyPrefix = keyPrefix.rstrip(self.separator)
+        collection = self.separator.join([self.cfg.storagePath, keyPrefix])
+        if not os.path.isdir(collection):
+            return []
+        dirContents = sorted(os.listdir(collection))
+        return [ self.separator.join([keyPrefix, x]) for x in dirContents ]
+
+    def _real_is_collection(self, key):
+        collection = self.separator.join([self.cfg.storagePath, key])
+        return os.path.isdir(collection)
 
     def _getFileForKey(self, key, createDirs = False):
         ret = self.separator.join([self.cfg.storagePath, key])
