@@ -183,6 +183,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return self.processRequest(self._do_DELETE)
 
     def processRequest(self, method):
+        # Dump the headers
+        for k, v in sorted(self.headers.items()):
+            print "    %-20s : %s" % (k, v)
         req = self._createRequest()
         if req is None:
             # _createRequest does all the work to send back the error codes
