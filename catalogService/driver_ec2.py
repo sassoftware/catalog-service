@@ -8,13 +8,13 @@ import boto
 from boto.exception import EC2ResponseError
 import urllib
 
-from tired import config
-from tired import environment
-from tired import images
-from tired import instances
-from tired import newInstance
-from tired import keypairs
-from tired import securityGroups
+from catalogService import config
+from catalogService import environment
+from catalogService import images
+from catalogService import instances
+from catalogService import newInstance
+from catalogService import keypairs
+from catalogService import securityGroups
 
 class Connection_EC2(EC2Connection.EC2Connection):
     "EC2 Connection"

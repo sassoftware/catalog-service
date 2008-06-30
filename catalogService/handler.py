@@ -7,10 +7,10 @@ import BaseHTTPServer
 import os
 import urllib
 
-from tired import config
-from tired import storage
-from tired import userData
-from tired import xmlNode
+from catalogService import config
+from catalogService import storage
+from catalogService import userData
+from catalogService import xmlNode
 
 class StorageConfig(config.BaseConfig):
     def __init__(self, storagePath):

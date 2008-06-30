@@ -4,11 +4,11 @@
 
 from rpath_common import xmllib
 
-from tired import images
-from tired import instances
-from tired import keypairs
-from tired import securityGroups
-from tired import xmlNode
+from catalogService import images
+from catalogService import instances
+from catalogService import keypairs
+from catalogService import securityGroups
+from catalogService import xmlNode
 
 class BaseCount(xmlNode.xmllib.IntegerNode):
     pass

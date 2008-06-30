@@ -6,9 +6,9 @@ from rpath_common import xmllib
 
 import xmlNode
 
-from tired import instances
-from tired import keypairs
-from tired import securityGroups
+from catalogService import instances
+from catalogService import keypairs
+from catalogService import securityGroups
 
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'
