@@ -1,0 +1,31 @@
+#
+# Copyright (c) 2006-2008 rPath, Inc.
+#
+# This program is distributed under the terms of the Common Public License,
+# version 1.0. A copy of this license should have been distributed with this
+# source file in a file called LICENSE. If it is not present, the license
+# is always available at http://www.rpath.com/permanent/licenses/CPL-1.0.
+#
+# This program is distributed in the hope that it will be useful, but
+# without any warranty; without even the implied warranty of merchantability
+# or fitness for a particular purpose. See the Common Public License for
+# full details.
+#
+
+VERSION=0.1
+# VERSION can be overridden by snapshot builds to force incompatible versions
+
+export prefix = /usr
+export bindir = $(prefix)/bin
+export sbindir = $(prefix)/sbin
+export libdir = $(prefix)/lib
+export libexecdir = $(prefix)/libexec
+export datadir = $(prefix)/share
+export mandir = $(datadir)/man
+export sitedir = $(libdir)/python$(PYVERSION)/site-packages/
+export pydir = $(sitedir)/rpath_common/
+export initdir = /etc/init.d
+export sysconfdir = /etc/sysconfig
+export docdir = $(datadir)/doc/product-common-$(VERSION)
+
+export VERSION

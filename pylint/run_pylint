@@ -1,0 +1,15 @@
+#!/bin/sh
+if [ -x reports ]; then
+   rm -rf reports;
+fi
+mkdir reports
+cp init_pylint.py reports
+cd reports
+
+pylint --init-hook='import sys, os; sys.path.append("."); import init_pylint' --rcfile='../pylintrc' ../../catalogService/*.py;
+rm init_pylint*;
+for file in $(ls); do
+   if [ ! -s $file ]; then
+      rm $file;
+   fi
+done
