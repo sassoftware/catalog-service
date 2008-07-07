@@ -84,7 +84,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise
 
     def _do_GET(self, req):
-        path = req.getRelativeURI()
+        # we know the method, we're just using common code to strip it.
+        path, method = self._get_method(req.getRelativeURI(), 'GET')
+        # XXX will have to strip out arguments
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         if path == '/%s/clouds/ec2/images' % self.toplevel:
@@ -120,6 +122,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         p = '/%s/users/' % self.toplevel
         # Look for a method
         path, method = self._get_method(req.getRelativeURI(), 'POST')
+        if method == 'GET':
+            return self._do_GET(req)
 
         if path.startswith(p):
             pRest = path[len(p):]
@@ -236,15 +240,21 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         response.serveResponse(self.wfile.write)
 
+    def _getMintConfig(self):
+        import mint.config
+        if not hasattr(self, 'mintCfg'):
+            self.mintCfg = mint.config.getConfig()
+        return self.mintCfg
+
+
     def _getMintClient(self, authToken):
         if self.storageConfig.rBuilderUrl:
             import mint.client
             return mint.client.MintClient( \
                     self.storageConfig.rBuilderUrl % authToken[:2])
         else:
-            import mint.config
             import mint.shimclient
-            mintCfg = mint.config.getConfig()
+            mintCfg = self._getMintConfig()
             return mint.shimclient.ShimMintClient(mintCfg, authToken)
 
     def getEC2Credentials(self):
