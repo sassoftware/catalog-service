@@ -221,6 +221,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         authData = authData.split(':', 1)
         req.setUser(authData[0])
         req.setPassword(authData[1])
+        self.mintClient = self._getMintClient(authData)
+        # explicitly authenticate the credentials against rBuilder to get
+        # the rBuilder userId
+        self.mintAuth = self.mintClient.checkAuth()
         return True
 
     def _handleResponse(self, response):
@@ -232,12 +236,26 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         response.serveResponse(self.wfile.write)
 
+    def _getMintClient(self, authToken):
+        if self.storageConfig.rBuilderUrl:
+            import mint.client
+            return mint.client.MintClient( \
+                    self.storageConfig.rBuilderUrl % authToken[:2])
+        else:
+            import mint.config
+            import mint.shimclient
+            mintCfg = mint.config.getConfig()
+            return mint.shimclient.ShimMintClient(mintCfg, authToken)
+
+    def getEC2Credentials(self):
+        cred = self.mintClient.getEC2CredentialsForUser(self.mintAuth.userId)
+        return (cred['awsPublicAccessKeyId'], cred['awsSecretAccessKey'])
+
     def enumerateImages(self, req):
         import images
         import driver_ec2
 
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -258,8 +276,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import images
         import driver_ec2
 
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -280,8 +297,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import images
         import driver_ec2
 
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -391,8 +407,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import environment
         import driver_ec2
 
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -410,8 +425,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def newInstance(self, req):
         import newInstance
         import driver_ec2
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -431,8 +445,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def terminateInstance(self, req, instanceId, prefix):
         import driver_ec2
 
-        awsPublicKey = '16CVNRTTWQG9MZ517782'
-        awsPrivateKey = 'B/kKJ5K+jcr3/Sr2DSMRx6dMXzqdaEv+4yFwOUj/'
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
