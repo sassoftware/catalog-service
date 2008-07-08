@@ -259,7 +259,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def getEC2Credentials(self):
         cred = self.mintClient.getEC2CredentialsForUser(self.mintAuth.userId)
-        return (cred['awsPublicAccessKeyId'], cred['awsSecretAccessKey'])
+        return (cred.get('awsPublicAccessKeyId', cred.get('awsSecretAccessKey'))
 
     def enumerateImages(self, req):
         import images
