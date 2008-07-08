@@ -86,7 +86,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _do_GET(self, req):
         # we know the method, we're just using common code to strip it.
         path, method = self._get_method(req.getRelativeURI(), 'GET')
-        # XXX will have to strip out arguments
+        req._req.path = path
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         if path == '/%s/clouds/ec2/images' % self.toplevel:
