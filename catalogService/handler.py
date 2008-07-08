@@ -251,7 +251,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.storageConfig.rBuilderUrl:
             import mint.client
             return mint.client.MintClient( \
-                    self.storageConfig.rBuilderUrl % authToken[:2])
+                    self.storageConfig.rBuilderUrl % tuple(authToken[:2]))
         else:
             import mint.shimclient
             mintCfg = self._getMintConfig()
