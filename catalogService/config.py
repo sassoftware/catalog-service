@@ -2,7 +2,9 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
-class BaseConfig(object):
+from conary import conarycfg
+
+class BaseConfig(conarycfg.ConfigFile):
     """
     Base configration object
     """

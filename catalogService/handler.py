@@ -483,8 +483,9 @@ if __name__ == '__main__':
 
     options, args = parser.parse_args()
     storageConfig = StorageConfig(storagePath = "storage")
+    import epdb; epdb.st()
     if options.configFile:
-        storageConfig.readFile(options.configFile)
+        storageConfig.read(options.configFile)
     BaseRESTHandler.storageConfig = storageConfig
 
     h = HTTPServer(("", options.port), BaseRESTHandler)
