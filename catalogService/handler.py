@@ -474,5 +474,20 @@ class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
 
 if __name__ == '__main__':
-    h = HTTPServer(("", 1234), BaseRESTHandler)
+    import optparse
+    parser = optparse.OptionParser()
+    parser.add_option('-c', '--config-file', dest = 'configFile',
+            help = 'location of config file to use')
+    parser.add_option('-p', '--port', dest = 'port', type = 'int',
+            default = 1234, help = 'port to listen on')
+
+    options, args = parser.parse_args()
+    if options.configFile:
+        storageConfig = StorageConfig()
+        storageConfig.readFile(options.configFile)
+    else:
+        storageConfig = StorageConfig(storagePath = "storage")
+    BaseRESTHandler.storageConfig = storageConfig
+
+    h = HTTPServer(("", options.port), BaseRESTHandler)
     h.serve_forever()
