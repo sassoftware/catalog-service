@@ -482,11 +482,9 @@ if __name__ == '__main__':
             default = 1234, help = 'port to listen on')
 
     options, args = parser.parse_args()
+    storageConfig = StorageConfig(storagePath = "storage")
     if options.configFile:
-        storageConfig = StorageConfig()
         storageConfig.readFile(options.configFile)
-    else:
-        storageConfig = StorageConfig(storagePath = "storage")
     BaseRESTHandler.storageConfig = storageConfig
 
     h = HTTPServer(("", options.port), BaseRESTHandler)
