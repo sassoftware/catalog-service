@@ -11,6 +11,7 @@ from catalogService import config
 from catalogService import request as brequest
 from catalogService import storage
 from catalogService import userData
+from catalogService import errors
 
 # Make it easy for the producers of responses
 Response = brequest.Response
@@ -49,6 +50,32 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
     logLevel = 1
+    error_message_format = '\n'.join(('<?xml version="1.0">',
+            '<fault>',
+            '  <code>%(code)s</code>',
+            '  <message>%(message)s</message>',
+            '</fault>'))
+
+
+    def send_error(self, code, message = ''):
+        # we have to override this method because the superclass assumes
+        # we want to send back HTML. other than the content type, we're
+        # not really changing much
+        try:
+            short, long = self.responses[code]
+        except KeyError:
+            short, long = '???', '???'
+        if message is None:
+            message = short
+        self.log_error("code %d, message %s", code, message)
+        content = (self.error_message_format %
+               {'code': code, 'message': BaseHTTPServer._quote_html(message)})
+        self.send_response(code, message)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
+            self.wfile.write(content)
 
     def log_message(self, *args, **kwargs):
         if self.logLevel > 0:
@@ -79,9 +106,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         try:
             return method(req)
-        except:
-            # XXX
-            raise
+        except Exception, e:
+            errcode = 500
+            if hasattr(e, 'errcode'):
+                errcode = e.errcode
+            self.send_error(errcode, str(e))
+            return errcode
 
     def _do_GET(self, req):
         # we know the method, we're just using common code to strip it.
@@ -258,7 +288,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return mint.shimclient.ShimMintClient(mintCfg, authToken)
 
     def getEC2Credentials(self):
-        cred = self.mintClient.getEC2CredentialsForUser(self.mintAuth.userId)
+        import mint.mint_error
+        try:
+            cred = self.mintClient.getEC2CredentialsForUser(self.mintAuth.userId)
+        except mint.mint_error.PermissionDenied:
+            raise errors.PermissionDenied
+        for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
+            if key not in cred:
+                raise errors.MissingCredentials
         return (cred.get('awsPublicAccessKeyId'),
             cred.get('awsSecretAccessKey'))
 
