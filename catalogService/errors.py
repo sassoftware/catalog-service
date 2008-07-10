@@ -19,3 +19,12 @@ class MissingCredentials(CatalogError):
 class PermissionDenied(CatalogError):
     """Permission Denied"""
     errcode = http_codes.HTTP_FORBIDDEN
+
+class ResponseError(CatalogError):
+    """Response error from remote cloud service"""
+    errcode = http_codes.HTTP_BAD_REQUEST
+    def __init__(self, status, reason, body):
+        # strip any xml tags
+        if body.strip().startswith('<?xml'):
+            body = ''.join(body.splitlines(True)[1:])
+        self.msg = "<wrapped_fault><status>%s</status><reason>%s</reason><body>%s</body>" % (status, reason, body)

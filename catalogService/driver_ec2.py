@@ -10,6 +10,7 @@ import urllib
 
 from catalogService import config
 from catalogService import environment
+from catalogService import errors
 from catalogService import images
 from catalogService import instances
 from catalogService import newInstance
@@ -88,16 +89,16 @@ class Driver(object):
                     user_data=userData, instance_type=instanceType)
             return self._getInstancesFromResultSet([ec2Reservation],
                 prefix = prefix)
-        except EC2ResponseError:
-            return None
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getInstanceStatus(self, ec2InstanceId):
         try:
             rs = self.ec2conn.get_all_instances(instance_ids=[ec2InstanceId])
             instance = rs[0].instances[0]
             return str(instance.state), str(instance.dns_name)
-        except EC2ResponseError:
-            return "unknown", ""
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def _terminateInstances(self, instanceIds, prefix = None):
         node = instances.BaseInstances()
@@ -105,8 +106,8 @@ class Driver(object):
             rs = self.ec2conn.terminate_instances(instance_ids=instanceIds)
             node.extend(self._genInstances(rs, prefix = prefix))
             return node
-        except EC2ResponseError:
-            return False
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     @staticmethod
     def addPrefix(prefix, data):
@@ -124,15 +125,15 @@ class Driver(object):
                               state=x.state, isPublic=x.is_public) for x in rs
                               if x.id.startswith('ami-'))
             return node
-        except EC2ResponseError:
-            return None
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getAllInstances(self, instanceIds = None, prefix = None):
         try:
             rs = self.ec2conn.get_all_instances(instance_ids = instanceIds)
             return self._getInstancesFromResultSet(rs, prefix = prefix)
-        except EC2ResponseError:
-            return None
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getAllInstanceTypes(self, prefix=None):
         ret = InstanceTypes()
@@ -150,8 +151,8 @@ class Driver(object):
                         keyName=x.name, keyFingerprint=x.fingerprint)
                         for x in rs)
             return ret
-        except EC2ResponseError:
-            return None
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getAllSecurityGroups(self, groupNames = None, prefix = None):
         try:
@@ -163,8 +164,8 @@ class Driver(object):
                         description=x.description)
                         for x in rs)
             return ret
-        except EC2ResponseError:
-            return None
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getEnvironment(self, prefix=None):
         env = Environment()
