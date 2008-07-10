@@ -16,6 +16,13 @@ from catalogService import errors
 # Make it easy for the producers of responses
 Response = brequest.Response
 
+# Monkeypatch BaseHTTPServer for older Python (e.g. the one that
+# rLS1 has) to include a function that we rely on. Yes, this is gross.
+if not hasattr(BaseHTTPServer, '_quote_html'):
+    def _quote_html(html):
+        return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    BaseHTTPServer._quote_html = _quote_html
+
 class StorageConfig(config.BaseConfig):
     def __init__(self, storagePath):
         config.BaseConfig.__init__(self)
