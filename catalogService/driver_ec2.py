@@ -120,7 +120,7 @@ class Driver(object):
         try:
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
             node.extend(Image(id=self.addPrefix(prefix, x.id), imageId=x.id,
-                              ownerId=x.ownerId, location=x.location,
+                              ownerId=x.ownerId, longName=x.location,
                               state=x.state, isPublic=x.is_public) for x in rs
                               if x.id.startswith('ami-'))
             return node

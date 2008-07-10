@@ -8,16 +8,31 @@ import xmlNode
 
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
-    __slots__ = [ 'id', 'imageId', 'ownerId', 'location', 'state', 'isPublic' ]
+    __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
+            'state', 'isPublic', 'description', 'productName',
+            'role', 'publisher', 'awsAccountNumber', 'buildName',
+            'isPrivaterBuilder']
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
         self.setId(kwargs.get('id'))
         self.setImageId(kwargs.get('imageId'))
-        self.setLocation(kwargs.get('location'))
+        shortName = None
+        longName = kwargs.get('longName')
+        if longName:
+            shortName = longName.split('/')[-1]
+        self.setLongName(longName)
+        self.setShortName(shortName)
         self.setState(kwargs.get('state'))
         self.setIsPublic(kwargs.get('isPublic'))
         self.setOwnerId(kwargs.get('ownerId'))
+        self.setDescription(kwargs.get('description'))
+        self.setProductName(kwargs.get('productName'))
+        self.setRole(kwargs.get('role'))
+        self.setPublisher(kwargs.get('publisher'))
+        self.setAwsAccountNumber(kwargs.get('awsAccountNumber'))
+        self.setBuildName(kwargs.get('buildName'))
+        self.setIsPrivaterBuilder(kwargs.get('isPrivaterBuilder'))
 
     def setId(self, data):
         self.id = None
@@ -55,17 +70,29 @@ class BaseImage(xmlNode.BaseNode):
             return None
         return self.ownerId.getText()
 
-    def setLocation(self, data):
-        self.location = None
+    def setLongName(self, data):
+        self.longName = None
         if data is None:
             return self
-        self.location = xmllib.GenericNode().setName('location').characters(data)
+        self.longName = xmllib.GenericNode().setName('longName').characters(data)
         return self
 
-    def getLocation(self):
-        if self.location is None:
+    def getLongName(self):
+        if self.longName is None:
             return None
-        return self.location.getText()
+        return self.longName.getText()
+
+    def setShortName(self, data):
+        self.shortName = None
+        if data is None:
+            return self
+        self.shortName = xmllib.GenericNode().setName('shortName').characters(data)
+        return self
+
+    def getShortName(self):
+        if self.shortName is None:
+            return None
+        return self.shortName.getText()
 
     def setState(self, data):
         self.state = None
@@ -91,6 +118,91 @@ class BaseImage(xmlNode.BaseNode):
         if self.isPublic is None:
             return None
         return xmllib.BooleanNode.fromString(self.isPublic.getText())
+
+    def setDescription(self, data):
+        self.description = None
+        if data is None:
+            return self
+        self.description = xmllib.GenericNode().setName('description').characters(data)
+        return self
+
+    def getDescription(self):
+        if self.description is None:
+            return None
+        return self.description.getText()
+
+    def setProductName(self, data):
+        self.productName = None
+        if data is None:
+            return self
+        self.productName = xmllib.GenericNode().setName('productName').characters(data)
+        return self
+
+    def getProductName(self):
+        if self.productName is None:
+            return None
+        return self.productName.getText()
+
+    def setRole(self, data):
+        self.role = None
+        if data is None:
+            return self
+        self.role = xmllib.GenericNode().setName('role').characters(data)
+        return self
+
+    def getRole(self):
+        if self.role is None:
+            return None
+        return self.role.getText()
+
+    def setPublisher(self, data):
+        self.publisher = None
+        if data is None:
+            return self
+        self.publisher = xmllib.GenericNode().setName('publisher').characters(data)
+        return self
+
+    def getPublisher(self):
+        if self.publisher is None:
+            return None
+        return self.publisher.getText()
+
+    def setAwsAccountNumber(self, data):
+        self.awsAccountNumber = None
+        if data is None:
+            return self
+        self.awsAccountNumber = xmllib.GenericNode().setName('awsAccountNumber').characters(data)
+        return self
+
+    def getAwsAccountNumber(self):
+        if self.awsAccountNumber is None:
+            return None
+        return self.awsAccountNumber.getText()
+
+    def setBuildName(self, data):
+        self.buildName = None
+        if data is None:
+            return self
+        self.buildName = xmllib.GenericNode().setName('buildName').characters(data)
+        return self
+
+    def getBuildName(self):
+        if self.buildName is None:
+            return None
+        return self.buildName.getText()
+
+    def setIsPrivaterBuilder(self, data):
+        self.isPrivaterBuilder = None
+        if data is None:
+            return self
+        data = xmllib.BooleanNode.toString(data)
+        self.isPrivaterBuilder = xmllib.GenericNode().setName('isPrivaterBuilder').characters(data)
+        return self
+
+    def getIsPrivaterBuilder(self):
+        if self.isPrivaterBuilder is None:
+            return None
+        return xmllib.BooleanNode.fromString(self.isPrivaterBuilder.getText())
 
     def __repr__(self):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),

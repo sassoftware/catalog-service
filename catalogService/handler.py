@@ -303,6 +303,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import images
         import driver_ec2
 
+        # map the way rBuilder refers to data to the call to set the node's
+        # data to match.
+        fieldMap = {'buildDescription': 'setDescription',
+                    'productName': 'setProductName',
+                    'isPrivate': 'setIsPrivaterBuilder',
+                    'role': 'setRole',
+                    'createdBy': 'setPublisher',
+                    'awsAccountNumber': 'setAwsAccountNumber',
+                    'buildName': 'setBuildName'}
+
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
@@ -310,9 +320,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         drv = driver_ec2.Driver(cfg)
 
         prefix = req.getAbsoluteURI()
-        node = drv.getAllImages(prefix = prefix)
+        imgs = drv.getAllImages(prefix = prefix)
+        imageDataLookup = self.mintClient.getAllAMIBuilds()
+        for image in imgs:
+            imageId = image.imageId.getText()
+            imgData = imageDataLookup.get(imageId, {})
+            for key, methodName in fieldMap.iteritems():
+                val = imgData.get(key)
+                method = getattr(image, methodName)
+                method(val)
+
         hndlr = images.Handler()
-        data = hndlr.toXml(node)
+        data = hndlr.toXml(imgs)
 
         self.send_response(200)
         self.send_header("Content-Type", "application/xml")
