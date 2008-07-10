@@ -2,11 +2,11 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
-from mod_python import apache
+from catalogService import http_codes
 
 class CatalogError(Exception):
     """Base class for errors from Cloud Catalog Service"""
-    errcode = apache.HTTP_INTERNAL_SERVER_ERROR
+    errcode = http_codes.HTTP_INTERNAL_SERVER_ERROR
     def __str__(self):
         if hasattr(self, 'msg'):
             return self.msg
@@ -14,8 +14,8 @@ class CatalogError(Exception):
 
 class MissingCredentials(CatalogError):
     """Cloud credentials are not set in rBuilder"""
-    errcode = apache.HTTP_BAD_REQUEST
+    errcode = http_codes.HTTP_BAD_REQUEST
 
 class PermissionDenied(CatalogError):
     """Permission Denied"""
-    errcode = apache.HTTP_FORBIDDEN
+    errcode = http_codes.HTTP_FORBIDDEN
