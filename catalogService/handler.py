@@ -294,7 +294,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         except mint.mint_error.PermissionDenied:
             raise errors.PermissionDenied
         for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
-            if key not in cred:
+            if key not in cred or not cred[key]:
                 raise errors.MissingCredentials
         return (cred.get('awsPublicAccessKeyId'),
             cred.get('awsSecretAccessKey'))
