@@ -397,7 +397,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def enumerateUserInfo(self, req):
         # we have to authenticate to get here, so we'll have a mintAuth obejct
         # XXX should this call be a UserInfo xml marshalling object?
-        data = "<userinfo><username>%s</username><userinfo>" % \
+        data = "<userinfo><username>%s</username></userinfo>" % \
                 self.mintAuth.username
 
         self.send_response(200)
