@@ -74,6 +74,7 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         headers = [x.split(': ', 1) for x in headerData.splitlines()[1:] if x]
         for key, val in headers:
             self.req._req.headers_out[key] = val
+        bhandler.BaseRESTHandler.end_headers(self)
 
     def __init__(self, toplevel, req, *args, **kwargs):
         bhandler.BaseRESTHandler.__init__(self, req, *args, **kwargs)
