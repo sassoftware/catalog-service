@@ -110,7 +110,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if req is None:
             # _createRequest does all the work to send back the error codes
             return
-
         try:
             return method(req)
         except Exception, e:
@@ -269,7 +268,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # the rBuilder userId. raise permission denied if we're not authorized
         self.mintAuth = self.mintClient.checkAuth()
         if not self.mintAuth.authorized:
-            raise errors.PermissionDenied
+            self._send_401()
+            return False
         return True
 
     def _handleResponse(self, response):
