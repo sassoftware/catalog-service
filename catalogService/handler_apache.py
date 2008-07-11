@@ -63,6 +63,8 @@ class ApacheRequest(brequest.BaseRequest):
             return util.BoundedStringIO()
 
 class ApacheHandler(bhandler.BaseRESTHandler):
+    storageConfig = bhandler.StorageConfig(storagePath = "/srv/rbuilder/tmp/storage")
+
     def end_headers(self):
         headerData = self.wfile.getvalue()
         if headerData:

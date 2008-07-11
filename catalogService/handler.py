@@ -132,6 +132,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateInstances(req)
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateInstanceTypes(req)
+        if path == '/%s/userinfo' % self.toplevel:
+            return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
         if path.startswith(p):
             return self._handleResponse(self.getUserData(req, p, path[len(p):]))
@@ -264,8 +266,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req.setPassword(authData[1])
         self.mintClient = self._getMintClient(authData)
         # explicitly authenticate the credentials against rBuilder to get
-        # the rBuilder userId
+        # the rBuilder userId. raise permission denied if we're not authorized
         self.mintAuth = self.mintClient.checkAuth()
+        if not self.mintAuth.authorized:
+            raise errors.PermissionDenied
         return True
 
     def _handleResponse(self, response):
@@ -383,6 +387,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         hndlr = images.Handler()
         data = hndlr.toXml(node)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def enumerateUserInfo(self, req):
+        # we have to authenticate to get here, so we'll have a mintAuth obejct
+        # XXX should this call be a UserInfo xml marshalling object?
+        data = "<userinfo><username>%s</username><userinfo>" % \
+                self.mintAuth.username
 
         self.send_response(200)
         self.send_header("Content-Type", "application/xml")
