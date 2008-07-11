@@ -4,7 +4,7 @@
 
 import base64
 import BaseHTTPServer
-import os
+import os, sys
 import urllib
 
 from catalogService import config
@@ -75,6 +75,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if message is None:
             message = short
         self.log_error("code %d, message %s", code, message)
+        print >> sys.stderr, "code %d, message %s" % (code, message)
+        sys.stderr.flush()
         content = (self.error_message_format %
                {'code': code, 'message': BaseHTTPServer._quote_html(message)})
         self.send_response(code, message)
@@ -105,7 +107,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.logLevel > 0:
             # Dump the headers
             for k, v in sorted(self.headers.items()):
-                print "    %-20s : %s" % (k, v)
+                print >> sys.stderr, "    %-20s : %s" % (k, v)
+                sys.stderr.flush()
+
         req = self._createRequest()
         if req is None:
             # _createRequest does all the work to send back the error codes
@@ -145,7 +149,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             userId = urllib.unquote(arr[0])
             if userId != req.getUser():
                 for k, v in req.iterHeaders():
-                    print "%s: %s" % (k, v)
+                    print >> sys.stderr, "%s: %s" % (k, v)
+                    sys.stderr.flush()
                 raise Exception("XXX 1", userId, req.getUser())
             if arr[1:] == ['environment']:
                 return self._handleResponse(self.getEnvironment(req,
