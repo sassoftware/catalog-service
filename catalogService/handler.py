@@ -312,9 +312,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         # map the way rBuilder refers to data to the call to set the node's
         # data to match.
-        fieldMap = {'buildDescription': 'setDescription',
+        fieldMap = {'buildDescription': 'setBuildDescription',
+                    'productDescription': 'setProductDescription',
                     'productName': 'setProductName',
-                    'isPrivate': 'setIsPrivaterBuilder',
+                    'isPrivate': 'setIsPrivate_rBuilder',
                     'role': 'setRole',
                     'createdBy': 'setPublisher',
                     'awsAccountNumber': 'setAwsAccountNumber',

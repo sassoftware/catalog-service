@@ -9,9 +9,9 @@ import xmlNode
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
-            'state', 'isPublic', 'description', 'productName',
+            'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
-            'isPrivaterBuilder']
+            'isPrivate_rBuilder', 'productDescription']
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
@@ -26,13 +26,14 @@ class BaseImage(xmlNode.BaseNode):
         self.setState(kwargs.get('state'))
         self.setIsPublic(kwargs.get('isPublic'))
         self.setOwnerId(kwargs.get('ownerId'))
-        self.setDescription(kwargs.get('description'))
+        self.setBuildDescription(kwargs.get('buildDescription'))
+        self.setProductDescription(kwargs.get('productDescription'))
         self.setProductName(kwargs.get('productName'))
         self.setRole(kwargs.get('role'))
         self.setPublisher(kwargs.get('publisher'))
         self.setAwsAccountNumber(kwargs.get('awsAccountNumber'))
         self.setBuildName(kwargs.get('buildName'))
-        self.setIsPrivaterBuilder(kwargs.get('isPrivaterBuilder'))
+        self.setIsPrivate_rBuilder(kwargs.get('isPrivate_rBuilder'))
 
     def setId(self, data):
         self.id = None
@@ -119,17 +120,29 @@ class BaseImage(xmlNode.BaseNode):
             return None
         return xmllib.BooleanNode.fromString(self.isPublic.getText())
 
-    def setDescription(self, data):
-        self.description = None
+    def setBuildDescription(self, data):
+        self.buildDescription = None
         if data is None:
             return self
-        self.description = xmllib.GenericNode().setName('description').characters(data)
+        self.buildDescription = xmllib.GenericNode().setName('buildDescription').characters(data)
         return self
 
-    def getDescription(self):
-        if self.description is None:
+    def getBuildDescription(self):
+        if self.buildDescription is None:
             return None
-        return self.description.getText()
+        return self.buildDescription.getText()
+
+    def setProductDescription(self, data):
+        self.productDescription = None
+        if data is None:
+            return self
+        self.productDescription = xmllib.GenericNode().setName('productDescription').characters(data)
+        return self
+
+    def getProductDescription(self):
+        if self.productDescription is None:
+            return None
+        return self.productDescription.getText()
 
     def setProductName(self, data):
         self.productName = None
@@ -191,18 +204,18 @@ class BaseImage(xmlNode.BaseNode):
             return None
         return self.buildName.getText()
 
-    def setIsPrivaterBuilder(self, data):
-        self.isPrivaterBuilder = None
+    def setIsPrivate_rBuilder(self, data):
+        self.isPrivate_rBuilder = None
         if data is None:
             return self
         data = xmllib.BooleanNode.toString(data)
-        self.isPrivaterBuilder = xmllib.GenericNode().setName('isPrivaterBuilder').characters(data)
+        self.isPrivate_rBuilder = xmllib.GenericNode().setName('isPrivate_rBuilder').characters(data)
         return self
 
-    def getIsPrivaterBuilder(self):
-        if self.isPrivaterBuilder is None:
+    def getIsPrivate_rBuilder(self):
+        if self.isPrivate_rBuilder is None:
             return None
-        return xmllib.BooleanNode.fromString(self.isPrivaterBuilder.getText())
+        return xmllib.BooleanNode.fromString(self.isPrivate_rBuilder.getText())
 
     def __repr__(self):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
