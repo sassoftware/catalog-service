@@ -20,6 +20,8 @@ Response = brequest.Response
 # rLS1 has) to include a function that we rely on. Yes, this is gross.
 if not hasattr(BaseHTTPServer, '_quote_html'):
     def _quote_html(html):
+        # XXX this data is needed unre-formed by the flex frontend
+        return html
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     BaseHTTPServer._quote_html = _quote_html
 
@@ -57,14 +59,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
     logLevel = 1
-    error_message_format = '\n'.join(('<?xml version="1.0">',
+    error_message_format = '\n'.join(('<?xml version="1.0" encoding="UTF-8"?>',
             '<fault>',
             '  <code>%(code)s</code>',
             '  <message>%(message)s</message>',
             '</fault>'))
 
 
-    def send_error(self, code, message = ''):
+    def send_error(self, code, message = '', shortMessage = ''):
         # we have to override this method because the superclass assumes
         # we want to send back HTML. other than the content type, we're
         # not really changing much
@@ -74,14 +76,17 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             short, long = '???', '???'
         if message is None:
             message = short
+        if shortMessage is None:
+            shortMessage = short
         self.log_error("code %d, message %s", code, message)
         print >> sys.stderr, "code %d, message %s" % (code, message)
         sys.stderr.flush()
         content = (self.error_message_format %
                {'code': code, 'message': BaseHTTPServer._quote_html(message)})
-        self.send_response(code, message)
+        self.send_response(code, shortMessage)
         self.send_header("Content-Type", "application/xml")
         self.send_header('Connection', 'close')
+        self.send_header('Content-Length', str(len(content)))
         self.end_headers()
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
             self.wfile.write(content)
@@ -120,7 +125,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             errcode = 500
             if hasattr(e, 'errcode'):
                 errcode = e.errcode
-            self.send_error(errcode, str(e))
+            self.send_error(errcode, str(e), repr(e))
             return errcode
 
     def _do_GET(self, req):
