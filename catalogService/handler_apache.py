@@ -2,6 +2,7 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import os
 import base64
 from mod_python import apache
 
@@ -23,15 +24,18 @@ def _handler(req):
     return apache.OK
 
 class ApacheRequest(brequest.BaseRequest):
-    __slots__ = [ '_req', 'read', 'requestline' ]
+    __slots__ = [ '_req', 'read', 'requestline', '_rfile' ]
 
     def __init__(self, req):
         req.assbackwards = 1
+        self._rfile = util.BoundedStringIO()
+        util.copyfileobj(req, self._rfile)
+        self._rfile.seek(0)
         brequest.BaseRequest.__init__(self)
         self._req = req
-        self.read = self._req.read
         self.requestline = '%s %s %s' % \
                 (req.method, req.unparsed_uri, req.protocol)
+        self.read = self._read
 
     def getRelativeURI(self):
         return "%s?%s#%s" % (self._req.parsed_uri[apache.URI_PATH],
@@ -55,12 +59,19 @@ class ApacheRequest(brequest.BaseRequest):
 
     def makefile(self, mode, bufsize):
         if 'r' in mode:
+            self._rfile.seek(0)
             res = util.BoundedStringIO()
-            util.copyfileobj(self._req, res)
+            util.copyfileobj(self._rfile, res)
             res.seek(0)
+            self._rfile.seek(0)
             return res
         elif 'w' in mode:
             return util.BoundedStringIO()
+
+    def _read(self, *args, **kwargs):
+        # SocketServer will close file objects, so we have to work around it
+        rfile = self.makefile('r', 0)
+        return rfile.read(*arge, **kwargs)
 
 class ApacheHandler(bhandler.BaseRESTHandler):
     def end_headers(self):
@@ -84,9 +95,11 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         self.request_version = req._req.protocol
         self.path = req._req.unparsed_uri
         self.command = req._req.method
-        # socketserver closes the output file
-        self.wfile = util.BoundedStringIO()
         self.req = req
+        # socketserver closes the input and output files
+        self.wfile = util.BoundedStringIO()
+        self.rfile = self.req.makefile('r', 0)
+        self.storageConfig = bhandler.StorageConfig(storagePath = os.path.join(os.path.sep, 'srv', 'rbuilder', 'tmp', 'storage'))
 
     def setAuthHeader(self, username, passwd):
         self.headers['Authorization'] = 'Basic %s' % \
