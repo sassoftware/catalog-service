@@ -444,10 +444,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         key = keyPath.rstrip('/')
 
+        xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>'
         if key != keyPath:
             # A trailing / means retrieving the contents from a collection
             if not store.isCollection(key):
-                raise Exception("XXX 2", prefix, keyPath)
+                data = xmlHeader + '<list></list>'
+                return Response(contentType = "application/xml", data = data, code = 200)
+                #raise Exception("XXX 2", prefix, keyPath)
 
         if store.isCollection(key):
             node = userData.IdsNode()
@@ -461,16 +464,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 return Response(data = node)
             # Grab contents and wrap them in some XML
             data = [ store.get(x) for x in snodes ]
-            data = '<list>%s</list>' % ''.join(data)
-            return Response(data = data)
+            data = xmlHeader + '<list>%s</list>' % ''.join(data)
+            return Response(contentType = "application/xml", data = data, code = 200)
 
         data = store.get(key)
-        code = None
         if data is None:
-            data = '<?xml version="1.0" encoding="UTF-8"?><error></error>'
-            code = 404
-        return Response(contentType = "application/xml", data = data,
-                        code = code)
+            raise errors.HttpNotFound
+        return Response(data = data)
 
     def setUserData(self, req, userData):
         userData = userData.split('/')

@@ -28,3 +28,7 @@ class ResponseError(CatalogError):
         if body.strip().startswith('<?xml'):
             body = ''.join(body.splitlines(True)[1:])
         self.msg = "<wrapped_fault><status>%s</status><reason>%s</reason><body>%s</body>" % (status, reason, body)
+
+class HttpNotFound(CatalogError):
+    """File not found"""
+    errcode = 404
