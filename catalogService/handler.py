@@ -48,7 +48,12 @@ class StandaloneRequest(brequest.BaseRequest):
         return "http://%s" % (hostport, )
 
     def getHeader(self, key):
-        return self._req.headers.get(key, None)
+        res = self._req.headers.get(key, None)
+        if not res:
+            for hdrKey, val in self.iterHeaders():
+                if key.upper() == hdrKey.upper():
+                    res = val
+        return res
 
     def iterHeaders(self):
         for k, v in self._req.headers.items():
