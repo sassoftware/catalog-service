@@ -23,6 +23,14 @@ class PermissionDenied(CatalogError):
     """Permission Denied"""
     errcode = http_codes.HTTP_FORBIDDEN
 
+class ParameterError(CatalogError):
+    """Errors were detected in input"""
+    errcode = http_codes.HTTP_BAD_REQUEST
+    def __init__(self, msg = None):
+        if msg:
+            self.msg = msg
+
+
 class ResponseError(CatalogError):
     """Response error from remote cloud service"""
     errcode = http_codes.HTTP_OK

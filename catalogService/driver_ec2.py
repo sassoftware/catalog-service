@@ -202,6 +202,8 @@ class Driver(object):
         maxCount = node.getMaxCount() or 1
 
         keyPair = node.getKeyPair()
+        if not keyPair:
+            raise errors.ParameterError('keyPair was not specified')
         keyName = keyPair.getId()
         keyName = self._extractId(keyName)
 
