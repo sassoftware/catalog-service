@@ -351,6 +351,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         for image in imgs:
             imageId = image.imageId.getText()
             imgData = imageDataLookup.get(imageId, {})
+            image.setIs_rBuilderImage(bool(imgData))
             for key, methodName in fieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)

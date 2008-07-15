@@ -11,7 +11,7 @@ class BaseImage(xmlNode.BaseNode):
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
             'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
-            'isPrivate_rBuilder', 'productDescription']
+            'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage']
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
@@ -34,6 +34,7 @@ class BaseImage(xmlNode.BaseNode):
         self.setAwsAccountNumber(kwargs.get('awsAccountNumber'))
         self.setBuildName(kwargs.get('buildName'))
         self.setIsPrivate_rBuilder(kwargs.get('isPrivate_rBuilder'))
+        self.setIs_rBuilderImage(kwargs.get('is_rBuilderImage'))
 
     def setId(self, data):
         self.id = None
@@ -216,6 +217,19 @@ class BaseImage(xmlNode.BaseNode):
         if self.isPrivate_rBuilder is None:
             return None
         return xmllib.BooleanNode.fromString(self.isPrivate_rBuilder.getText())
+
+    def setIs_rBuilderImage(self, data):
+        self.is_rBuilderImage = None
+        if data is None:
+            return self
+        data = xmllib.BooleanNode.toString(data)
+        self.is_rBuilderImage = xmllib.GenericNode().setName('is_rBuilderImage').characters(data)
+        return self
+
+    def getIs_rBuilderImage(self):
+        if self.is_rBuilderImage is None:
+            return None
+        return xmllib.BooleanNode.fromString(self.is_rBuilderImage.getText())
 
     def __repr__(self):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
