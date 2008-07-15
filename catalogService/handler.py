@@ -253,7 +253,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return
 
         if 'Authorization' not in self.headers:
-            self._send_401()
+            self._send_403()
             return
 
         self.host = self.headers['Host']
@@ -261,9 +261,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req = StandaloneRequest(self)
         return req
 
-    def _send_401(self):
-        self.send_response(401, "Unauthorized")
-        self.send_header('WWW-Authenticate', 'Basic realm="blah"')
+    def _send_403(self):
+        self.send_response(403, "Forbidden")
         self.send_header('Content-Type', 'text/html')
         self.send_header('Connection', 'close')
         self.end_headers()
@@ -271,7 +270,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _auth(self, req):
         authData = self.headers['Authorization']
         if authData[:6] != 'Basic ':
-            self._send_401()
+            self._send_403()
             return False
         authData = authData[6:]
         authData = base64.decodestring(authData)
@@ -283,7 +282,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # the rBuilder userId. raise permission denied if we're not authorized
         self.mintAuth = self.mintClient.checkAuth()
         if not self.mintAuth.authorized:
-            self._send_401()
+            self._send_403()
             return False
         return True
 
