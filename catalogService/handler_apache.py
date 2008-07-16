@@ -87,7 +87,7 @@ class ApacheHandler(bhandler.BaseRESTHandler):
             self.req._req.headers_out[key] = val
         bhandler.BaseRESTHandler.end_headers(self)
 
-    def __init__(self, toplevel, req, *args, **kwargs):
+    def __init__(self, toplevel, storagePath, req, *args, **kwargs):
         bhandler.BaseRESTHandler.__init__(self, req, *args, **kwargs)
         self.toplevel = toplevel
         self.headers = dict(req.iterHeaders())
@@ -99,7 +99,7 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         # socketserver closes the input and output files
         self.wfile = util.BoundedStringIO()
         self.rfile = self.req.makefile('r', 0)
-        self.storageConfig = bhandler.StorageConfig(storagePath = os.path.join(os.path.sep, 'srv', 'rbuilder', 'tmp', 'storage'))
+        self.storageConfig = bhandler.StorageConfig(storagePath = storagePath)
 
     def setAuthHeader(self, username, passwd):
         self.headers['Authorization'] = 'Basic %s' % \
