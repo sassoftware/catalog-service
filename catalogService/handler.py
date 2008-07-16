@@ -12,6 +12,7 @@ from catalogService import request as brequest
 from catalogService import storage
 from catalogService import userData
 from catalogService import errors
+from catalogService import images
 
 # Make it easy for the producers of responses
 Response = brequest.Response
@@ -59,6 +60,16 @@ class StandaloneRequest(brequest.BaseRequest):
         for k, v in self._req.headers.items():
             yield k, v
 
+# map the way rBuilder refers to data to the call to set the node's
+# data to match.
+buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
+            'productDescription': 'setProductDescription',
+            'productName': 'setProductName',
+            'isPrivate': 'setIsPrivate_rBuilder',
+            'role': 'setRole',
+            'createdBy': 'setPublisher',
+            'awsAccountNumber': 'setAwsAccountNumber',
+            'buildName': 'setBuildName'}
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
@@ -136,35 +147,41 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _do_GET(self, req):
         # we know the method, we're just using common code to strip it.
         path, method = self._get_method(req.getRelativeURI(), 'GET')
+        # now record the stripped path as the original path for consistency
         req._req.path = path
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         if path == '/%s/clouds/ec2/images' % self.toplevel:
-            return self.enumerateImages(req)
+            return self.enumerateEC2Images(req)
         if path == '/%s/clouds/ec2/instances' % self.toplevel:
-            return self.enumerateInstances(req)
+            return self.enumerateEC2Instances(req)
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
-            return self.enumerateInstanceTypes(req)
+            return self.enumerateEC2InstanceTypes(req)
+        if path == '/%s/clouds/globus/images' % self.toplevel:
+            return self.enumerateGlobusImages(req)
+        if path == '/%s/clouds/globus/instances' % self.toplevel:
+            return self.enumerateGlobusInstances(req)
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
         if path.startswith(p):
             return self._handleResponse(self.getUserData(req, p, path[len(p):]))
-        p = '/%s/clouds/ec2/users/' % self.toplevel
-        if self.path.startswith(p):
-            rp = self.path[len(p):]
-            cloudPrefix = '/%s/clouds/ec2' % self.toplevel
-            # Grab the user part
-            arr = rp.split('/')
-            userId = urllib.unquote(arr[0])
-            if userId != req.getUser():
-                for k, v in req.iterHeaders():
-                    print >> sys.stderr, "%s: %s" % (k, v)
-                    sys.stderr.flush()
-                raise Exception("XXX 1", userId, req.getUser())
-            if arr[1:] == ['environment']:
-                return self._handleResponse(self.getEnvironment(req,
-                    cloudPrefix))
+        for cloud in ('ec2', 'globus'):
+            p = '/%s/clouds/ec2/users/' % self.toplevel
+            if self.path.startswith(p):
+                rp = self.path[len(p):]
+                cloudPrefix = '/%s/clouds/ec2' % self.toplevel
+                # Grab the user part
+                arr = rp.split('/')
+                userId = urllib.unquote(arr[0])
+                if userId != req.getUser():
+                    for k, v in req.iterHeaders():
+                        print >> sys.stderr, "%s: %s" % (k, v)
+                        sys.stderr.flush()
+                    raise Exception("XXX 1", userId, req.getUser())
+                if arr[1:] == ['environment']:
+                    return self._handleResponse(self.getEnvironment(req,
+                        cloudPrefix))
 
     def _do_PUT(self, req):
         p = '/%s/users/' % self.toplevel
@@ -324,20 +341,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return (cred.get('awsPublicAccessKeyId'),
             cred.get('awsSecretAccessKey'))
 
-    def enumerateImages(self, req):
+    def enumerateEC2Images(self, req):
         import images
         import driver_ec2
-
-        # map the way rBuilder refers to data to the call to set the node's
-        # data to match.
-        fieldMap = {'buildDescription': 'setBuildDescription',
-                    'productDescription': 'setProductDescription',
-                    'productName': 'setProductName',
-                    'isPrivate': 'setIsPrivate_rBuilder',
-                    'role': 'setRole',
-                    'createdBy': 'setPublisher',
-                    'awsAccountNumber': 'setAwsAccountNumber',
-                    'buildName': 'setBuildName'}
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
@@ -352,7 +358,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             imageId = image.imageId.getText()
             imgData = imageDataLookup.get(imageId, {})
             image.setIs_rBuilderImage(bool(imgData))
-            for key, methodName in fieldMap.iteritems():
+            for key, methodName in buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
                 method(val)
@@ -366,7 +372,33 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateInstances(self, req):
+    def enumerateGlobusImages(self, req):
+        import images
+        import driver_globus
+
+        builds = self.mintClient.getAllGlobusBuilds()
+
+        imgs = driver_globus.Images()
+        for imgData in builds:
+            image = driver_globus.Image(imageId = str(imgData.get('buildId')),
+                    cloud = 'globus')
+            for key, methodName in buildToNodeFieldMap.iteritems():
+                val = imgData.get(key)
+                method = getattr(image, methodName)
+                method(val)
+            imgs.append(image)
+
+        hndlr = images.Handler()
+        data = hndlr.toXml(imgs)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", len(data))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+    def enumerateEC2Instances(self, req):
         import images
         import driver_ec2
 
@@ -387,7 +419,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateInstanceTypes(self, req):
+    def enumerateEC2InstanceTypes(self, req):
         import images
         import driver_ec2
 
@@ -510,6 +542,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def getEnvironment(self, req, cloudPrefix):
+        if 'globus' in cloudPrefix:
+            raise NotImplementedError
         import environment
         import driver_ec2
 

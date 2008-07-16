@@ -11,7 +11,8 @@ class BaseImage(xmlNode.BaseNode):
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
             'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
-            'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage']
+            'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
+            'cloud']
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
@@ -35,6 +36,7 @@ class BaseImage(xmlNode.BaseNode):
         self.setBuildName(kwargs.get('buildName'))
         self.setIsPrivate_rBuilder(kwargs.get('isPrivate_rBuilder'))
         self.setIs_rBuilderImage(kwargs.get('is_rBuilderImage'))
+        self.setCloud(kwargs.get('cloud'))
 
     def setId(self, data):
         self.id = None
@@ -230,6 +232,18 @@ class BaseImage(xmlNode.BaseNode):
         if self.is_rBuilderImage is None:
             return None
         return xmllib.BooleanNode.fromString(self.is_rBuilderImage.getText())
+
+    def setCloud(self, data):
+        self.cloud = None
+        if data is None:
+            return self
+        self.cloud = xmllib.GenericNode().setName('cloud').characters(data)
+        return self
+
+    def getCloud(self):
+        if self.cloud is None:
+            return None
+        return self.cloud.getText()
 
     def __repr__(self):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
