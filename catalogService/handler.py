@@ -157,16 +157,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateEC2Instances(req)
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
-        if path == '/%s/clouds/globus/images' % self.toplevel:
-            return self.enumerateGlobusImages(req)
-        if path == '/%s/clouds/globus/instances' % self.toplevel:
-            return self.enumerateGlobusInstances(req)
+        if path == '/%s/clouds/workspaces/images' % self.toplevel:
+            return self.enumerateWorkspacesImages(req)
+        if path == '/%s/clouds/workspaces/instances' % self.toplevel:
+            return self.enumerateWorkspacesInstances(req)
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
         if path.startswith(p):
             return self._handleResponse(self.getUserData(req, p, path[len(p):]))
-        for cloud in ('ec2', 'globus'):
+        for cloud in ('ec2', 'workspaces'):
             p = '/%s/clouds/ec2/users/' % self.toplevel
             if self.path.startswith(p):
                 rp = self.path[len(p):]
@@ -205,33 +205,19 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self._handleResponse(self.setUserData(req, pRest))
             return
 
-        p = '/%s/clouds/ec2/instances' % self.toplevel
-        if path == p:
-            self._handleResponse(self.newInstance(req))
-            return
-        p += '/'
-        if path.startswith(p):
-            pRest = path[len(p):]
-            if method == 'DELETE':
-                arr = pRest.split('/')
-                if arr:
-                    instanceId = arr[0]
-                    self._handleResponse(self.terminateInstance(req, instanceId,
-                                         prefix = p))
-            return
+        instanceInfo = self._getInstanceInfo(path)
+        if instanceInfo.get('resource') == 'instances':
+            self._handleInstances(req, method, instanceInfo)
 
     def _do_DELETE(self, req):
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
 
-        p = '/%s/clouds/ec2/instances/' % self.toplevel
-        if self.path.startswith(p):
-            arr = self.path[len(p):].split('/')
-            if arr:
-                instanceId = arr[0]
-                self._handleResponse(self.terminateInstance(req, instanceId,
-                                     prefix = p))
+        path = self.path
+        instanceInfo = self._getInstanceInfo(path)
+        if instanceInfo.get('resource') == 'instances':
+            self._handleInstances(req, 'DELETE', instanceInfo)
 
     @classmethod
     def _get_method(cls, path, defaultMethod):
@@ -244,6 +230,70 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return path, defaultMethod
         rMap = cls._split_query(query)
         return path, rMap.get('_method', defaultMethod)
+
+    def _getInstanceInfo(self, path):
+        """
+        returns dict containing useful information about the path
+
+        This function generally expects URIs of the form:
+        /<toplevel>/clouds/<cloudname>{/cloudId}/<resource>{/instanceId}
+        cloudId is omitted for EC2 since there's only one
+        """
+        try:
+            res = {}
+            prefix = '/%s/clouds/' % (self.toplevel)
+            if path.startswith(prefix):
+                pRest = path[len(prefix):]
+                cloud, pRest = pRest.split('/', 1)
+                if cloud == 'ec2':
+                    cloudId = None
+                else:
+                    cloudId, pRest = pRest.split('/', 1)
+                if '/' in pRest:
+                    resource, pRest = pRest.split('/', 1)
+                else:
+                    resource, pRest = pRest, ''
+                res['cloud'] = cloud
+                if cloudId is not None:
+                    res['cloudId'] = cloudId
+                if pRest:
+                    res['instanceId'] = pRest
+                    prefix = path[:- len(pRest)]
+                else:
+                    prefix = path
+                res['resource'] = resource
+                res['prefix'] = prefix
+            return res
+        except:
+            # an empty dict indicates a URL we couldn't handle, which
+            # ultimately results in a 404
+            return {}
+
+    def _handleInstances(self, req, method, instanceInfo):
+        cloudName = instanceInfo.get('cloud')
+        if cloudName not in ('ec2', 'workspaces'):
+            # these are currently the only two clouds we handle
+            raise errors.HttpNotFound
+        caseName = cloudName.capitalize()
+        cloudId = instanceInfo.get('cloudId')
+        if method == 'DELETE':
+            instanceId = instanceInfo.get('instanceId')
+            prefix = instanceInfo.get('prefix', '')
+            if cloudName == 'ec2':
+                self._handleResponse(self.terminateEC2Instance(req,
+                        instanceId, prefix = prefix))
+            else:
+                methodName = 'terminate%sInstance' % caseName
+                m = getattr(self, methodName)
+                self._handleResponse(m(req, cloudId, instanceId,
+                    prefix))
+        else:
+            if cloudName == 'ec2':
+                self._handleResponse(self.newEC2Instance(req))
+            else:
+                methodName = 'new%sInstance' % caseName
+                m = getattr(self, methodName)
+                self._handleResponse(m(req, cloudId))
 
     @staticmethod
     def _split_query(query):
@@ -372,16 +422,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateGlobusImages(self, req):
+    def enumerateWorkspacesImages(self, req):
         import images
-        import driver_globus
+        import driver_workspaces
 
-        builds = self.mintClient.getAllGlobusBuilds()
+        builds = self.mintClient.getAllWorkspacesBuilds()
 
-        imgs = driver_globus.Images()
+        imgs = driver_workspaces.Images()
         for imgData in builds:
-            image = driver_globus.Image(imageId = str(imgData.get('buildId')),
-                    cloud = 'globus')
+            image = driver_workspaces.Image(imageId = str(imgData.get('buildId')),
+                    cloud = 'workspaces')
             for key, methodName in buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -542,7 +592,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def getEnvironment(self, req, cloudPrefix):
-        if 'globus' in cloudPrefix:
+        if 'workspaces' in cloudPrefix:
             raise NotImplementedError
         import environment
         import driver_ec2
@@ -562,7 +612,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType="application/xml", data = data)
 
 
-    def newInstance(self, req):
+    def newEC2Instance(self, req):
         import newInstance
         import driver_ec2
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -582,7 +632,26 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(contentType="application/xml", data = data)
 
-    def terminateInstance(self, req, instanceId, prefix):
+    def newWorkspacesInstance(self, req, cloudId):
+        import newInstance
+        import driver_workspaces
+
+        cfg = driver_workspaces.Config()
+
+        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
+
+        dataLen = req.getContentLength()
+        data = req.read(dataLen)
+
+        prefix = req.getAbsoluteURI()
+        response = drv.newInstance(data, prefix = prefix)
+
+        hndlr = newInstance.Handler()
+        data = hndlr.toXml(response)
+
+        return Response(contentType="application/xml", data = data)
+
+    def terminateEC2Instance(self, req, instanceId, prefix):
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -590,6 +659,25 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
         drv = driver_ec2.Driver(cfg)
+
+        prefix = req.getSchemeNetloc() + prefix
+        response = drv.terminateInstance(instanceId, prefix = prefix)
+
+        hndlr = driver_ec2.instances.Handler()
+        data = hndlr.toXml(response)
+
+        return Response(contentType="application/xml", data = data)
+
+    def terminateWorkspacesInstance(self, req, cloudId, instanceId, prefix):
+        import newInstance
+        import driver_workspaces
+
+        cfg = driver_workspaces.Config()
+
+        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
+
+        dataLen = req.getContentLength()
+        data = req.read(dataLen)
 
         prefix = req.getSchemeNetloc() + prefix
         response = drv.terminateInstance(instanceId, prefix = prefix)
