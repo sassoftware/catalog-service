@@ -54,7 +54,7 @@ class ApacheRequest(brequest.BaseRequest):
         via = self._req.headers_in.get('Via')
         if via and self._req.proxyreq:
             # XXX We simply have to err on the side of encrypted requests...
-            scheme = 'https'
+            scheme = 'http'
             hostport = via.split(',')[-1].split()[1]
         else:
             secure = (self._req.subprocess_env.get('HTTPS', 'off').lower() == 'on')
