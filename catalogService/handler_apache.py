@@ -43,12 +43,17 @@ class ApacheRequest(brequest.BaseRequest):
                              self._req.parsed_uri[apache.URI_FRAGMENT])
 
     def getSchemeNetloc(self):
-        scheme = self._req.parsed_uri[apache.URI_SCHEME].loser()
-        port = self._req.parsed_uri[apache.URI_PORT]
-        hostport = self._req.parsed_uri[apache.URI_HOSTNAME]
-        knownPorts = set([('http', 80), ('https', 443)])
-        if (scheme, port) not in knownPorts:
-            hostport = "%s:%s" % (hostport, port)
+        scheme = self._req.parsed_uri[apache.URI_SCHEME]
+        scheme = scheme and scheme.lower() or 'http'
+        via = self._req.headers_in.get('Via')
+        if via and self._req.proxyreq:
+            hostport = via.split(',')[-1].split()[1]
+        else:
+            port = self._req.parsed_uri[apache.URI_PORT]
+            hostport = self._req.parsed_uri[apache.URI_HOSTNAME]
+            knownPorts = set([('http', 80), ('https', 443)])
+            if (scheme, port) not in knownPorts:
+                hostport = "%s:%s" % (hostport, port)
         return "%s://%s" % (scheme, hostport, )
 
     def getHeader(self, key):
