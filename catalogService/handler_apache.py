@@ -24,9 +24,10 @@ def _handler(req):
     return apache.OK
 
 class ApacheRequest(brequest.BaseRequest):
-    __slots__ = [ '_req', 'read', 'requestline', '_rfile' ]
+    __slots__ = [ '_req', 'read', 'requestline', '_rfile', 'path' ]
 
     def __init__(self, req):
+        self.setPath(req.unparsed_uri)
         req.assbackwards = 1
         self._rfile = util.BoundedStringIO()
         util.copyfileobj(req, self._rfile)
@@ -37,10 +38,17 @@ class ApacheRequest(brequest.BaseRequest):
                 (req.method, req.unparsed_uri, req.protocol)
         self.read = self._read
 
+    def setPath(self, path):
+        if path.lower().startswith('http'):
+            if path.count('/') > 2:
+                self.path = '/' + path.split('/', 3)[-1]
+            else:
+                self.path = '/'
+        else:
+            self.path = path
+
     def getRelativeURI(self):
-        return "%s?%s#%s" % (self._req.parsed_uri[apache.URI_PATH],
-                             self._req.parsed_uri[apache.URI_QUERY],
-                             self._req.parsed_uri[apache.URI_FRAGMENT])
+        return self.path
 
     def getSchemeNetloc(self):
         via = self._req.headers_in.get('Via')

@@ -60,6 +60,9 @@ class StandaloneRequest(brequest.BaseRequest):
         for k, v in self._req.headers.items():
             yield k, v
 
+    def setPath(self, path):
+        self._req.path = path
+
 # map the way rBuilder refers to data to the call to set the node's
 # data to match.
 buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
@@ -148,7 +151,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # we know the method, we're just using common code to strip it.
         path, method = self._get_method(req.getRelativeURI(), 'GET')
         # now record the stripped path as the original path for consistency
-        req._req.path = path
+        req.setPath(path)
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         if path == '/%s/clouds/ec2/images' % self.toplevel:
