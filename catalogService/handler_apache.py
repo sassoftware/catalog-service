@@ -82,7 +82,7 @@ class ApacheRequest(brequest.BaseRequest):
     def _read(self, *args, **kwargs):
         # SocketServer will close file objects, so we have to work around it
         rfile = self.makefile('r', 0)
-        return rfile.read(*arge, **kwargs)
+        return rfile.read(*args, **kwargs)
 
 class ApacheHandler(bhandler.BaseRESTHandler):
     def end_headers(self):
@@ -129,5 +129,6 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         return 0
 
     def _createRequest(self):
-        bhandler.BaseRESTHandler._createRequest(self)
+        res = bhandler.BaseRESTHandler._createRequest(self)
+        self.req.setUser(res.getUser())
         return self.req
