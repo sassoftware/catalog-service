@@ -122,3 +122,6 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         util.copyfileobj(self.wfile, self.req._req)
         return 0
 
+    def _createRequest(self):
+        bhandler.BaseRESTHandler._createRequest(self)
+        return self.req
