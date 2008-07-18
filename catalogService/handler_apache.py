@@ -49,7 +49,8 @@ class ApacheRequest(brequest.BaseRequest):
             scheme = 'https'
             hostport = via.split(',')[-1].split()[1]
         else:
-            scheme = self._req.is_https() and 'https' or 'http'
+            secure = (self._req.subprocess_env.get('HTTPS', 'off').lower() == 'on')
+            scheme = secure and 'https' or 'http'
             hostport = self._req.headers_in.get('Host')
         return "%s://%s" % (scheme, hostport, )
 
