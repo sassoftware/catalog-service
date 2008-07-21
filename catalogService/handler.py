@@ -160,10 +160,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateEC2Instances(req)
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
-        if path == '/%s/clouds/workspaces/images' % self.toplevel:
-            return self.enumerateWorkspacesImages(req)
-        if path == '/%s/clouds/workspaces/instances' % self.toplevel:
-            return self.enumerateWorkspacesInstances(req)
+        pathInfo = self._getPathInfo(path)
+        if pathInfo.get('resource') == 'images':
+            return self.enumerateWorkspacesImages(req,
+                    pathInfo.get('cloudId'))
+        if pathInfo.get('resource') == 'instances':
+            return self.enumerateWorkspacesInstances(req,
+                    pathInfo.get('cloudId'))
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
@@ -185,6 +188,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 if arr[1:] == ['environment']:
                     return self._handleResponse(self.getEnvironment(req,
                         cloudPrefix))
+        raise errors.HttpNotFound
 
     def _do_PUT(self, req):
         p = '/%s/users/' % self.toplevel
@@ -208,9 +212,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self._handleResponse(self.setUserData(req, pRest))
             return
 
-        instanceInfo = self._getInstanceInfo(path)
-        if instanceInfo.get('resource') == 'instances':
-            self._handleInstances(req, method, instanceInfo)
+        pathInfo = self._getPathInfo(path)
+        if pathInfo.get('resource') == 'instances':
+            self._handleInstances(req, method, pathInfo)
 
     def _do_DELETE(self, req):
         p = '/%s/users/' % self.toplevel
@@ -218,9 +222,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
 
         path = self.path
-        instanceInfo = self._getInstanceInfo(path)
-        if instanceInfo.get('resource') == 'instances':
-            self._handleInstances(req, 'DELETE', instanceInfo)
+        pathInfo = self._getPathInfo(path)
+        if pathInfo.get('resource') == 'instances':
+            self._handleInstances(req, 'DELETE', pathInfo)
 
     @classmethod
     def _get_method(cls, path, defaultMethod):
@@ -234,7 +238,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         rMap = cls._split_query(query)
         return path, rMap.get('_method', defaultMethod)
 
-    def _getInstanceInfo(self, path):
+    def _getPathInfo(self, path):
         """
         returns dict containing useful information about the path
 
@@ -272,16 +276,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # ultimately results in a 404
             return {}
 
-    def _handleInstances(self, req, method, instanceInfo):
-        cloudName = instanceInfo.get('cloud')
+    def _handleInstances(self, req, method, pathInfo):
+        cloudName = pathInfo.get('cloud')
         if cloudName not in ('ec2', 'workspaces'):
             # these are currently the only two clouds we handle
             raise errors.HttpNotFound
         caseName = cloudName.capitalize()
-        cloudId = instanceInfo.get('cloudId')
+        cloudId = pathInfo.get('cloudId')
         if method == 'DELETE':
-            instanceId = instanceInfo.get('instanceId')
-            prefix = instanceInfo.get('prefix', '')
+            instanceId = pathInfo.get('instanceId')
+            prefix = pathInfo.get('prefix', '')
             if cloudName == 'ec2':
                 self._handleResponse(self.terminateEC2Instance(req,
                         instanceId, prefix = prefix))
@@ -425,16 +429,36 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateWorkspacesImages(self, req):
+    def enumerateWorkspacesImages(self, req, cloudId):
         import images
         import driver_workspaces
 
-        builds = self.mintClient.getAllWorkspacesBuilds()
+        cfg = driver_workspaces.Config()
+        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
 
-        imgs = driver_workspaces.Images()
-        for imgData in builds:
-            image = driver_workspaces.Image(imageId = str(imgData.get('buildId')),
-                    cloud = 'workspaces')
+        prefix = req.getAbsoluteURI()
+        imgs = drv.getAllImages(prefix = prefix)
+        found = set()
+
+        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        for image in imgs:
+            imageId = image.imageId.getText()
+            imgData = imageDataLookup.get(imageId, {})
+            if imgData:
+                found.add(imageId)
+            image.setIs_rBuilderImage(bool(imgData))
+            image.setIsDeployed(True)
+            for key, methodName in buildToNodeFieldMap.iteritems():
+                val = imgData.get(key)
+                method = getattr(image, methodName)
+                method(val)
+
+        # loop over the images known by rBuilder but not known by Workspaces
+        for imageId, imgData in [x for x in imageDataLookup.iteritems() \
+                if x[0] not in found]:
+            image = driver_workspaces.Image(id = os.path.join(prefix, imageId),
+                    imageId = imageId, cloud = 'workspaces', isDeployed = False,
+                    is_rBuilderImage = True)
             for key, methodName in buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -449,7 +473,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(data))
         self.end_headers()
         self.wfile.write(data)
-
 
     def enumerateEC2Instances(self, req):
         import images
