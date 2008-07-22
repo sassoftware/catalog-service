@@ -5,6 +5,7 @@
 import errno
 import os
 import re
+import shutil
 import StringIO
 import subprocess
 import tempfile
@@ -17,6 +18,7 @@ class WorkspaceCloudProperties(object):
         'vws.factory.identity' : '/O=My Company Inc/CN=host/localhost',
         'vws.repository.identity' : '/O=My Company Inc/CN=host/localhost',
         'vws.memory.request' : '128',
+        'vws.cahash' : '6045a439',
         'ca.certs' : '/tmp',
     }
     ssh_pubkey = "~/.ssh/id_dsa.pub"
@@ -45,13 +47,23 @@ class WorkspaceCloudClient(object):
     GLOBUS_LOCATION = "/tmp/workspace-cloud-client-009"
     _image_re = re.compile(r"^.*'(.*)'.*$")
 
-    def __init__(self, properties):
+    def __init__(self, properties, caCert, userCert, userKey):
         self._properties = properties
+        self._caCert = caCert
 
+        self._caCertHash = None
+        self._caCertSubject = None
+        self._userCert = userCert
+        self._userKey = userKey
+        self._userCertSubject = None
+        self._userCertIssuer = None
+
+        self._initX509()
         self._createConfigFile()
 
     def listImages(self):
-        stdout, stderr, returncode = self._exec('--list')
+        cmdline = self._cmdline('--list')
+        stdout, stderr, returncode = self._exec(cmdline)
         return self._parseListImages(stdout)
 
     def _createConfigFile(self):
@@ -60,14 +72,73 @@ class WorkspaceCloudClient(object):
         self._properties.write(stream)
         stream.close()
 
-    def _exec(self, *args):
-        cmdline = self._cmdline(args)
+    def _initX509(self):
+        fd, tmpf = tempfile.mkstemp()
+        stream = os.fdopen(fd, "w")
+        stream.write(self._caCert)
+        stream.flush()
+
+        cmdline = self._opensslCmdline('-in', tmpf,
+            '-subject', '-issuer', '-hash')
+        stdout, stderr, returncode = self._exec(cmdline)
+        self._caCertSubject, _, self._caCertHash = self._parseCertData(stdout)
+        if self._caCertSubject is None:
+            # Some kind of syntax error
+            raise Exception("XXX 1")
+
+        # Rewind the temp file
+        stream.seek(0)
+        stream.truncate()
+        stream.write(self._userCert)
+        stream.flush()
+        stdout, stderr, returncode = self._exec(cmdline)
+        stream.close()
+        os.unlink(tmpf)
+        self._userCertSubject, self._userCertIssuer, self._userCertHash = \
+            self._parseCertData(stdout)
+        if self._userCertSubject is None:
+            raise Exception("XXX 1")
+
+        # Create directory structure for the CA certs
+        self._caCertDir = tempfile.mkdtemp(prefix="vws-ca-")
+        fpath = os.path.join(self._caCertDir, self._caCertHash)
+        # Write the cert as <hash>.0
+        file(fpath + ".0", "w+").write(self._caCert)
+        # Write the policy file
+        data = dict(caHash = self._caCertHash,
+            caSubject = self._caCertSubject,
+            certSubject = self._userCertSubject)
+        file(fpath + ".signing_policy", "w+").write(self._policyTemplate % data)
+
+    def _parseCertData(self, data):
+        sio = StringIO.StringIO(data)
+        sio.seek(0)
+        prefix = "subject= "
+        line = sio.readline().strip()
+        if not line.startswith(prefix):
+            return None, None, None
+        csubj = line[len(prefix):]
+
+        prefix = "issuer= "
+        line = sio.readline().strip()
+        if not line.startswith(prefix):
+            return None, None, None
+        ciss = line[len(prefix):]
+
+        chash = sio.readline().strip()
+        return csubj, ciss, chash
+
+    def _exec(self, cmdline, stdinData = None):
+        if stdinData:
+            stdin = subprocess.PIPE
+        else:
+            stdin = None
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
-            stderr = subprocess.PIPE)
-        stdout, stderr = p.communicate()
+            stderr = subprocess.PIPE, stdin = stdin)
+        stdout, stderr = p.communicate(stdinData)
         return stdout, stderr, p.returncode
 
-    def _cmdline(self, args):
+    def _cmdline(self, *args):
         cmdline = [
             "java",
             "-DGLOBUS_LOCATION=%(top)s/lib/globus",
@@ -84,10 +155,14 @@ class WorkspaceCloudClient(object):
             "--history-dir", "%(top)s/history"
         ] + list(args)
         replacements = dict(top = self.GLOBUS_LOCATION,
-            certDir = self._properties.get('ca.certs'),
+            certDir = self._caCertDir,
             confFile = self._configFile,
         )
         return [ x % replacements for x in cmdline ]
+
+    def _opensslCmdline(self, *args):
+        cmdline = ["openssl", "x509", "-noout"] + list(args)
+        return cmdline
 
     def _parseListImages(self, data):
         ret = []
@@ -113,15 +188,12 @@ class WorkspaceCloudClient(object):
                 if e.errno != errno.EBADF:
                     raise
             self._configFile = None
+        if self._caCertDir:
+            shutil.rmtree(self._caCertDir, ignore_errors = True)
+            self._caCertDir = None
 
-if __name__ == '__main__':
-    conf = WorkspaceCloudProperties()
-    conf.set('ca.certs', '/tmp/xx1')
-    conf.set('vws.factory', 'speedy.eng.rpath.com:8443')
-    conf.set('vws.repository', 'speedy.eng.rpath.com:2811')
-    conf.set('vws.factory.identity', '/O=rPath Inc/CN=host/speedy')
-    conf.set('vws.repository.identity', '/O=rPath Inc/CN=host/speedy')
-
-    cli = WorkspaceCloudClient(conf)
-    print " ".join(cli._cmdline(["--list"]))
-    print cli.listImages()
+    _policyTemplate = """
+access_id_CA    X509    '%(caSubject)s'
+pos_rights      globus  CA:sign
+cond_subjects   globus  '"%(certSubject)s"'
+"""
