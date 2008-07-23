@@ -161,9 +161,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
         if path == '/%s/clouds/vws/images' % self.toplevel:
-            return self.enumerateWorkspacesImages(req)
+            return self.enumerateVwsImages(req)
         if path == '/%s/clouds/vws/instances' % self.toplevel:
-            return self.enumerateWorkspacesInstances(req)
+            return self.enumerateVwsInstances(req)
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
@@ -425,7 +425,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def enumerateWorkspacesImages(self, req):
+    def enumerateVwsImages(self, req):
         import images
         import driver_workspaces
 
@@ -635,7 +635,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(contentType="application/xml", data = data)
 
-    def newWorkspacesInstance(self, req, cloudId):
+    def newVwsInstance(self, req, cloudId):
         import newInstance
         import driver_workspaces
 
@@ -671,7 +671,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(contentType="application/xml", data = data)
 
-    def terminateWorkspacesInstance(self, req, cloudId, instanceId, prefix):
+    def terminateVwsInstance(self, req, cloudId, instanceId, prefix):
         import newInstance
         import driver_workspaces
 
