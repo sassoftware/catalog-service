@@ -51,15 +51,29 @@ class WorkspaceCloudClient(object):
         self._properties = properties
         self._caCert = caCert
 
+        self._tmpDir = tempfile.mkdtemp(prefix="vws-session-")
+
+        # Save the user's cert and key in files on the disk, the proxy
+        # cert creation needs them
+        self._userCertPath = os.path.join(self._tmpDir, "usercert.pem")
+        self._openStream(self._userCertPath, 0644).write(userCert)
+
+        self._userKeyPath = os.path.join(self._tmpDir, "userkey.pem")
+        self._openStream(self._userKeyPath, 0600).write(userKey)
+
         self._caCertHash = None
         self._caCertSubject = None
-        self._userCert = userCert
-        self._userKey = userKey
         self._userCertSubject = None
         self._userCertIssuer = None
+        self._proxyCertPath = os.path.join(self._tmpDir, "proxycert.pem")
+
+        # Create the directory for CA certs
+        self._caCertDir = os.path.join(self._tmpDir, "ca-certs")
+        os.mkdir(self._caCertDir)
 
         self._initX509()
         self._createConfigFile()
+        self._initProxyCert()
 
     def listImages(self):
         cmdline = self._cmdline('--list')
@@ -67,8 +81,8 @@ class WorkspaceCloudClient(object):
         return self._parseListImages(stdout)
 
     def _createConfigFile(self):
-        fd, self._configFile = tempfile.mkstemp(prefix = "vwsconf-")
-        stream = os.fdopen(fd, "w")
+        self._configFile = os.path.join(self._tmpDir, "cloud.properties")
+        stream = self._openStream(self._configFile)
         self._properties.write(stream)
         stream.close()
 
@@ -76,7 +90,7 @@ class WorkspaceCloudClient(object):
         fd, tmpf = tempfile.mkstemp()
         stream = os.fdopen(fd, "w")
         stream.write(self._caCert)
-        stream.flush()
+        stream.close()
 
         cmdline = self._opensslCmdline('-in', tmpf,
             '-subject', '-issuer', '-hash')
@@ -86,11 +100,8 @@ class WorkspaceCloudClient(object):
             # Some kind of syntax error
             raise Exception("XXX 1")
 
-        # Rewind the temp file
-        stream.seek(0)
-        stream.truncate()
-        stream.write(self._userCert)
-        stream.flush()
+        cmdline = self._opensslCmdline('-in', self._userCertPath,
+            '-subject', '-issuer', '-hash')
         stdout, stderr, returncode = self._exec(cmdline)
         stream.close()
         os.unlink(tmpf)
@@ -99,8 +110,6 @@ class WorkspaceCloudClient(object):
         if self._userCertSubject is None:
             raise Exception("XXX 1")
 
-        # Create directory structure for the CA certs
-        self._caCertDir = tempfile.mkdtemp(prefix="vws-ca-")
         fpath = os.path.join(self._caCertDir, self._caCertHash)
         # Write the cert as <hash>.0
         file(fpath + ".0", "w+").write(self._caCert)
@@ -109,6 +118,19 @@ class WorkspaceCloudClient(object):
             caSubject = self._caCertSubject,
             certSubject = self._userCertSubject)
         file(fpath + ".signing_policy", "w+").write(self._policyTemplate % data)
+
+    def _initProxyCert(self):
+        cmdline = self._cmdlineProxy()
+        stdout, stderr, returncode = self._exec(cmdline)
+        if returncode != 0:
+            raise Exception("Passphrase-protected key", stdout)
+        if not os.path.exists(self._proxyCertPath):
+            raise Exception("Proxy certificate not created")
+
+    def _openStream(self, fileName, mode = 0644):
+        fd = os.open(fileName, os.O_RDWR | os.O_CREAT | os.O_EXCL, mode)
+        stream = os.fdopen(fd, "w+")
+        return stream
 
     def _parseCertData(self, data):
         sio = StringIO.StringIO(data)
@@ -129,10 +151,11 @@ class WorkspaceCloudClient(object):
         return csubj, ciss, chash
 
     def _exec(self, cmdline, stdinData = None):
-        if stdinData:
+        if stdinData is not None:
             stdin = subprocess.PIPE
         else:
-            stdin = None
+            stdin = file(os.devnull)
+
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
             stderr = subprocess.PIPE, stdin = stdin)
         stdout, stderr = p.communicate(stdinData)
@@ -143,6 +166,7 @@ class WorkspaceCloudClient(object):
             "java",
             "-DGLOBUS_LOCATION=%(top)s/lib/globus",
             "-Djava.endorsed.dirs=%(top)s/lib/globus/endorsed",
+            "-DX509_USER_PROXY=%(proxyCert)s",
             "-DX509_CERT_DIR=%(certDir)s",
             "-Djava.security.egd=file:///dev/urandom",
             "-classpath",
@@ -157,12 +181,27 @@ class WorkspaceCloudClient(object):
         replacements = dict(top = self.GLOBUS_LOCATION,
             certDir = self._caCertDir,
             confFile = self._configFile,
+            proxyCert = self._proxyCertPath,
         )
         return [ x % replacements for x in cmdline ]
 
     def _opensslCmdline(self, *args):
         cmdline = ["openssl", "x509", "-noout"] + list(args)
         return cmdline
+
+    def _cmdlineProxy(self):
+        cmdline = [
+            "%(top)s/bin/grid-proxy-init.sh",
+            "-key", "%(userKey)s",
+            "-cert", "%(userCert)s",
+            "-out", "%(proxyCert)s",
+        ]
+        replacements = dict(top = self.GLOBUS_LOCATION,
+            userKey = self._userKeyPath,
+            userCert = self._userCertPath,
+            proxyCert = self._proxyCertPath,
+        )
+        return [ x % replacements for x in cmdline ]
 
     def _parseListImages(self, data):
         ret = []
@@ -180,17 +219,14 @@ class WorkspaceCloudClient(object):
             ret.append(m.group(1))
         return ret
 
+    def close(self):
+        if self._tmpDir is None:
+            return
+        shutil.rmtree(self._tmpDir, ignore_errors = True)
+        self._tmpDir = None
+
     def __del__(self):
-        if self._configFile:
-            try:
-                os.unlink(self._configFile)
-            except OSError, e:
-                if e.errno != errno.EBADF:
-                    raise
-            self._configFile = None
-        if self._caCertDir:
-            shutil.rmtree(self._caCertDir, ignore_errors = True)
-            self._caCertDir = None
+        self.close()
 
     _policyTemplate = """
 access_id_CA    X509    '%(caSubject)s'
