@@ -160,9 +160,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateEC2Instances(req)
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
-        if path == '/%s/clouds/workspaces/images' % self.toplevel:
+        if path == '/%s/clouds/vws/images' % self.toplevel:
             return self.enumerateWorkspacesImages(req)
-        if path == '/%s/clouds/workspaces/instances' % self.toplevel:
+        if path == '/%s/clouds/vws/instances' % self.toplevel:
             return self.enumerateWorkspacesInstances(req)
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
