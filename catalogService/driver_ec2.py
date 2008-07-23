@@ -8,6 +8,7 @@ import boto
 from boto.exception import EC2ResponseError
 import urllib
 
+from catalogService import clouds
 from catalogService import config
 from catalogService import environment
 from catalogService import errors
@@ -64,11 +65,17 @@ class SecurityGroup(securityGroups.BaseSecurityGroup):
 class SecurityGroups(securityGroups.BaseSecurityGroups):
     "EC2 Security Groups"
 
-class Cloud(environment.BaseCloud):
+class EnvCloud(environment.BaseCloud):
     "EC2 Cloud"
 
 class Environment(environment.BaseEnvironment):
     "EC2 Environment"
+
+class Cloud(clouds.BaseCloud):
+    "EC2 Cloud"
+    def __init__(self, **kwargs):
+        kwargs['cloudType'] = 'ec2'
+        clouds.BaseCloud.__init__(self, **kwargs)
 
 class Driver(object):
     __slots__ = [ 'ec2conn' ]
@@ -169,7 +176,7 @@ class Driver(object):
 
     def getEnvironment(self, prefix=None):
         env = Environment()
-        cloud = Cloud()
+        cloud = EnvCloud()
 
         instanceTypes = self.getAllInstanceTypes(
             prefix = "%s/instanceTypes/" % prefix)

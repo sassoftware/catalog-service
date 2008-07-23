@@ -67,8 +67,9 @@ class Response(object):
 
         if headers is None:
             headers = {}
-        if contentType is not None:
-            headers['Content-Type'] = contentType or 'application/xml'
+        if contentType is None:
+            contentType = 'application/xml'
+        headers['Content-Type'] = contentType
 
         for k, v in headers.iteritems():
             if isinstance(v, list):
@@ -76,7 +77,7 @@ class Response(object):
             else:
                 self.addHeader(k, v)
 
-        if data:
+        if data is not None:
             # We can pass a node directly
             if hasattr(data, 'getElementTree'):
                 hndlr = xmlNode.Handler()

@@ -6,6 +6,7 @@ import os
 
 import urllib
 
+from catalogService import clouds
 from catalogService import config
 from catalogService import environment
 from catalogService import images
@@ -50,11 +51,17 @@ class SecurityGroup(securityGroups.BaseSecurityGroup):
 class SecurityGroups(securityGroups.BaseSecurityGroups):
     "Globus Virtual Workspaces Security Groups"
 
-class Cloud(environment.BaseCloud):
+class EnvCloud(environment.BaseCloud):
     "Globus Virtual Workspaces Cloud"
 
 class Environment(environment.BaseEnvironment):
     "Globus Virtual Workspaces Environment"
+
+class Cloud(clouds.BaseCloud):
+    "Globus Virtual Workspaces Cloud"
+    def __init__(self, **kwargs):
+        kwargs['cloudType'] = 'vws'
+        clouds.BaseCloud.__init__(self, **kwargs)
 
 class Driver(object):
     __slots__ = [ 'cloudId', 'cfg', 'mintClient' ]
@@ -76,7 +83,7 @@ class Driver(object):
 
     def getEnvironment(self, prefix=None):
         env = Environment()
-        cloud = Cloud()
+        cloud = EnvCloud()
 
         cloud.setId(prefix)
         cloud.setCloudName('workspaces')
