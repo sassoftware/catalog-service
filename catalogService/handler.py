@@ -7,6 +7,7 @@ import BaseHTTPServer
 import os, sys
 import urllib
 
+from catalogService import clouds
 from catalogService import config
 from catalogService import request as brequest
 from catalogService import storage
@@ -154,16 +155,28 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req.setPath(path)
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
+        if path == '/%s/clouds' % self.toplevel:
+            return self._handleResponse(self.enumerateClouds(req))
+        if path == '/%s/clouds/vws' % self.toplevel:
+            return self._handleResponse(self.enumerateVwsClouds(req))
         if path == '/%s/clouds/ec2/images' % self.toplevel:
             return self.enumerateEC2Images(req)
         if path == '/%s/clouds/ec2/instances' % self.toplevel:
             return self._handleResponse(self.enumerateEC2Instances(req))
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
-        if path == '/%s/clouds/vws/images' % self.toplevel:
-            return self._handleResponse(self.enumerateVwsImages(req))
-        if path == '/%s/clouds/vws/instances' % self.toplevel:
-            return self._handleResponse(self.enumerateVwsInstances(req))
+        prefix = '/%s/clouds/vws/' % self.toplevel
+        if path.startswith(prefix):
+            # vws request
+            rest = path[len(prefix):]
+            arr = rest.split('/')
+            vwsName = arr[0]
+            if len(arr) == 2:
+                if arr[1] == 'images':
+                    return self._handleResponse(self.enumerateVwsImages(req,
+                        vwsName))
+                if arr[1] == 'instances':
+                    return self._handleResponse(self.enumerateVwsInstances(req))
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
@@ -439,10 +452,25 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  description = tmp_cloud2Desc),
         ]
 
-    def enumerateVwsClouds(self, req):
-        creds = self.getVwsCredentials()
+    def enumerateClouds(self, req):
+        import driver_ec2
+        nodes = clouds.BaseClouds()
+        prefix = req.getAbsoluteURI()
+        try:
+            _, _ = self.getEC2Credentials()
+            nodes.append(driver_ec2.Cloud(id = prefix + '/ec2',
+                cloudName = '', description = "Amazon Elastic Compute Cloud"))
+        except errors.MissingCredentials:
+            pass
+        nodes.extend(self._enumerateVwsClouds(prefix + '/vws'))
+        return Response(data = nodes)
 
-    def enumerateVwsImages(self, req):
+    def enumerateVwsClouds(self, req):
+        prefix = req.getAbsoluteURI()
+        nodes = self._enumerateVwsClouds(prefix)
+        return Response(data = nodes)
+
+    def enumerateVwsImages(self, req, vwsName):
         import images
         import driver_workspaces
 
@@ -451,7 +479,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         imgs = driver_workspaces.Images()
         for imgData in builds:
             image = driver_workspaces.Image(imageId = str(imgData.get('buildId')),
-                    cloud = 'workspaces')
+                    cloud = 'vws/blah')
             for key, methodName in buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -691,6 +719,20 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = hndlr.toXml(response)
 
         return Response(contentType="application/xml", data = data)
+
+    def _enumerateVwsClouds(self, prefix):
+        import driver_workspaces
+        creds = self.getVwsCredentials()
+
+        nodes = driver_workspaces.clouds.BaseClouds()
+        for cred in creds:
+            nodeName = cred['factory']
+            node = driver_workspaces.Cloud(cloudName = nodeName,
+                cloudDescription = cred['description'])
+            nodeId = "%s/%s" % (prefix, urllib.quote(nodeName, safe=":"))
+            node.setId(nodeId)
+            nodes.append(node)
+        return nodes
 
 
 class HTTPServer(BaseHTTPServer.HTTPServer):
