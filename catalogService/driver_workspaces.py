@@ -6,6 +6,8 @@ import os
 
 import urllib
 
+from rpath_common import xmllib
+
 from catalogService import clouds
 from catalogService import config
 from catalogService import environment
@@ -27,8 +29,31 @@ class Config(config.BaseConfig):
 class Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
 
+    __slots__ = images.BaseImage.__slots__ + ['isDeployed']
+
+    def __init__(self, attrs = None, nsMap = None, **kwargs):
+        images.BaseImage.__init__(self, attrs = None, nsMap = None, **kwargs)
+        self.setIsDeployed(kwargs.get('isDeployed'))
+
+    def setIsDeployed(self, data):
+        self.isDeployed = None
+        if data is None:
+            return self
+        data = xmllib.BooleanNode.toString(data)
+        self.isDeployed = xmllib.GenericNode().setName('isDeployed').characters(data)
+        return self
+
+    def getIsDeployed(self):
+        if self.isDeployed is None:
+            return None
+        return xmllib.BooleanNode.fromString(self.isDeployed.getText())
+
 class Images(images.BaseImages):
     "Globus Virtual Workspaces Images"
+
+class Handler(images.Handler):
+    imageClass = Image
+    imagesClass = Images
 
 class Instance(instances.BaseInstance):
     "Globus Virtual Workspaces Instance"
