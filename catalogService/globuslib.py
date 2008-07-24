@@ -44,7 +44,7 @@ class WorkspaceCloudProperties(object):
             stream.write("%s=%s\n" % (k, v))
 
 class WorkspaceCloudClient(object):
-    GLOBUS_LOCATION = "/tmp/workspace-cloud-client-009"
+    GLOBUS_LOCATION = "/opt/workspace-cloud-client"
     _image_re = re.compile(r"^.*'(.*)'.*$")
 
     def __init__(self, properties, caCert, userCert, userKey):
@@ -74,6 +74,11 @@ class WorkspaceCloudClient(object):
         self._initX509()
         self._createConfigFile()
         self._initProxyCert()
+
+    @classmethod
+    def isFunctional(cls):
+        "Return True if the libraries for Globus Virtual Workspaces exist"
+        return os.path.exists(cls.GLOBUS_LOCATION)
 
     def getCloudId(self):
         return self._properties.get('vws.factory')
@@ -194,12 +199,24 @@ class WorkspaceCloudClient(object):
 
     def _cmdlineProxy(self):
         cmdline = [
-            "%(top)s/bin/grid-proxy-init.sh",
+            "java",
+            "-DGLOBUS_LOCATION=%(top)s/lib/globus",
+            "-Djava.endorsed.dirs=%(top)s/lib/globus/endorsed",
+            "-DX509_USER_PROXY=%(proxyCert)s",
+            "-DX509_CERT_DIR=%(certDir)s",
+            "-Djava.security.egd=file:///dev/urandom",
+            "-classpath",
+            "%(top)s/lib/globus/lib/bootstrap.jar:"
+                "%(top)s/lib/globus/lib/cog-url.jar:"
+                "%(top)s/lib/globus/lib/axis-url.jar",
+            "org.globus.bootstrap.Bootstrap",
+            "org.globus.tools.ProxyInit",
             "-key", "%(userKey)s",
             "-cert", "%(userCert)s",
             "-out", "%(proxyCert)s",
         ]
         replacements = dict(top = self.GLOBUS_LOCATION,
+            certDir = self._caCertDir,
             userKey = self._userKeyPath,
             userCert = self._userCertPath,
             proxyCert = self._proxyCertPath,

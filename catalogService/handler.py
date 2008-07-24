@@ -445,6 +445,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = imgs)
 
     def getVwsCredentials(self):
+        from catalogService import globuslib
+        if not globuslib.WorkspaceCloudClient.isFunctional():
+            return []
         return [
             dict(factory = tmp_cloud1,
                  repository = tmp_repo1,
