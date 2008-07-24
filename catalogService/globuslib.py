@@ -131,7 +131,7 @@ class WorkspaceCloudClient(object):
         cmdline = self._cmdlineProxy()
         stdout, stderr, returncode = self._exec(cmdline)
         if returncode != 0:
-            raise Exception("Passphrase-protected key", stdout)
+            raise Exception("Passphrase-protected key", stdout + stderr)
         if not os.path.exists(self._proxyCertPath):
             raise Exception("Proxy certificate not created")
 
