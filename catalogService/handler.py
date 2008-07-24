@@ -166,12 +166,29 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
             return self.enumerateEC2InstanceTypes(req)
         pathInfo = self._getPathInfo(path)
-        if pathInfo.get('resource') == 'images':
-            return self._handleResponse(self.enumerateVwsImages(req,
-                    pathInfo.get('cloudId')))
-        if pathInfo.get('resource') == 'instances':
-            return self._handleResponse(self.enumerateVwsInstances(req,
-                    pathInfo.get('cloudId')))
+        if pathInfo.get('cloud') == 'vws':
+            creds = self.getVwsCredentials()
+            # Compose the properties for this cloud
+            cloudId = urllib.unquote(pathInfo.get('cloudId'))
+            cloudCred = [ x for x in creds if x['factory'] == cloudId ]
+            if not cloudCred:
+                raise errors.HttpNotFound
+            cloudCred = cloudCred[0]
+
+            from catalogService import globuslib
+            props = globuslib.WorkspaceCloudProperties()
+            props.set('vws.factory', cloudCred['factory'])
+            props.set('vws.repository', cloudCred['repository'])
+            props.set('vws.factory.identity', cloudCred['factoryIdentity'])
+            props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
+            cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
+                cloudCred['userCert'], cloudCred['userKey'])
+            if pathInfo.get('resource') == 'images':
+                return self._handleResponse(self.enumerateVwsImages(req,
+                        cli))
+            if pathInfo.get('resource') == 'instances':
+                return self._handleResponse(self.enumerateVwsInstances(req,
+                        cli))
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
@@ -430,11 +447,17 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def getVwsCredentials(self):
         return [
             dict(factory = tmp_cloud1,
+                 repository = tmp_repo1,
+                 factoryIdentity = tmp_factoryIdentity,
+                 repositoryIdentity = tmp_repoIdentity,
                  caCert = tmp_caCert,
                  userCert = tmp_userCert,
                  userKey = tmp_userKey,
                  description = tmp_cloud1Desc),
             dict(factory = tmp_cloud2,
+                 repository = tmp_repo2,
+                 factoryIdentity = tmp_factoryIdentity,
+                 repositoryIdentity = tmp_repoIdentity,
                  caCert = tmp_caCert,
                  userCert = tmp_userCert,
                  userKey = tmp_userKey,
@@ -459,12 +482,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         nodes = self._enumerateVwsClouds(prefix)
         return Response(data = nodes)
 
-    def enumerateVwsImages(self, req, cloudId):
+    def enumerateVwsImages(self, req, cloudClient):
         import images
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
-        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
+        drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
         prefix = req.getAbsoluteURI()
         imgs = drv.getAllImages(prefix = prefix)
@@ -472,7 +495,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
         for image in imgs:
-            imageId = image.imageId.getText()
+            imageId = image.getImageId()
             imgData = imageDataLookup.get(imageId, {})
             if imgData:
                 found.add(imageId)
@@ -486,8 +509,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # loop over the images known by rBuilder but not known by Workspaces
         for imageId, imgData in [x for x in imageDataLookup.iteritems() \
                 if x[0] not in found]:
+            cloudId = "vws/%s" % cloudClient.getCloudId()
             image = driver_workspaces.Image(id = os.path.join(prefix, imageId),
-                    imageId = imageId, cloud = 'vws', isDeployed = False,
+                    imageId = imageId, cloud = cloudId, isDeployed = False,
                     is_rBuilderImage = True)
             for key, methodName in buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
@@ -749,8 +773,13 @@ class HTTPServer(BaseHTTPServer.HTTPServer):
 
 tmp_cloud1 = "speedy.eng.rpath.com:8443"
 tmp_cloud1Desc = "Super Speedy Super Cloud"
+tmp_repo1 = "speedy.eng.rpath.com:2811"
 tmp_cloud2 = "snaily.eng.rpath.com:8443"
 tmp_cloud2Desc = "Super Slow Micro Cloud"
+tmp_repo2 = "speedy.eng.rpath.com:2811"
+
+tmp_factoryIdentity = "/O=rPath Inc/CN=host/speedy"
+tmp_repoIdentity = "/O=rPath Inc/CN=host/speedy"
 
 tmp_caCert = """\
 Certificate:

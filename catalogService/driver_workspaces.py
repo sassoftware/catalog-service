@@ -11,6 +11,7 @@ from rpath_common import xmllib
 from catalogService import clouds
 from catalogService import config
 from catalogService import environment
+from catalogService import globuslib
 from catalogService import images
 from catalogService import instances
 from catalogService import newInstance
@@ -89,10 +90,10 @@ class Cloud(clouds.BaseCloud):
         clouds.BaseCloud.__init__(self, **kwargs)
 
 class Driver(object):
-    __slots__ = [ 'cloudId', 'cfg', 'mintClient' ]
+    __slots__ = [ 'cloudClient', 'cfg', 'mintClient' ]
 
-    def __init__(self, cloudId, cfg, mintClient):
-        self.cloudId = cloudId
+    def __init__(self, cloudClient, cfg, mintClient):
+        self.cloudClient = cloudClient
         self.cfg = cfg
         self.mintClient = mintClient
         # XXX we need to fetch cloud related info from mint
@@ -101,7 +102,16 @@ class Driver(object):
         raise NotImplementedError
 
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
-        raise NotImplementedError
+        imageIds = self.cloudClient.listImages()
+        imgs = Images()
+        cloudId = 'vws/%s' % self.cloudClient.getCloudId()
+        for imageId in imageIds:
+            qimageId = urllib.quote(imageId, safe = "")
+            image = Image(id = os.path.join(prefix, qimageId),
+                    imageId = imageId, cloud = cloudId, isDeployed = True,
+                    is_rBuilderImage = False)
+            imgs.append(image)
+        return imgs
 
     def getAllInstances(self, instanceIds = None, prefix = None):
         raise NotImplementedError

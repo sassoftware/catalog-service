@@ -75,6 +75,9 @@ class WorkspaceCloudClient(object):
         self._createConfigFile()
         self._initProxyCert()
 
+    def getCloudId(self):
+        return self._properties.get('vws.factory')
+
     def listImages(self):
         cmdline = self._cmdline('--list')
         stdout, stderr, returncode = self._exec(cmdline)
