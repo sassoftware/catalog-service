@@ -155,7 +155,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req.setPath(path)
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
-        if path == '/%s/clouds' % self.toplevel:
+        # We serve clouds both with and without trailing /
+        validCloudsPaths = [ '/%s/clouds' % self.toplevel ]
+        validCloudsPaths.append(validCloudsPaths[0] + '/')
+        if path in validCloudsPaths:
             return self._handleResponse(self.enumerateClouds(req))
         if path == '/%s/clouds/vws' % self.toplevel:
             return self._handleResponse(self.enumerateVwsClouds(req))
@@ -471,6 +474,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import driver_ec2
         nodes = clouds.BaseClouds()
         prefix = req.getAbsoluteURI()
+        # Strip trailing /
+        prefix = prefix.rstrip('/')
         try:
             _, _ = self.getEC2Credentials()
             nodes.append(driver_ec2.Cloud(id = prefix + '/ec2',

@@ -9,6 +9,7 @@ import shutil
 import StringIO
 import subprocess
 import tempfile
+import time
 
 class WorkspaceCloudProperties(object):
     __slots__ = [ 'properties' ]
@@ -46,6 +47,10 @@ class WorkspaceCloudProperties(object):
 class WorkspaceCloudClient(object):
     GLOBUS_LOCATION = "/opt/workspace-cloud-client"
     _image_re = re.compile(r"^.*'(.*)'.*$")
+    _instance_1_re = re.compile(r"^([\d]+)\. "
+        r"([\d]+\.[\d]+\.[\d]+\.[\d]+) "
+        r"\[ (.+) \]$")
+    _timeFormat = "%a %b %d %H:%M:%S %Z %Y"
 
     def __init__(self, properties, caCert, userCert, userKey):
         self._properties = properties
@@ -87,6 +92,11 @@ class WorkspaceCloudClient(object):
         cmdline = self._cmdline('--list')
         stdout, stderr, returncode = self._exec(cmdline)
         return self._parseListImages(stdout)
+
+    def listInstances(self):
+        cmdline = self._cmdline('--status')
+        stdout, stderr, returncode = self._exec(cmdline)
+        return self._parseListInstances(stdout)
 
     def _createConfigFile(self):
         self._configFile = os.path.join(self._tmpDir, "cloud.properties")
@@ -239,6 +249,76 @@ class WorkspaceCloudClient(object):
             ret.append(m.group(1))
         return ret
 
+    def _parseListInstances(self, data):
+        sio = StringIO.StringIO(data)
+        sio.seek(0)
+        instancesLines = self._splitListInstances(sio)
+        ret = []
+        for instanceLines in instancesLines:
+            inst = self._parseInstanceLines(instanceLines)
+            if inst is not None:
+                ret.append(inst)
+        return ret
+
+    def _splitListInstances(self, sio):
+        prefix = '[*]'
+        ret = []
+        for line in sio:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(prefix):
+                ret.append([])
+            ret[-1].append(line)
+        return ret
+
+    @classmethod
+    def _parseInstanceLines(cls, instanceLines):
+        line = instanceLines[0]
+        prefix = '[*] - Workspace #'
+        if not line.startswith(prefix):
+            return None
+        line = line[len(prefix):]
+        m = cls._instance_1_re.search(line)
+        if not m:
+            return None
+
+        inst = Instance()
+        instId, instIp, instName = m.groups()
+        inst.setId(int(instId))
+        inst.setIp(instIp)
+        inst.setName(instName)
+
+        timeFields = { 'Start time' : 'setStartTime',
+                       'Shutdown time' : 'setShutdownTime',
+                       'Termination time' : 'setTerminationTime', }
+        for line in instanceLines[1:]:
+            k, v = cls._splitLine(line)
+            if k == 'State':
+                inst.setState(v)
+            elif k == 'Duration':
+                suffix = ' minutes.'
+                if not v.endswith(suffix):
+                    continue
+                try:
+                    v = int(v[:-len(suffix)])
+                    inst.setDuration(v)
+                except ValueError:
+                    pass
+            elif k in timeFields:
+                ttup = time.strptime(v, cls._timeFormat)
+                tstamp = int(time.mktime(ttup))
+                meth = getattr(inst, timeFields[k])
+                meth(tstamp)
+        return inst
+
+    @classmethod
+    def _splitLine(cls, line):
+        arr = line.split(': ', 1)
+        if len(arr) != 2:
+            return (None, None)
+        return arr
+
     def close(self):
         if self._tmpDir is None:
             return
@@ -253,3 +333,30 @@ access_id_CA    X509    '%(caSubject)s'
 pos_rights      globus  CA:sign
 cond_subjects   globus  '"%(certSubject)s"'
 """
+
+class Instance(object):
+    __slots__ = [ '_id', '_name', '_state', '_ip', '_duration',
+        '_startTime', '_shutdownTime', '_terminationTime', ]
+
+    def __init__(self, **kwargs):
+        for k in self.__slots__:
+            val = kwargs.get(k, None)
+            setattr(self, k, val)
+
+    # Magic function mapper
+    def __getattr__(self, name):
+        if name[:3] not in ['get', 'set']:
+            raise AttributeError(name)
+        slot = "_%s%s" % (name[3].lower(), name[4:])
+        if slot not in self.__slots__:
+            raise AttributeError(name)
+        if name[:3] == 'get':
+            return lambda: self._get(slot)
+        return lambda x: self._set(slot, x)
+
+    def _set(self, key, value):
+        setattr(self, key, value)
+
+    def _get(self, key):
+        val = getattr(self, key)
+        return val
