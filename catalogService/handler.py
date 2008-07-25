@@ -764,7 +764,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         for cred in creds:
             nodeName = cred['factory']
             node = driver_workspaces.Cloud(cloudName = nodeName,
-                cloudDescription = cred['description'])
+                description = cred['description'])
             nodeId = "%s/%s" % (prefix, urllib.quote(nodeName, safe=":"))
             node.setId(nodeId)
             nodes.append(node)
