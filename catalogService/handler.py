@@ -529,6 +529,17 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(data = imgs)
 
+    def enumerateVwsInstances(self, req, cloudClient):
+        import images
+        import driver_workspaces
+
+        cfg = driver_workspaces.Config()
+        drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
+
+        prefix = req.getAbsoluteURI()
+        nodes = drv.getInstances(prefix = prefix)
+        return Response(data = nodes)
+
     def enumerateEC2Instances(self, req):
         import images
         import driver_ec2

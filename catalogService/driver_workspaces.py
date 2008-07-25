@@ -52,15 +52,19 @@ class Image(images.BaseImage):
 class Images(images.BaseImages):
     "Globus Virtual Workspaces Images"
 
-class Handler(images.Handler):
-    imageClass = Image
-    imagesClass = Images
-
 class Instance(instances.BaseInstance):
     "Globus Virtual Workspaces Instance"
 
 class Instances(instances.BaseInstances):
     "Globus Virtual Workspaces Instances"
+
+class Handler(images.Handler):
+    imageClass = Image
+    imagesClass = Images
+
+class HandlerInstances(instances.Handler):
+    instanceClass = Instance
+    instancesClass = Instances
 
 class InstanceType(instances.InstanceType):
     "Globus Virtual Workspaces Instance Type"
@@ -113,8 +117,20 @@ class Driver(object):
             imgs.append(image)
         return imgs
 
-    def getAllInstances(self, instanceIds = None, prefix = None):
-        raise NotImplementedError
+    def getInstances(self, instanceIds = None, prefix = None):
+        instObjs = self.cloudClient.listInstances()
+        nodes = Instances()
+
+        cloudId = 'vws/%s' % self.cloudClient.getCloudId()
+        for instObj in instObjs:
+            instId = str(instObj.getId())
+            inst = Instance(id = os.path.join(prefix, instId),
+                instanceId = instId, dnsName = instObj.getName(),
+                privateDnsName = instObj.getIp(), state = instObj.getState(),
+                launchTime = instObj.getStartTime())
+
+            nodes.append(inst)
+        return nodes
 
     def getEnvironment(self, prefix=None):
         env = Environment()
@@ -159,7 +175,6 @@ class Driver(object):
         <jsdl:CPUArchitectureName>%(ARCHTECTURE)s</jsdl:CPUArchitectureName>
       </jsdl:CPUArchitecture>
       <def:VMM>
-        <def:type>Xen</def:type>
         <def:version>3</def:version>
       </def:VMM>
     </def:requirements>
