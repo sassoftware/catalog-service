@@ -65,17 +65,6 @@ class StandaloneRequest(brequest.BaseRequest):
     def setPath(self, path):
         self._req.path = path
 
-# map the way rBuilder refers to data to the call to set the node's
-# data to match.
-buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
-            'productDescription': 'setProductDescription',
-            'productName': 'setProductName',
-            'isPrivate': 'setIsPrivate_rBuilder',
-            'role': 'setRole',
-            'createdBy': 'setPublisher',
-            'awsAccountNumber': 'setAwsAccountNumber',
-            'buildName': 'setBuildName'}
-
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
@@ -421,7 +410,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             cred.get('awsSecretAccessKey'))
 
     def enumerateEC2Images(self, req):
-        import images
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -437,7 +425,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             imageId = image.imageId.getText()
             imgData = imageDataLookup.get(imageId, {})
             image.setIs_rBuilderImage(bool(imgData))
-            for key, methodName in buildToNodeFieldMap.iteritems():
+            for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
                 method(val)
@@ -494,8 +482,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
         prefix = req.getAbsoluteURI()
-        imgs = drv.getImages(prefix = prefix,
-            buildToNodeFieldMap = buildToNodeFieldMap)
+        imgs = drv.getImages(prefix = prefix)
 
         return Response(data = imgs)
 

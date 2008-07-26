@@ -268,3 +268,15 @@ class Handler(xmllib.DataBinder):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.imageClass, self.imageClass.tag)
         self.registerType(self.imagesClass, self.imagesClass.tag)
+
+# map the way rBuilder refers to data to the call to set the node's
+# data to match.
+buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
+            'productDescription': 'setProductDescription',
+            'productName': 'setProductName',
+            'isPrivate': 'setIsPrivate_rBuilder',
+            'role': 'setRole',
+            'createdBy': 'setPublisher',
+            'awsAccountNumber': 'setAwsAccountNumber',
+            'buildName': 'setBuildName'}
+

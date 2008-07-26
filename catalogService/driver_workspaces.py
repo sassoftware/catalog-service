@@ -105,7 +105,7 @@ class Driver(object):
     def getInstanceStatus(self, workspacesInstanceId):
         raise NotImplementedError
 
-    def getImages(self, prefix, buildToNodeFieldMap):
+    def getImages(self, prefix):
         imgs = self.getImagesFromGrid(prefix = prefix)
         found = set()
 
@@ -117,7 +117,7 @@ class Driver(object):
                 found.add(imageId)
             image.setIs_rBuilderImage(bool(imgData))
             image.setIsDeployed(True)
-            for key, methodName in buildToNodeFieldMap.iteritems():
+            for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
                 method(val)
@@ -129,7 +129,7 @@ class Driver(object):
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, cloud = cloudId, isDeployed = False,
                     is_rBuilderImage = True)
-            for key, methodName in buildToNodeFieldMap.iteritems():
+            for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
                 method(val)
