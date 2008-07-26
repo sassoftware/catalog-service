@@ -170,22 +170,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.enumerateEC2InstanceTypes(req)
         pathInfo = self._getPathInfo(path)
         if pathInfo.get('cloud') == 'vws':
-            creds = self.getVwsCredentials()
-            # Compose the properties for this cloud
             cloudId = urllib.unquote(pathInfo.get('cloudId'))
-            cloudCred = [ x for x in creds if x['factory'] == cloudId ]
-            if not cloudCred:
-                raise errors.HttpNotFound
-            cloudCred = cloudCred[0]
+            cli = self._getVwsClient(cloudId)
 
-            from catalogService import globuslib
-            props = globuslib.WorkspaceCloudProperties()
-            props.set('vws.factory', cloudCred['factory'])
-            props.set('vws.repository', cloudCred['repository'])
-            props.set('vws.factory.identity', cloudCred['factoryIdentity'])
-            props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
-            cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
-                cloudCred['userCert'], cloudCred['userKey'])
             if pathInfo.get('resource') == 'images':
                 return self._handleResponse(self.enumerateVwsImages(req,
                         cli))
@@ -197,7 +184,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         p = '/%s/users/' % self.toplevel
         if path.startswith(p):
             return self._handleResponse(self.getUserData(req, p, path[len(p):]))
-        for cloud in ('ec2', 'workspaces'):
+        for cloud in ('ec2', 'vws'):
             p = '/%s/clouds/ec2/users/' % self.toplevel
             if self.path.startswith(p):
                 rp = self.path[len(p):]
@@ -263,6 +250,23 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         rMap = cls._split_query(query)
         return path, rMap.get('_method', defaultMethod)
 
+    def _getVwsClient(self, cloudId):
+        creds = self.getVwsCredentials()
+        cloudCred = [ x for x in creds if x['factory'] == cloudId ]
+        if not cloudCred:
+            raise errors.HttpNotFound
+        cloudCred = cloudCred[0]
+
+        from catalogService import globuslib
+        props = globuslib.WorkspaceCloudProperties()
+        props.set('vws.factory', cloudCred['factory'])
+        props.set('vws.repository', cloudCred['repository'])
+        props.set('vws.factory.identity', cloudCred['factoryIdentity'])
+        props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
+        cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
+            cloudCred['userCert'], cloudCred['userKey'])
+        return cli
+
     def _getPathInfo(self, path):
         """
         returns dict containing useful information about the path
@@ -303,29 +307,21 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def _handleInstances(self, req, method, pathInfo):
         cloudName = pathInfo.get('cloud')
-        if cloudName not in ('ec2', 'workspaces'):
+        cloudMap = dict(ec2 = 'EC2', vws = 'Vws')
+        if cloudName not in cloudMap:
             # these are currently the only two clouds we handle
             raise errors.HttpNotFound
-        caseName = cloudName.capitalize()
         cloudId = pathInfo.get('cloudId')
         if method == 'DELETE':
+            methodName = 'terminate%sInstance' % cloudMap[cloudName]
+            method = getattr(self, methodName)
             instanceId = pathInfo.get('instanceId')
             prefix = pathInfo.get('prefix', '')
-            if cloudName == 'ec2':
-                self._handleResponse(self.terminateEC2Instance(req,
-                        instanceId, prefix = prefix))
-            else:
-                methodName = 'terminate%sInstance' % caseName
-                m = getattr(self, methodName)
-                self._handleResponse(m(req, cloudId, instanceId,
-                    prefix))
-        else:
-            if cloudName == 'ec2':
-                self._handleResponse(self.newEC2Instance(req))
-            else:
-                methodName = 'new%sInstance' % caseName
-                m = getattr(self, methodName)
-                self._handleResponse(m(req, cloudId))
+            return self._handleResponse(method(req, cloudId, instanceId,
+                prefix))
+        methodName = 'new%sInstance' % cloudMap[cloudName]
+        method = getattr(self, methodName)
+        return self._handleResponse(method(req, cloudId))
 
     @staticmethod
     def _split_query(query):
@@ -491,6 +487,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = nodes)
 
     def enumerateVwsImages(self, req, cloudClient):
+        imgs = self._enumerateVwsImages(req, cloudClient)
+
+        return Response(data = imgs)
+
+    def _enumerateVwsImages(self, req, cloudClient):
         import images
         import driver_workspaces
 
@@ -526,8 +527,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 method = getattr(image, methodName)
                 method(val)
             imgs.append(image)
-
-        return Response(data = imgs)
+        return imgs
 
     def enumerateVwsInstances(self, req, cloudClient):
         import images
@@ -677,7 +677,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def getEnvironment(self, req, cloudPrefix):
-        if 'workspaces' in cloudPrefix:
+        if 'vws' in cloudPrefix:
             raise NotImplementedError
         import environment
         import driver_ec2
@@ -697,7 +697,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType="application/xml", data = data)
 
 
-    def newEC2Instance(self, req):
+    def newEC2Instance(self, req, cloudId):
         import newInstance
         import driver_ec2
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -718,6 +718,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType="application/xml", data = data)
 
     def newVwsInstance(self, req, cloudId):
+        if cloudId is None:
+            raise HttpNotFound
+        cloudId = urllib.unquote(cloudId)
+
+        cli = self._getVwsClient(cloudId)
+
         import newInstance
         import driver_workspaces
 
@@ -736,7 +742,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(contentType="application/xml", data = data)
 
-    def terminateEC2Instance(self, req, instanceId, prefix):
+    def terminateEC2Instance(self, req, cloudId, instanceId, prefix):
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
