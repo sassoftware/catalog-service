@@ -9,6 +9,7 @@ import urllib
 
 from catalogService import clouds
 from catalogService import config
+from catalogService import newInstance
 from catalogService import request as brequest
 from catalogService import storage
 from catalogService import userData
@@ -487,50 +488,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = nodes)
 
     def enumerateVwsImages(self, req, cloudClient):
-        imgs = self._enumerateVwsImages(req, cloudClient)
-
-        return Response(data = imgs)
-
-    def _enumerateVwsImages(self, req, cloudClient):
-        import images
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
         prefix = req.getAbsoluteURI()
-        imgs = drv.getAllImages(prefix = prefix)
-        found = set()
+        imgs = drv.getImages(prefix = prefix,
+            buildToNodeFieldMap = buildToNodeFieldMap)
 
-        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
-        for image in imgs:
-            imageId = image.getImageId()
-            imgData = imageDataLookup.get(imageId, {})
-            if imgData:
-                found.add(imageId)
-            image.setIs_rBuilderImage(bool(imgData))
-            image.setIsDeployed(True)
-            for key, methodName in buildToNodeFieldMap.iteritems():
-                val = imgData.get(key)
-                method = getattr(image, methodName)
-                method(val)
-
-        # loop over the images known by rBuilder but not known by Workspaces
-        for imageId, imgData in [x for x in imageDataLookup.iteritems() \
-                if x[0] not in found]:
-            cloudId = "vws/%s" % cloudClient.getCloudId()
-            image = driver_workspaces.Image(id = os.path.join(prefix, imageId),
-                    imageId = imageId, cloud = cloudId, isDeployed = False,
-                    is_rBuilderImage = True)
-            for key, methodName in buildToNodeFieldMap.iteritems():
-                val = imgData.get(key)
-                method = getattr(image, methodName)
-                method(val)
-            imgs.append(image)
-        return imgs
+        return Response(data = imgs)
 
     def enumerateVwsInstances(self, req, cloudClient):
-        import images
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
@@ -541,7 +510,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = nodes)
 
     def enumerateEC2Instances(self, req):
-        import images
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -698,7 +666,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
     def newEC2Instance(self, req, cloudId):
-        import newInstance
         import driver_ec2
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
@@ -722,19 +689,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise HttpNotFound
         cloudId = urllib.unquote(cloudId)
 
-        cli = self._getVwsClient(cloudId)
-
-        import newInstance
-        import driver_workspaces
-
-        cfg = driver_workspaces.Config()
-
-        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
+        cloudClient = self._getVwsClient(cloudId)
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
 
         prefix = req.getAbsoluteURI()
+
+        from catalogService import driver_workspaces
+
+        cfg = driver_workspaces.Config()
+        drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
+
         response = drv.newInstance(data, prefix = prefix)
 
         hndlr = newInstance.Handler()
@@ -760,7 +726,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType="application/xml", data = data)
 
     def terminateVwsInstance(self, req, cloudId, instanceId, prefix):
-        import newInstance
         import driver_workspaces
 
         cfg = driver_workspaces.Config()

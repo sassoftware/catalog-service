@@ -105,7 +105,38 @@ class Driver(object):
     def getInstanceStatus(self, workspacesInstanceId):
         raise NotImplementedError
 
-    def getAllImages(self, imageIds = None, owners = None, prefix = None):
+    def getImages(self, prefix, buildToNodeFieldMap):
+        imgs = self.getImagesFromGrid(prefix = prefix)
+        found = set()
+
+        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        for image in imgs:
+            imageId = image.getImageId()
+            imgData = imageDataLookup.get(imageId, {})
+            if imgData:
+                found.add(imageId)
+            image.setIs_rBuilderImage(bool(imgData))
+            image.setIsDeployed(True)
+            for key, methodName in buildToNodeFieldMap.iteritems():
+                val = imgData.get(key)
+                method = getattr(image, methodName)
+                method(val)
+
+        # loop over the images known by rBuilder but not known by Workspaces
+        for imageId, imgData in [x for x in imageDataLookup.iteritems()
+                if x[0] not in found]:
+            cloudId = "vws/%s" % self.cloudClient.getCloudId()
+            image = Image(id = os.path.join(prefix, imageId),
+                    imageId = imageId, cloud = cloudId, isDeployed = False,
+                    is_rBuilderImage = True)
+            for key, methodName in buildToNodeFieldMap.iteritems():
+                val = imgData.get(key)
+                method = getattr(image, methodName)
+                method(val)
+            imgs.append(image)
+        return imgs
+
+    def getImagesFromGrid(self, imageIds = None, owners = None, prefix = None):
         imageIds = self.cloudClient.listImages()
         imgs = Images()
         cloudId = 'vws/%s' % self.cloudClient.getCloudId()
