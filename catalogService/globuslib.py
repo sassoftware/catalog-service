@@ -174,8 +174,12 @@ class WorkspaceCloudClient(object):
         else:
             stdin = file(os.devnull)
 
+        env = os.environ.copy()
+        # XXX Hack
+        javaHome = env.get('JAVA_HOME', '/usr/lib64/jvm/sun-java-5.0u15/jre')
+        env['PATH'] = env['PATH'] + ':%s/bin' % javaHome
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
-            stderr = subprocess.PIPE, stdin = stdin)
+            stderr = subprocess.PIPE, stdin = stdin, env = env)
         stdout, stderr = p.communicate(stdinData)
         return stdout, stderr, p.returncode
 
