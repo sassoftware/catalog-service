@@ -175,7 +175,45 @@ class Driver(object):
         return env
 
     def newInstance(self, launchData, prefix=None):
-        raise NotImplementedError
+        hndlr = newInstance.Handler()
+        node = hndlr.parseString(launchData)
+        assert(isinstance(node, newInstance.BaseNewInstance))
+
+        # Extract the real IDs
+        image = node.getImage()
+        imageId = image.getId()
+        imageId = self._extractId(imageId)
+
+        minCount = node.getMinCount() or 1
+        maxCount = node.getMaxCount() or 1
+
+        keyPair = node.getKeyPair()
+        if not keyPair:
+            raise errors.ParameterError('keyPair was not specified')
+        keyName = keyPair.getId()
+        keyName = self._extractId(keyName)
+
+        securityGroups = []
+        for sg in (node.getSecurityGroups() or []):
+            sgId = sg.getId()
+            sgId = self._extractId(sgId)
+            securityGroups.append(sgId)
+
+        userData = node.getUserData()
+
+        instanceType = node.getInstanceType()
+        if instanceType is None:
+            instanceType = 'm1.small'
+        else:
+            instanceType = instanceType.getId() or 'm1.small'
+            instanceType = self._extractId(instanceType)
+
+        ret = self._launchInstance(imageId, minCount=minCount,
+            maxCount=maxCount, keyName=keyName, securityGroups=securityGroups,
+            userData=userData, instanceType=instanceType,
+            prefix = prefix)
+        return ret
+
 
     def terminateInstance(self, instanceId, prefix = None):
         raise NotImplementedError
