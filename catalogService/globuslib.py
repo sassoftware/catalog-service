@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import time
 
+from xml.dom import minidom
+
 class WorkspaceCloudProperties(object):
     __slots__ = [ 'properties' ]
     _properties = {
@@ -103,7 +105,7 @@ class WorkspaceCloudClient(object):
         imageId = imageIds[0]
         cmdline = self._cmdline('--run', '--name', imageId, '--hours', hours)
         stdout, stderr, returncode = self._exec(cmdline)
-        return self._parseLaunchInstances(stdout)
+        return self._parseLaunchInstances(stdout, historyDir)
 
     def _createConfigFile(self):
         self._configFile = os.path.join(self._tmpDir, "cloud.properties")
@@ -324,8 +326,16 @@ class WorkspaceCloudClient(object):
         return inst
 
     @classmethod
-    def _parseLaunchInstances(self, data):
-        pass
+    def _parseLaunchInstances(cls, data, historyDir):
+        # We should have a 'vm-001' in the output
+        hndl = 'vm-001'
+        if hndl not in data:
+            raise Exception("XXX 1")
+        # Grab the identifier from the XML file
+        xmlFile = os.path.join(historyDir, hndl, "vw-epr.xml")
+        epr = EPR()
+        epr.parse(file(xmlFile))
+        return epr.id
 
     @classmethod
     def _repackageImage(self, filename):
@@ -397,3 +407,18 @@ class Instance(object):
     def _get(self, key):
         val = getattr(self, key)
         return val
+
+class EPR(object):
+    def __init__(self):
+        self.id = None
+
+    def parse(self, stream):
+        dom = minidom.parse(stream)
+
+        try:
+            nodes = dom.getElementsByTagName('ns2:WorkspaceKey')
+            if nodes:
+                node = nodes[0]
+                self.id = int(node.childNodes[0].data)
+        finally:
+            dom.unlink()
