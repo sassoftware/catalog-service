@@ -283,7 +283,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     resource, pRest = pRest, ''
                 res['cloud'] = cloud
                 if cloudId is not None:
-                    res['cloudId'] = cloudId
+                    res['cloudId'] = urllib.unquote(cloudId)
                 if pRest:
                     res['instanceId'] = pRest
                     prefix = path[:- len(pRest)]
