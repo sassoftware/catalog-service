@@ -174,22 +174,24 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         p = '/%s/users/' % self.toplevel
         if path.startswith(p):
             return self._handleResponse(self.getUserData(req, p, path[len(p):]))
-        for cloud in ('ec2', 'vws'):
-            p = '/%s/clouds/ec2/users/' % self.toplevel
-            if self.path.startswith(p):
-                rp = self.path[len(p):]
-                cloudPrefix = '/%s/clouds/ec2' % self.toplevel
-                # Grab the user part
-                arr = rp.split('/')
-                userId = urllib.unquote(arr[0])
-                if userId != req.getUser():
-                    for k, v in req.iterHeaders():
-                        print >> sys.stderr, "%s: %s" % (k, v)
-                        sys.stderr.flush()
-                    raise Exception("XXX 1", userId, req.getUser())
-                if arr[1:] == ['environment']:
-                    return self._handleResponse(self.getEnvironment(req,
+        if pathInfo.get('resource') == 'users':
+            # Grab the user part
+            arr = pathInfo['instanceId'].split('/')
+            userId = urllib.unquote(arr[0])
+            if userId != req.getUser():
+                for k, v in req.iterHeaders():
+                    print >> sys.stderr, "%s: %s" % (k, v)
+                    sys.stderr.flush()
+                raise Exception("XXX 1", userId, req.getUser())
+            cloudPrefix = '%s/clouds/%s' % (self.toplevel, pathInfo['cloud'])
+            if 'cloudId' in pathInfo:
+                cloudPrefix += '/%s' % pathInfo['cloudId']
+            if arr[1:] == ['environment']:
+                if pathInfo['cloud'] == 'ec2':
+                    return self._handleResponse(self.getEnvironmentEC2(req,
                         cloudPrefix))
+                return self._handleResponse(self.getEnvironmentVWS(req,
+                    cloudPrefix, pathInfo['cloudId']))
         raise errors.HttpNotFound
 
     def _do_PUT(self, req):
@@ -631,9 +633,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             req.getAbsoluteURIPath(), )
         return Response(contentType = "text/xml", data = response)
 
-    def getEnvironment(self, req, cloudPrefix):
-        if 'vws' in cloudPrefix:
-            raise NotImplementedError
+    def getEnvironmentEC2(self, req, cloudPrefix):
         import environment
         import driver_ec2
 
@@ -649,7 +649,23 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         hndlr = environment.Handler()
         data = hndlr.toXml(node)
 
-        return Response(contentType="application/xml", data = data)
+        return Response(data = data)
+
+    def getEnvironmentVWS(self, req, cloudPrefix, cloudId):
+        import environment
+        import driver_workspaces
+
+        cloudClient = self._getVwsClient(cloudId)
+
+        cfg = driver_workspaces.Config()
+        drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
+
+        prefix = "%s%s" % (req.getSchemeNetloc(), cloudPrefix)
+        node = drv.getEnvironment(cloudId, prefix=prefix)
+
+        hndlr = environment.Handler()
+        data = hndlr.toXml(node)
+        return Response(data = data)
 
 
     def newEC2Instance(self, req, cloudId):

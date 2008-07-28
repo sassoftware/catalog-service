@@ -12,7 +12,7 @@ from catalogService import securityGroups
 
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'
-    __slots__ = [ 'id', 'cloudName', 'instanceTypes', 'keyPairs', 'securityGroups' ]
+    __slots__ = [ 'id', 'cloudName', 'cloudType', 'instanceTypes', 'keyPairs', 'securityGroups' ]
 
 class BaseEnvironment(xmlNode.BaseNodeCollection):
     tag = 'environment'

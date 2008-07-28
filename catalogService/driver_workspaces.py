@@ -10,6 +10,7 @@ from rpath_common import xmllib
 
 from catalogService import clouds
 from catalogService import config
+from catalogService import driver
 from catalogService import environment
 from catalogService import globuslib
 from catalogService import images
@@ -69,6 +70,17 @@ class HandlerInstances(instances.Handler):
 class InstanceType(instances.InstanceType):
     "Globus Virtual Workspaces Instance Type"
 
+class InstanceTypes(instances.InstanceTypes):
+    "Globus Virtual Workspaces Instance Types"
+
+    idMap = [
+        ('vws.small', "Small"),
+        ('vws.medium', "Medium"),
+        ('vws.large', "Large"),
+        ('vws.xlarge', "Extra Large"),
+    ]
+
+
 class KeyPair(keypairs.BaseKeyPair):
     "Globus Virtual Workspaces Key Pair"
 
@@ -93,10 +105,11 @@ class Cloud(clouds.BaseCloud):
         kwargs['cloudType'] = 'vws'
         clouds.BaseCloud.__init__(self, **kwargs)
 
-class Driver(object):
+class Driver(driver.BaseDriver):
     __slots__ = [ 'cloudClient', 'cfg', 'mintClient' ]
 
     def __init__(self, cloudClient, cfg, mintClient):
+        driver.BaseDriver.__init__(self)
         self.cloudClient = cloudClient
         self.cfg = cfg
         self.mintClient = mintClient
@@ -141,7 +154,7 @@ class Driver(object):
         imgs = Images()
         cloudId = 'vws/%s' % self.cloudClient.getCloudId()
         for imageId in imageIds:
-            qimageId = urllib.quote(imageId, safe = "")
+            qimageId = self._urlquote(imageId)
             image = Image(id = os.path.join(prefix, qimageId),
                     imageId = imageId, cloud = cloudId, isDeployed = True,
                     is_rBuilderImage = False)
@@ -163,12 +176,17 @@ class Driver(object):
             nodes.append(inst)
         return nodes
 
-    def getEnvironment(self, prefix=None):
+    def getEnvironment(self, cloudId, prefix=None):
         env = Environment()
         cloud = EnvCloud()
 
+        instanceTypes = self.getAllInstanceTypes(
+            prefix = "%s/instanceTypes/" % prefix)
+
         cloud.setId(prefix)
-        cloud.setCloudName('workspaces')
+        cloud.setCloudType('vws')
+        cloud.setCloudName('vws/%s' % cloudId)
+        cloud.setInstanceTypes(instanceTypes)
 
         env.append(cloud)
 
@@ -283,4 +301,15 @@ class Driver(object):
         macros['IMAGEFILENAME'] = os.path.join(baseFileName,
                 baseFileName + '-root.ext3')
         return template % macros
+
+    def getAllInstanceTypes(self, prefix=None):
+        ret = InstanceTypes()
+        ret.extend(InstanceType(id=self.addPrefix(prefix, x), instanceTypeId=x,
+                   description=y)
+                   for x, y in InstanceTypes.idMap)
+        return ret
+
+    @classmethod
+    def _urlquote(cls, data):
+        return urllib.quote(data, safe = "")
 

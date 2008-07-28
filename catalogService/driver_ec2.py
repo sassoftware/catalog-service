@@ -10,6 +10,7 @@ import urllib
 
 from catalogService import clouds
 from catalogService import config
+from catalogService import driver
 from catalogService import environment
 from catalogService import errors
 from catalogService import images
@@ -77,10 +78,11 @@ class Cloud(clouds.BaseCloud):
         kwargs['cloudType'] = 'ec2'
         clouds.BaseCloud.__init__(self, **kwargs)
 
-class Driver(object):
+class Driver(driver.BaseDriver):
     __slots__ = [ 'ec2conn' ]
 
     def __init__(self, cfg):
+        driver.BaseDriver.__init__(self)
         self.ec2conn = Connection_EC2(cfg.awsPublicKey, cfg.awsPrivateKey)
 
     def _launchInstance(self, ec2AMIId, minCount=1, maxCount=1,
@@ -115,13 +117,6 @@ class Driver(object):
             return node
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.reason, e.body)
-
-    @staticmethod
-    def addPrefix(prefix, data):
-        data = urllib.quote(data, safe="")
-        if prefix is None:
-            return data
-        return os.path.join(prefix, data)
 
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
         node = Images()
@@ -187,6 +182,7 @@ class Driver(object):
 
         cloud.setId(prefix)
         cloud.setCloudName('ec2')
+        cloud.setCloudType('ec2')
         cloud.setInstanceTypes(instanceTypes)
         cloud.setKeyPairs(keyPairs)
         cloud.setSecurityGroups(securityGroups)
