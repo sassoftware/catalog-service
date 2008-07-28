@@ -689,7 +689,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def newVwsInstance(self, req, cloudId):
         if cloudId is None:
-            raise HttpNotFound
+            raise errors.HttpNotFound
         cloudId = urllib.unquote(cloudId)
 
         cloudClient = self._getVwsClient(cloudId)
