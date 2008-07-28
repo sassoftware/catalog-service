@@ -16,7 +16,8 @@ class BaseCount(xmlNode.xmllib.IntegerNode):
 class BaseNewInstance(xmlNode.BaseNode):
     tag = 'newInstance'
     __slots__ = [ 'image', 'minCount', 'maxCount', 'keyPair',
-                  'securityGroups', 'userData', 'instanceType' ]
+                  'securityGroups', 'userData', 'instanceType',
+                  'duration' ]
 
 class Handler(xmllib.DataBinder):
     countClass = BaseCount
@@ -31,6 +32,7 @@ class Handler(xmllib.DataBinder):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.countClass, 'minCount')
         self.registerType(self.countClass, 'maxCount')
+        self.registerType(self.countClass, 'duration')
         self.registerType(self.newInstanceClass, self.newInstanceClass.tag)
         self.registerType(self.keyPairClass, self.keyPairClass.tag)
         self.registerType(self.imageClass, self.imageClass.tag)
