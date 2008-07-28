@@ -98,6 +98,13 @@ class WorkspaceCloudClient(object):
         stdout, stderr, returncode = self._exec(cmdline)
         return self._parseListInstances(stdout)
 
+    def launchInstances(self, imageIds, hours):
+        # We only launch an instance for now
+        imageId = imageIds[0]
+        cmdline = self._cmdline('--run', '--name', imageId, '--hours', hours)
+        stdout, stderr, returncode = self._exec(cmdline)
+        return self._parseLaunchInstances(stdout)
+
     def _createConfigFile(self):
         self._configFile = os.path.join(self._tmpDir, "cloud.properties")
         stream = self._openStream(self._configFile)
@@ -315,6 +322,32 @@ class WorkspaceCloudClient(object):
                 meth = getattr(inst, timeFields[k])
                 meth(tstamp)
         return inst
+
+    @classmethod
+    def _parseLaunchInstances(self, data):
+        pass
+
+    @classmethod
+    def _repackageImage(self, filename):
+        """
+        Take a .tar.gz image and convert it to a gzipped image with the same
+        name, in the same directory
+        """
+        bname = os.path.basename(filename)
+        for suffix in ['.tgz', '.tar.gz']:
+            if bname.endswith(suffix):
+                bname = bname[:-len(suffix)]
+                break
+        else: # for
+            # Not a .tar.gz
+            raise Exception("Not a tar-gzipped image")
+
+        dname = os.path.dirname(filename)
+        dfilename = os.path.join(dname, bname)
+        cmd = "tar zxvf %s --to-stdout | gzip -c > %s" % (filename, dfilename)
+        p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, "w"))
+        p.wait()
+        return dfilename
 
     @classmethod
     def _splitLine(cls, line):
