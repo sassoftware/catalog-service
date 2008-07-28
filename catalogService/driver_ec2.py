@@ -235,12 +235,6 @@ class Driver(driver.BaseDriver):
         ret = self._terminateInstances([instanceId], prefix = prefix)
         return ret[0]
 
-    @staticmethod
-    def _extractId(value):
-        if value is None:
-            return None
-        return urllib.unquote(os.path.basename(value))
-
     def _genInstances(self, iList, reservation = None, prefix = None):
         for x in iList:
             ownerId = reservationId = launchIndex = None

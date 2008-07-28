@@ -13,3 +13,9 @@ class BaseDriver(object):
             return data
         return os.path.join(prefix, data)
 
+    @staticmethod
+    def _extractId(value):
+        if value is None:
+            return None
+        return urllib.unquote(os.path.basename(value))
+
