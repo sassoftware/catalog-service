@@ -455,6 +455,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  userCert = tmp_userCert,
                  userKey = tmp_userKey,
                  description = tmp_cloud2Desc),
+            dict(factory = tmp_cloud3,
+                 repository = tmp_repo3,
+                 factoryIdentity = tmp_cloud3FactoryIdentity,
+                 repositoryIdentity = tmp_cloud3RepoIdentity,
+                 caCert = tmp_cloud3CaCert,
+                 userCert = tmp_cloud3UserCert,
+                 userKey = tmp_cloud3UserKey,
+                 description = tmp_cloud3Desc),
         ]
 
     def enumerateClouds(self, req):
@@ -982,6 +990,103 @@ WABj0OCea7TgOVvkaTyUzuYZE0YDe0NPkQJBAMv2pvHdKiST3zK2eox4WaaD8f67
 jLqr2DhXnjKq8PPXuJe8QpVuCnJ205CvEVURbEnrAgT8as1q1xLf4TCqePelOO+y
 Rsm9l8DztFChTF+XFIECQEfnlq/2nKJ9tPjwpnEMAvgG8ZPETySVOMXWw5D+8X0i
 dbYb5MZfyowL0QZsEJAhSo1R5vzLTXjYAUCJrPZ0LKo=
+-----END RSA PRIVATE KEY-----
+"""
+
+tmp_cloud3 = "tp-grid3.ci.uchicago.edu:8445"
+tmp_cloud3Desc = "Nimbus Cloud at University of Chicago"
+tmp_repo3 = "tp-vm1.ci.uchicago.edu:2811"
+
+tmp_cloud3FactoryIdentity = "/O=Grid/OU=GlobusTest/OU=simple-workspace-ca/CN=host/tp-grid3.ci.uchicago.edu"
+tmp_cloud3RepoIdentity = "/O=Grid/OU=GlobusTest/OU=simple-workspace-ca/CN=host/tp-vm1.ci.uchicago.edu"
+
+tmp_cloud3CaCert = """
+-----BEGIN CERTIFICATE-----
+MIICZTCCAc6gAwIBAgIBADANBgkqhkiG9w0BAQQFADBVMQ0wCwYDVQQKEwRHcmlk
+MRMwEQYDVQQLEwpHbG9idXNUZXN0MRwwGgYDVQQLExNzaW1wbGUtd29ya3NwYWNl
+LWNhMREwDwYDVQQDEwhTaW1wbGVDQTAeFw0wNzAyMjYwMjE4MDBaFw0xMjAyMjUw
+MjE4MDBaMFUxDTALBgNVBAoTBEdyaWQxEzARBgNVBAsTCkdsb2J1c1Rlc3QxHDAa
+BgNVBAsTE3NpbXBsZS13b3Jrc3BhY2UtY2ExETAPBgNVBAMTCFNpbXBsZUNBMIGf
+MA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCpFzJ+klOA7XvDs6e9T4EKFzVc5+gP
+nsQPk6ARxJMBJvvEmHDVHOiGBKl4ua3KscP/LOPyhTbshtukcE4FrzG3HRrfSzJL
+lbRrtmrLFp+9hIv8g2klC9/a444DnBTdrBjcAywRjiDDZwYKZucYjbmivbuzVYDs
+xy7eDixbTCmWewIDAQABo0UwQzAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBQ8
+HTYkMIb4nykLBEPFRApQAnik/DARBglghkgBhvhCAQEEBAMCAAcwDQYJKoZIhvcN
+AQEEBQADgYEAgtdSTpYug9NgtiMK+1ivN+Hug+BAYnfWoqMqbFeRN0R/l7bHI5Q5
+E7/27cGZV/rkWw/XiZcY8tvq6IpSj8EO4DNHoPf1fcB456LJC1JynAakR0Um/s/O
+mGHoqfb9hJbpLdxyvhdR2RjZYsOjSrF1zrqwCwuYEhVKuCav+oYyC+Q=
+-----END CERTIFICATE-----
+"""
+
+tmp_cloud3UserCert = """
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number: 28 (0x1c)
+        Signature Algorithm: md5WithRSAEncryption
+        Issuer: O=Grid, OU=GlobusTest, OU=simple-workspace-ca, CN=SimpleCA
+        Validity
+            Not Before: Jul 25 21:22:36 2008 GMT
+            Not After : Jul 25 21:22:36 2009 GMT
+        Subject: O=Grid, OU=GlobusTest, OU=simple-workspace-ca, OU=uchicago.edu, CN=Mihai Ibanescu
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+            RSA Public Key: (1024 bit)
+                Modulus (1024 bit):
+                    00:e4:af:fa:12:d8:d1:8c:62:78:8c:73:15:48:16:
+                    c9:17:2b:8d:13:07:0a:ef:b8:34:9a:2d:2d:48:08:
+                    65:86:bd:54:f9:60:ae:3c:94:78:a9:89:cb:6b:5e:
+                    61:2e:53:cd:d1:d5:5b:73:e5:d3:4a:ca:48:57:02:
+                    b5:58:25:c4:c2:d3:e9:14:b1:0e:c6:be:27:a5:19:
+                    a3:7f:c4:cc:a3:24:dc:84:f0:4d:b5:8d:af:c7:78:
+                    4c:b8:a0:2d:70:61:22:ef:5e:eb:e9:bc:24:26:0f:
+                    53:b4:b7:5c:2b:9e:07:98:65:d2:b0:86:7b:03:a4:
+                    6b:43:4a:e9:fd:53:66:b9:89
+                Exponent: 65537 (0x10001)
+        X509v3 extensions:
+            Netscape Cert Type: 
+                SSL Client, SSL Server, S/MIME, Object Signing
+    Signature Algorithm: md5WithRSAEncryption
+        68:2a:26:d4:a1:fc:51:b7:df:e3:28:05:28:b6:60:75:3a:90:
+        56:5d:a0:4b:ef:07:60:cf:d0:8c:dd:3e:2c:6c:96:8a:ca:fd:
+        ce:4d:29:ad:0c:54:5e:d8:cd:ac:e2:db:ba:9c:39:72:96:af:
+        91:9d:65:a3:c5:77:43:ff:4f:77:4c:bd:ed:b7:e2:ed:91:24:
+        b7:86:7e:67:0d:2a:0c:8d:1a:6a:99:c4:bd:4e:16:a2:30:1f:
+        86:14:07:63:d1:e0:ea:b4:9a:2b:ee:52:6e:21:f4:c4:18:48:
+        93:b9:35:96:59:74:f1:35:cf:a8:7f:e3:90:58:1f:39:50:5f:
+        9f:ab
+-----BEGIN CERTIFICATE-----
+MIICUjCCAbugAwIBAgIBHDANBgkqhkiG9w0BAQQFADBVMQ0wCwYDVQQKEwRHcmlk
+MRMwEQYDVQQLEwpHbG9idXNUZXN0MRwwGgYDVQQLExNzaW1wbGUtd29ya3NwYWNl
+LWNhMREwDwYDVQQDEwhTaW1wbGVDQTAeFw0wODA3MjUyMTIyMzZaFw0wOTA3MjUy
+MTIyMzZaMHIxDTALBgNVBAoTBEdyaWQxEzARBgNVBAsTCkdsb2J1c1Rlc3QxHDAa
+BgNVBAsTE3NpbXBsZS13b3Jrc3BhY2UtY2ExFTATBgNVBAsTDHVjaGljYWdvLmVk
+dTEXMBUGA1UEAxMOTWloYWkgSWJhbmVzY3UwgZ8wDQYJKoZIhvcNAQEBBQADgY0A
+MIGJAoGBAOSv+hLY0YxieIxzFUgWyRcrjRMHCu+4NJotLUgIZYa9VPlgrjyUeKmJ
+y2teYS5TzdHVW3Pl00rKSFcCtVglxMLT6RSxDsa+J6UZo3/EzKMk3ITwTbWNr8d4
+TLigLXBhIu9e6+m8JCYPU7S3XCueB5hl0rCGewOka0NK6f1TZrmJAgMBAAGjFTAT
+MBEGCWCGSAGG+EIBAQQEAwIE8DANBgkqhkiG9w0BAQQFAAOBgQBoKibUofxRt9/j
+KAUotmB1OpBWXaBL7wdgz9CM3T4sbJaKyv3OTSmtDFRe2M2s4tu6nDlylq+RnWWj
+xXdD/093TL3tt+LtkSS3hn5nDSoMjRpqmcS9ThaiMB+GFAdj0eDqtJor7lJuIfTE
+GEiTuTWWWXTxNc+of+OQWB85UF+fqw==
+-----END CERTIFICATE-----
+"""
+
+tmp_cloud3UserKey = """
+-----BEGIN RSA PRIVATE KEY-----
+MIICXQIBAAKBgQDkr/oS2NGMYniMcxVIFskXK40TBwrvuDSaLS1ICGWGvVT5YK48
+lHipictrXmEuU83R1Vtz5dNKykhXArVYJcTC0+kUsQ7GvielGaN/xMyjJNyE8E21
+ja/HeEy4oC1wYSLvXuvpvCQmD1O0t1wrngeYZdKwhnsDpGtDSun9U2a5iQIDAQAB
+AoGAI2y/KDw9+aknU1pgaZJeBCDS8aedohS+0UM+SHJEh+K8TwUS+H9nUZvuzusH
+0s1YjLCoQgPP/z3mhtP8k3MGT3zavSwRb6nZslwDBwfKuX6cCi7aL9tqc4Ctc4x2
+ZRbKH+/IdIoX4oQQsiRwAQjHOfHsqJQ6k9lExZTTrlW8TqECQQD2Rza90wEFYSqz
+dAKO0+c7sy0nOIoGRGaGeXaHRiUcraWUrKQ7BIt9x2NA0V46HEJXG7UvPvYEq0k9
+qbXf9n3zAkEA7bb/d869+RgS97OMRQ6wyCOspHVt9bWk2ZfXiJ1rnaTt8/8C3jZ8
+NXoBcnQR9cQhk+Tp+CNwlAihP6cVYqC9kwJAEitQ05JUmfQANXsSkTz660GdzC30
+qN+0/KjLYNGA/WumMqDGAQCl1eK25NpNbFYXYtvNcy3e8ps8bQsvOtWxlwJBAKey
+FkzVq00Df7YAku7Qq0O1bwBh2x2gc9gQ9zroGtgOVtNvTf2nID61gDnWyii/oRRt
+Q+UKU0wLPn3iCAMY9EMCQQCS5MOelpclV0kQWWxFobS9IDW2XbE/AvtqafxrGQ9a
+7KhykMTHcLm2150q1KwSHnoiWpsCDFam1X/Jo70F8dWi
 -----END RSA PRIVATE KEY-----
 """
 
