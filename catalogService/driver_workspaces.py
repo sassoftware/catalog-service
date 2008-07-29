@@ -145,7 +145,8 @@ class Driver(driver.BaseDriver):
             cloudId = "vws/%s" % self.cloudClient.getCloudId()
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, cloud = cloudId, isDeployed = False,
-                    is_rBuilderImage = True, buildId = imgData['buildId'])
+                    is_rBuilderImage = True, buildId = imgData['buildId'],
+                    location = imageId)
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -161,7 +162,8 @@ class Driver(driver.BaseDriver):
             qimageId = self._urlquote(imageId)
             image = Image(id = os.path.join(prefix, qimageId),
                     imageId = imageId, cloud = cloudId, isDeployed = True,
-                    is_rBuilderImage = False)
+                    is_rBuilderImage = False,
+                    location = os.path.basename(imageId))
             imgs.append(image)
         return imgs
 
