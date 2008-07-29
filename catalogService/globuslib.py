@@ -100,6 +100,12 @@ class WorkspaceCloudClient(object):
         stdout, stderr, returncode = self._exec(cmdline)
         return self._parseListInstances(stdout)
 
+    def transferInstance(self, filename):
+        cmdline = self._cmdline('--transfer', '--sourcefile', filename)
+        stdout, stderr, returncode = self._exec(cmdline)
+        if returncode != 0:
+            raise Exception("XXX 1")
+
     def launchInstances(self, imageIds, duration):
         # duration is time in minutes
         # We only launch an instance for now

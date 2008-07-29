@@ -32,11 +32,12 @@ class Config(config.BaseConfig):
 class Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
 
-    __slots__ = images.BaseImage.__slots__ + ['isDeployed']
+    __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId']
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         images.BaseImage.__init__(self, attrs = None, nsMap = None, **kwargs)
         self.setIsDeployed(kwargs.get('isDeployed'))
+        self.setBuildId(kwargs.get('buildId'))
 
     def setIsDeployed(self, data):
         self.isDeployed = None
@@ -127,10 +128,12 @@ class Driver(driver.BaseDriver):
         for image in imgs:
             imageId = image.getImageId()
             imgData = imageDataLookup.get(imageId, {})
-            if imgData:
-                found.add(imageId)
             image.setIs_rBuilderImage(bool(imgData))
             image.setIsDeployed(True)
+            if not imgData:
+                continue
+            found.add(imageId)
+            image.setBuildId(imgData['buildId'])
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -142,7 +145,7 @@ class Driver(driver.BaseDriver):
             cloudId = "vws/%s" % self.cloudClient.getCloudId()
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, cloud = cloudId, isDeployed = False,
-                    is_rBuilderImage = True)
+                    is_rBuilderImage = True, buildId = imgData['buildId'])
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -311,7 +314,7 @@ class Driver(driver.BaseDriver):
         img = fimgs[0]
 
         if not img.getIsDeployed():
-            self.cloudClient.deployImage(imageId)
+            self._deployImage(img)
 
         ret = Instances()
         try:
@@ -324,3 +327,24 @@ class Driver(driver.BaseDriver):
         except:
             raise
 
+    def _deployImage(self, image):
+        imageId = image.getImageId()
+        build = self.mintClient.getBuild(image.getBuildId())
+        # XXX lots of shortcuts here. Instead of building a proper URL and do
+        # it remotely, we'll just fetch the file if we have a path to it.
+        fileUrls = [ x['fileUrls'] for x in build.getFiles()
+            if imageId == x['sha1'] ]
+        fileUrls = [ x[2] for x in fileUrls[0] if os.path.exists(x[2]) ]
+        fileUrl = fileUrls[0]
+        # We need to rename/copy this file first
+        dFileName = os.path.join(self.cloudClient._tmpDir, "%s.tgz" % imageId)
+        globuslib.shutil.copy(fileUrl, dFileName)
+        # Convert from .tgz to compressed image
+        self.cloudClient._repackageImage(dFileName)
+        os.unlink(dFileName)
+        dFileName = os.path.splitext(dFileName)[0]
+        # Now publish the image
+        self._publishImage(dFileName)
+
+    def _publishImage(self, fileName):
+        self.cloudClient.transferInstance(fileName)
