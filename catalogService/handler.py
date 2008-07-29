@@ -474,7 +474,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         try:
             _, _ = self.getEC2Credentials()
             nodes.append(driver_ec2.Cloud(id = prefix + '/ec2',
-                cloudName = '', description = "Amazon Elastic Compute Cloud"))
+                cloudName = 'ec2',
+                description = "Amazon Elastic Compute Cloud"))
         except errors.MissingCredentials:
             pass
         nodes.extend(self._enumerateVwsClouds(prefix + '/vws'))
@@ -761,7 +762,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         nodes = driver_workspaces.clouds.BaseClouds()
         for cred in creds:
             nodeName = cred['factory']
-            node = driver_workspaces.Cloud(cloudName = nodeName,
+            cloudName = "vws/%s" % cred['factory']
+            node = driver_workspaces.Cloud(cloudName = cloudName,
                 description = cred['description'])
             nodeId = "%s/%s" % (prefix, urllib.quote(nodeName, safe=":"))
             node.setId(nodeId)
