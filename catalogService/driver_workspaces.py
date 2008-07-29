@@ -174,7 +174,7 @@ class Driver(driver.BaseDriver):
             instId = str(instObj.getId())
             inst = Instance(id = os.path.join(prefix, instId),
                 instanceId = instId, dnsName = instObj.getName(),
-                privateDnsName = instObj.getIp(), state = instObj.getState(),
+                publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime())
 
             nodes.append(inst)
