@@ -146,7 +146,7 @@ class Driver(driver.BaseDriver):
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, cloud = cloudId, isDeployed = False,
                     is_rBuilderImage = True, buildId = imgData['buildId'],
-                    location = imageId)
+                    shortName = imageId, longName = imageId)
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -163,7 +163,8 @@ class Driver(driver.BaseDriver):
             image = Image(id = os.path.join(prefix, qimageId),
                     imageId = imageId, cloud = cloudId, isDeployed = True,
                     is_rBuilderImage = False,
-                    location = os.path.basename(imageId))
+                    shortName = os.path.basename(imageId),
+                    longName = imageId)
             imgs.append(image)
         return imgs
 
