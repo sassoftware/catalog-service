@@ -12,6 +12,7 @@ from catalogService import clouds
 from catalogService import config
 from catalogService import driver
 from catalogService import environment
+from catalogService import errors
 from catalogService import globuslib
 from catalogService import images
 from catalogService import instances
@@ -202,36 +203,20 @@ class Driver(driver.BaseDriver):
         imageId = image.getId()
         imageId = self._extractId(imageId)
 
-        minCount = node.getMinCount() or 1
-        maxCount = node.getMaxCount() or 1
-
-        keyPair = node.getKeyPair()
-        if not keyPair:
-            raise errors.ParameterError('keyPair was not specified')
-        keyName = keyPair.getId()
-        keyName = self._extractId(keyName)
-
-        securityGroups = []
-        for sg in (node.getSecurityGroups() or []):
-            sgId = sg.getId()
-            sgId = self._extractId(sgId)
-            securityGroups.append(sgId)
-
-        userData = node.getUserData()
+        duration = node.getDuration()
+        if duration is None:
+            raise errors.ParameterError('duration was not specified')
 
         instanceType = node.getInstanceType()
         if instanceType is None:
-            instanceType = 'm1.small'
+            instanceType = 'vws.small'
         else:
-            instanceType = instanceType.getId() or 'm1.small'
+            instanceType = instanceType.getId() or 'vws.small'
             instanceType = self._extractId(instanceType)
 
-        ret = self._launchInstance(imageId, minCount=minCount,
-            maxCount=maxCount, keyName=keyName, securityGroups=securityGroups,
-            userData=userData, instanceType=instanceType,
-            prefix = prefix)
+        ret = self._launchInstance(imageId, duration = duration,
+            instanceType = instanceType, prefix = prefix)
         return ret
-
 
     def terminateInstance(self, instanceId, prefix = None):
         raise NotImplementedError
@@ -312,4 +297,30 @@ class Driver(driver.BaseDriver):
     @classmethod
     def _urlquote(cls, data):
         return urllib.quote(data, safe = "")
+
+    def _launchInstance(self, imageId, duration = None, instanceType = None,
+            prefix = None):
+        # First, verify that the instance we're about to launch exists
+
+        imgs = self.getImages(prefix = 'aaa')
+
+        fimgs = [ x for x in imgs if x.getImageId() == imageId ]
+        if not fimgs:
+            raise error.HttpNotFound()
+
+        img = fimgs[0]
+
+        if not img.getIsDeployed():
+            self.cloudClient.deployImage(imageId)
+
+        ret = Instances()
+        try:
+            reservation = self.cloudClient.launchInstances([imageId],
+                duration = duration)
+            inst = Instance(id = self.addPrefix(prefix, str(reservation)),
+                instanceId = str(reservation))
+            ret.append(inst)
+            return ret
+        except:
+            raise
 

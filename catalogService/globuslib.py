@@ -100,10 +100,19 @@ class WorkspaceCloudClient(object):
         stdout, stderr, returncode = self._exec(cmdline)
         return self._parseListInstances(stdout)
 
-    def launchInstances(self, imageIds, hours):
+    def launchInstances(self, imageIds, duration):
+        # duration is time in minutes
         # We only launch an instance for now
         imageId = imageIds[0]
-        cmdline = self._cmdline('--run', '--name', imageId, '--hours', hours)
+        hours = duration / 60.0
+        historyDir = "%s/history" % self._tmpDir
+        try:
+            os.mkdir(historyDir)
+        except OSError, e:
+            if e.errno != 17:
+                raise
+        cmdline = self._cmdline('--run', '--name', imageId,
+                                '--hours', str(hours))
         stdout, stderr, returncode = self._exec(cmdline)
         return self._parseLaunchInstances(stdout, historyDir)
 
@@ -207,12 +216,13 @@ class WorkspaceCloudClient(object):
             "org.globus.bootstrap.Bootstrap",
             "org.globus.workspace.cloud.client.CloudClient",
             "--conf", "%(confFile)s",
-            "--history-dir", "%(top)s/history"
+            "--history-dir", "%(history)s"
         ] + list(args)
         replacements = dict(top = self.GLOBUS_LOCATION,
             certDir = self._caCertDir,
             confFile = self._configFile,
             proxyCert = self._proxyCertPath,
+            history = os.path.join(self._tmpDir, 'history'),
         )
         return [ x % replacements for x in cmdline ]
 
