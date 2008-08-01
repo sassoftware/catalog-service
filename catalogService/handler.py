@@ -256,7 +256,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         props.set('vws.factory.identity', cloudCred['factoryIdentity'])
         props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
         cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
-            cloudCred['userCert'], cloudCred['userKey'])
+            cloudCred['userCert'], cloudCred['userKey'],
+            cloudCred['sshPubKey'])
         return cli
 
     def _getPathInfo(self, path):
@@ -446,6 +447,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  caCert = tmp_caCert,
                  userCert = tmp_userCert,
                  userKey = tmp_userKey,
+                 sshPubKey = tmp_ssh_pubkey,
                  description = tmp_cloud1Desc),
             dict(factory = tmp_cloud2,
                  repository = tmp_repo2,
@@ -454,6 +456,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  caCert = tmp_caCert,
                  userCert = tmp_userCert,
                  userKey = tmp_userKey,
+                 sshPubKey = tmp_ssh_pubkey,
                  description = tmp_cloud2Desc),
             dict(factory = tmp_cloud3,
                  repository = tmp_repo3,
@@ -462,6 +465,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  caCert = tmp_cloud3CaCert,
                  userCert = tmp_cloud3UserCert,
                  userKey = tmp_cloud3UserKey,
+                 sshPubKey = tmp_ssh_pubkey,
                  description = tmp_cloud3Desc),
         ]
 
@@ -1090,6 +1094,10 @@ FkzVq00Df7YAku7Qq0O1bwBh2x2gc9gQ9zroGtgOVtNvTf2nID61gDnWyii/oRRt
 Q+UKU0wLPn3iCAMY9EMCQQCS5MOelpclV0kQWWxFobS9IDW2XbE/AvtqafxrGQ9a
 7KhykMTHcLm2150q1KwSHnoiWpsCDFam1X/Jo70F8dWi
 -----END RSA PRIVATE KEY-----
+"""
+
+tmp_ssh_pubkey = """\
+ssh-dss AAAAB3NzaC1kc3MAAAEBALWyU/YlO5G5JWlooR5hTtylgOa9sQ+4HoMMP+Inj/XZPnbqgxvE+BSgi6w5Z50rPmDXYP/wAFzy6hhYjM+uhxz0N0OHHOyK8NCPuQvnDY38g6uE8V++B81KmRguXODM2lSOZRMBYL/KqPs25QO4orIGFNiPMWYPWBx8Kch7itcWX2dynwOYpM/IgIGBoRlc7mbk9vFaQqj7cBMCuQfrwbMIiMvvzzalcDKX+CevMVxJLUDA+V63JLXAyjWGMbpkrDgfjaTwAnC5FSrcWPpVIPC42H9UcS/UR9R8igO8JQKnKqhhrpDNZkTxbnRa5Jhm1BckcwJkAX+4ZmjsboK1OcsAAAAVAJWTCngn/uQfT3NptCgUQAItpD1xAAABAQCNmrzcqsbaUcAHi3dcZbArsmZU2tAupOqwp8Jq2Cyw8gigkAQg0kOhDCnUy/+SkQdx6IuWhWAzfCiQo2Iu8bwa1VvWyxQSM/4p2hZiqCAWpOLim6h/0XuCmiinX/QPIfFFoFFP2P+IE+87gV/rNoJoi8ImYwBpILH4/nTx7dFx3Qj6xY/39o0/+VFqt8RPAM9apzqCQDE6fkR5++csshpREHji1kAOmc2fSGp2YuV5qwfxfReG7rZgpWIJndnh/KaXQH34sYCfoIw3WfLrzJd/lRPX/5UwAG/XEJOWU36xQXVXC5B3ILl1VcQRdlw8jf0HzC0Sm+bhT22HnLGzg66EAAABAQCfM3YtYXh93nmtTf3+Ign65DhhjxcLgCD44X3fx1nwmoR5jW1EDCpswgffzm/GEy0i673+o9pz6H7HoSP/sYCruR1nFLr6SzlwxZw27hz4ePRX/YryrUQcgQPmgBNsyVGYgAUGC6RQssmt/9KCi7yXLKW7Pj+6gjmNn4plyM6+iVN8MpslV9e+Iq738BXWzEOSeHq9vHqG6NiHlDpLDxKvWjwGjKgNxy9+ilFYAz7jtw5nea52JlJhwNA9mvhI3rXL2btgnslCUOormeN3ypo4SM/xUbTWci2KS4R/DEInhXfkNQeaUl589XIYg3FJwLU8UWFhDhVpATv79mn9QIQZ misa@rpath.com
 """
 
 if __name__ == '__main__':

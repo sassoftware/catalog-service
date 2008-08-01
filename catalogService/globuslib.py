@@ -24,7 +24,6 @@ class WorkspaceCloudProperties(object):
         'vws.cahash' : '6045a439',
         'ca.certs' : '/tmp',
     }
-    ssh_pubkey = "~/.ssh/id_dsa.pub"
 
     def __init__(self, properties = None):
         self.properties = self._properties.copy()
@@ -54,7 +53,7 @@ class WorkspaceCloudClient(object):
         r"\[ (.+) \]$")
     _timeFormat = "%a %b %d %H:%M:%S %Z %Y"
 
-    def __init__(self, properties, caCert, userCert, userKey):
+    def __init__(self, properties, caCert, userCert, userKey, sshPubKey):
         self._properties = properties
         self._caCert = caCert
 
@@ -67,6 +66,9 @@ class WorkspaceCloudClient(object):
 
         self._userKeyPath = os.path.join(self._tmpDir, "userkey.pem")
         self._openStream(self._userKeyPath, 0600).write(userKey)
+
+        self._sshPubKeyPath = os.path.join(self._tmpDir, "ssh.pub")
+        self._openStream(self._sshPubKeyPath).write(sshPubKey)
 
         self._caCertHash = None
         self._caCertSubject = None
@@ -126,6 +128,7 @@ class WorkspaceCloudClient(object):
         self._configFile = os.path.join(self._tmpDir, "cloud.properties")
         stream = self._openStream(self._configFile)
         self._properties.write(stream)
+        stream.write("\nssh.pubkey=%s\n" % self._sshPubKeyPath)
         stream.close()
 
     def _initX509(self):
