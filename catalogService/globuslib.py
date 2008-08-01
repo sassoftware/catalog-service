@@ -298,6 +298,9 @@ class WorkspaceCloudClient(object):
                 continue
             if line.startswith(prefix):
                 ret.append([])
+            if not ret:
+                # We haven't found a start block line
+                continue
             ret[-1].append(line)
         return ret
 
