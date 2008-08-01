@@ -369,7 +369,7 @@ class WorkspaceCloudClient(object):
             raise Exception("Not a tar-gzipped image")
 
         dname = os.path.dirname(filename)
-        dfilename = os.path.join(dname, bname)
+        dfilename = os.path.join(dname, bname + '.gz')
         cmd = "tar zxvf %s --to-stdout | gzip -c > %s" % (filename, dfilename)
         p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, "w"))
         p.wait()

@@ -159,12 +159,15 @@ class Driver(driver.BaseDriver):
         imgs = Images()
         cloudId = 'vws/%s' % self.cloudClient.getCloudId()
         for imageId in imageIds:
+            imageName = imageId
+            if imageId.endswith('.gz'):
+                imageId = imageId[:-3]
             qimageId = self._urlquote(imageId)
             image = Image(id = os.path.join(prefix, qimageId),
                     imageId = imageId, cloud = cloudId, isDeployed = True,
                     is_rBuilderImage = False,
-                    shortName = os.path.basename(imageId),
-                    longName = imageId)
+                    shortName = os.path.basename(imageName),
+                    longName = imageName)
             imgs.append(image)
         return imgs
 
@@ -324,7 +327,8 @@ class Driver(driver.BaseDriver):
             reservation = self.cloudClient.launchInstances([imageId],
                 duration = duration)
             inst = Instance(id = self.addPrefix(prefix, str(reservation)),
-                instanceId = str(reservation))
+                instanceId = str(reservation),
+                imageId = imageId)
             ret.append(inst)
             return ret
         except:
@@ -338,16 +342,17 @@ class Driver(driver.BaseDriver):
         fileUrls = [ x['fileUrls'] for x in build.getFiles()
             if imageId == x['sha1'] ]
         fileUrls = [ x[2] for x in fileUrls[0] if os.path.exists(x[2]) ]
+        if not fileUrls:
+            return
         fileUrl = fileUrls[0]
         # We need to rename/copy this file first
         dFileName = os.path.join(self.cloudClient._tmpDir, "%s.tgz" % imageId)
         globuslib.shutil.copy(fileUrl, dFileName)
         # Convert from .tgz to compressed image
-        self.cloudClient._repackageImage(dFileName)
+        retfile = self.cloudClient._repackageImage(dFileName)
         os.unlink(dFileName)
-        dFileName = os.path.splitext(dFileName)[0]
         # Now publish the image
-        self._publishImage(dFileName)
+        self._publishImage(retfile)
 
     def _publishImage(self, fileName):
         self.cloudClient.transferInstance(fileName)
