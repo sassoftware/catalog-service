@@ -127,7 +127,11 @@ class Driver(driver.BaseDriver):
         imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
         for image in imgs:
             imageId = image.getImageId()
-            imgData = imageDataLookup.get(imageId, {})
+            imgData = imageDataLookup.pop(imageId, {})
+            if not imgData and imageId.endswith('.gz'):
+                # Try as .gz too
+                imgData = imageDataLookup.pop(imageId[:-3], {})
+
             image.setIs_rBuilderImage(bool(imgData))
             image.setIsDeployed(True)
             if not imgData:
@@ -140,8 +144,7 @@ class Driver(driver.BaseDriver):
                 method(val)
 
         # loop over the images known by rBuilder but not known by Workspaces
-        for imageId, imgData in [x for x in imageDataLookup.iteritems()
-                if x[0] not in found]:
+        for imageId, imgData in imageDataLookup.iteritems():
             cloudId = "vws/%s" % self.cloudClient.getCloudId()
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, cloud = cloudId, isDeployed = False,
@@ -160,8 +163,6 @@ class Driver(driver.BaseDriver):
         cloudId = 'vws/%s' % self.cloudClient.getCloudId()
         for imageId in imageIds:
             imageName = imageId
-            if imageId.endswith('.gz'):
-                imageId = imageId[:-3]
             qimageId = self._urlquote(imageId)
             image = Image(id = os.path.join(prefix, qimageId),
                     imageId = imageId, cloud = cloudId, isDeployed = True,
@@ -314,8 +315,14 @@ class Driver(driver.BaseDriver):
         imgs = self.getImages(prefix = 'aaa')
 
         fimgs = [ x for x in imgs if x.getImageId() == imageId ]
+
+        # Strip out .gz too
+        if not fimgs and imageId.endswith('.gz'):
+            imgPrefix = imageId[:-3]
+            fimgs = [ x for x in imgs if x.getImageId() == imgPrefix ]
+
         if not fimgs:
-            raise error.HttpNotFound()
+            raise errors.HttpNotFound()
 
         img = fimgs[0]
 
