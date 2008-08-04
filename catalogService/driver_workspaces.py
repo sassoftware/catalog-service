@@ -125,13 +125,13 @@ class Driver(driver.BaseDriver):
         found = set()
 
         imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        # Convert the images coming from rbuilder to .gz, to match what we're
+        # storing in globus
+        imageDataLookup = dict((x + '.gz', y)
+            for x, y in imageDataLookup.iteritems())
         for image in imgs:
             imageId = image.getImageId()
             imgData = imageDataLookup.pop(imageId, {})
-            if not imgData and imageId.endswith('.gz'):
-                # Try as .gz too
-                imgData = imageDataLookup.pop(imageId[:-3], {})
-
             image.setIs_rBuilderImage(bool(imgData))
             image.setIsDeployed(True)
             if not imgData:
@@ -343,17 +343,20 @@ class Driver(driver.BaseDriver):
 
     def _deployImage(self, image):
         imageId = image.getImageId()
+        # Get rid of the trailing .gz
+        assert(imageId.endswith('.gz'))
+        imageSha1 = imageId[:-3]
         build = self.mintClient.getBuild(image.getBuildId())
         # XXX lots of shortcuts here. Instead of building a proper URL and do
         # it remotely, we'll just fetch the file if we have a path to it.
         fileUrls = [ x['fileUrls'] for x in build.getFiles()
-            if imageId == x['sha1'] ]
+            if imageSha1 == x['sha1'] ]
         fileUrls = [ x[2] for x in fileUrls[0] if os.path.exists(x[2]) ]
         if not fileUrls:
             return
         fileUrl = fileUrls[0]
         # We need to rename/copy this file first
-        dFileName = os.path.join(self.cloudClient._tmpDir, "%s.tgz" % imageId)
+        dFileName = os.path.join(self.cloudClient._tmpDir, "%s.tgz" % imageSha1)
         globuslib.shutil.copy(fileUrl, dFileName)
         # Convert from .tgz to compressed image
         retfile = self.cloudClient._repackageImage(dFileName)
