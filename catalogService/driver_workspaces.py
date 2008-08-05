@@ -419,6 +419,7 @@ class Driver(driver.BaseDriver):
                 self._doLaunchImage(instanceStore, instId, img,
                     duration = duration, instanceType = instanceType)
             finally:
+                self.cloudClient.close()
                 os._exit(0)
         else:
             os.waitpid(pid, 0)
