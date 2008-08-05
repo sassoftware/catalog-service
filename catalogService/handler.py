@@ -163,12 +163,15 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             cloudId = urllib.unquote(pathInfo.get('cloudId'))
             cli = self._getVwsClient(cloudId)
 
-            if pathInfo.get('resource') == 'images':
-                return self._handleResponse(self.enumerateVwsImages(req,
-                        cli))
-            if pathInfo.get('resource') == 'instances':
-                return self._handleResponse(self.enumerateVwsInstances(req,
-                        cli))
+            try:
+                if pathInfo.get('resource') == 'images':
+                    return self._handleResponse(self.enumerateVwsImages(req,
+                            cli))
+                if pathInfo.get('resource') == 'instances':
+                    return self._handleResponse(self.enumerateVwsInstances(req,
+                            cli))
+            finally:
+                cli.close()
         if path == '/%s/userinfo' % self.toplevel:
             return self.enumerateUserInfo(req)
         p = '/%s/users/' % self.toplevel
@@ -508,7 +511,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
         prefix = req.getAbsoluteURI()
-        nodes = drv.getInstances(prefix = prefix)
+        nodes = drv.getInstances(store = self._getInstanceDataStore(),
+            prefix = prefix)
         return Response(data = nodes)
 
     def enumerateEC2Instances(self, req):
@@ -571,7 +575,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
-        store = storage.DiskStorage(self.storageConfig)
+        store = self._getUserDataStore()
 
         keyPrefix = '/'.join(x for x in userData if x not in ('', '.', '..'))
 
@@ -587,7 +591,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise Exception("XXX 1", arr[0], req.getUser())
 
         prefix = "%s%s" % (req.getSchemeNetloc(), prefix)
-        store = storage.DiskStorage(self.storageConfig)
+        store = self._getUserDataStore()
 
         key = keyPath.rstrip('/')
 
@@ -627,7 +631,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         dataLen = req.getContentLength()
         data = req.read(dataLen)
 
-        store = storage.DiskStorage(self.storageConfig)
+        store = self._getUserDataStore()
         key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         store.set(key, data)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
@@ -639,7 +643,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if userData[0] != req.getUser():
             raise Exception("XXX 1")
 
-        store = storage.DiskStorage(self.storageConfig)
+        store = self._getUserDataStore()
         key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         store.delete(key)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
@@ -676,6 +680,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         prefix = "%s%s" % (req.getSchemeNetloc(), cloudPrefix)
         node = drv.getEnvironment(cloudId, prefix=prefix)
 
+        cloudClient.close()
         hndlr = environment.Handler()
         data = hndlr.toXml(node)
         return Response(data = data)
@@ -717,7 +722,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cfg = driver_workspaces.Config()
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
-        response = drv.newInstance(data, prefix = prefix)
+        store = self._getInstanceDataStore()
+        try:
+            response = drv.newInstance(store, data, prefix = prefix)
+        except:
+            cloudClient.close()
+            raise
+        # Don't close the client on success, the driver will do it for us
 
         hndlr = newInstance.Handler()
         data = hndlr.toXml(response)
@@ -758,6 +769,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = hndlr.toXml(response)
 
         return Response(contentType="application/xml", data = data)
+
+    def _getUserDataStore(self):
+        path = self.storageConfig.storagePath + '/userData'
+        cfg = StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
+
+    def _getInstanceDataStore(self):
+        path = self.storageConfig.storagePath + '/instances'
+        cfg = StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
 
     def _enumerateVwsClouds(self, prefix):
         import driver_workspaces

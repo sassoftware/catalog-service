@@ -3,6 +3,7 @@
 #
 
 import os
+import time
 
 import urllib
 
@@ -21,6 +22,7 @@ from catalogService import keypairs
 from catalogService import securityGroups
 
 from conary import versions
+from conary.lib import util
 
 class Connection_Workspaces(object):
     "Globus Virtual Workspaces Connection"
@@ -116,6 +118,8 @@ class Driver(driver.BaseDriver):
         self.cfg = cfg
         self.mintClient = mintClient
         # XXX we need to fetch cloud related info from mint
+        self.instancesDir = '/tmp/catalog-service-instances'
+        util.mkdirChain(self.instancesDir)
 
     def getInstanceStatus(self, workspacesInstanceId):
         raise NotImplementedError
@@ -172,15 +176,69 @@ class Driver(driver.BaseDriver):
             imgs.append(image)
         return imgs
 
-    def getInstances(self, instanceIds = None, prefix = None):
+    def getInstances(self, store, instanceIds = None, prefix = None):
+        cloudId = 'vws/%s' % self.cloudClient.getCloudId()
+
         instObjs = self.cloudClient.listInstances()
+        # Hash the instances
+        instObjsHash = dict((x.getId(), x) for x in instObjs)
+
+        # List the instances we have in the store
+        keyPrefix = self._getInstanceStorePrefix()
+        instanceStore = InstanceStore(store, keyPrefix)
+        localInstances = instanceStore.enumerate()
+
+        ret = []
+
+        for liKey in localInstances:
+            stateKey = liKey + '/state'
+            fId = os.path.basename(liKey)
+            # Grab the ID
+            rInstId = instanceStore.getId(liKey)
+            if not rInstId:
+                state = instanceStore.getState(liKey, 'Cleaning up')
+                expiration = instanceStore.getExpiration(liKey)
+
+                if expiration is None or time.time() > float(expiration):
+                    # This one expired
+                    instanceStore.delete(liKey)
+                    continue
+
+                inst = globuslib.Instance(_id = fId,
+                    _state = state,
+                    _imageId = instanceStore.getImageId(liKey))
+
+                ret.append((None, inst))
+                continue
+            rInstId = int(rInstId)
+            if rInstId not in instObjsHash:
+                # We no longer have this instance, get rid of it
+                instanceStore.delete(liKey)
+                continue
+            # Instance exists in both globus and the local store.
+            instObj = instObjsHash.pop(rInstId)
+            instObj.setId(fId)
+            ret.append((rInstId, instObj))
+            # Get rid of the state, if one exists
+            instanceStore.delete(stateKey)
+
+        # For everything else, create an instance ID
+        for rInstId, instObj in instObjsHash.items():
+            nkey = instanceStore.newKey(realId = rInstId)
+            instObj.setId(nkey)
+            ret.append((rInstId, instObj))
+        ret.sort(key = lambda x: x[0])
+
         nodes = Instances()
 
-        cloudId = 'vws/%s' % self.cloudClient.getCloudId()
-        for instObj in instObjs:
+        for rId, instObj in ret:
             instId = str(instObj.getId())
-            inst = Instance(id = os.path.join(prefix, instId),
-                instanceId = instId, dnsName = instObj.getName(),
+            longInstId = os.path.join(prefix, instId)
+            if rId is not None:
+                instId = "%s-%s" % (instId, rId)
+            inst = Instance(id = longInstId,
+                instanceId = instId,
+                dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime())
 
@@ -203,7 +261,7 @@ class Driver(driver.BaseDriver):
 
         return env
 
-    def newInstance(self, launchData, prefix=None):
+    def newInstance(self, store, launchData, prefix=None):
         hndlr = newInstance.Handler()
         node = hndlr.parseString(launchData)
         assert(isinstance(node, newInstance.BaseNewInstance))
@@ -224,12 +282,16 @@ class Driver(driver.BaseDriver):
             instanceType = instanceType.getId() or 'vws.small'
             instanceType = self._extractId(instanceType)
 
-        ret = self._launchInstance(imageId, duration = duration,
+        ret = self._launchInstance(store, imageId, duration = duration,
             instanceType = instanceType, prefix = prefix)
         return ret
 
     def terminateInstance(self, instanceId, prefix = None):
         raise NotImplementedError
+
+    def _getInstanceStorePrefix(self):
+        return "%s/%s" % (self.cloudClient.getCloudId().replace('/', '_'),
+            self.cloudClient._userCertHash)
 
     def _getManifest(self, buildId):
         template = """<?xml version="1.0" encoding="UTF-8"?>
@@ -308,10 +370,12 @@ class Driver(driver.BaseDriver):
     def _urlquote(cls, data):
         return urllib.quote(data, safe = "")
 
-    def _launchInstance(self, imageId, duration = None, instanceType = None,
-            prefix = None):
+    def _launchInstance(self, store, imageId, duration = None,
+            instanceType = None, prefix = None):
         # First, verify that the instance we're about to launch exists
 
+        # Prefix doesn't matter here, we're just trying to match the image
+        # by ID
         imgs = self.getImages(prefix = 'aaa')
 
         fimgs = [ x for x in imgs if x.getImageId() == imageId ]
@@ -326,22 +390,70 @@ class Driver(driver.BaseDriver):
 
         img = fimgs[0]
 
-        if not img.getIsDeployed():
-            self._deployImage(img)
+        keyPrefix = self._getInstanceStorePrefix()
+        instanceStore = InstanceStore(store, keyPrefix)
+
+        instId = instanceStore.newKey(imageId = imageId)
+
+        pid = os.fork()
+        if pid == 0:
+            # Fork once more, so we don't have to wait for the real worker
+            pid = os.fork()
+            if pid:
+                # The first child exits and is waited by the parent
+                os._exit(0)
+
+            instanceStore.setPid(instId)
+
+            try:
+                # Redirect stdin, stdout, stderr
+                fd = os.open(os.devnull, os.O_RDWR)
+                os.dup2(fd, 0)
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+                os.close(fd)
+                # Create new process group
+                os.setsid()
+
+                os.chdir('/')
+                self._doLaunchImage(instanceStore, instId, img,
+                    duration = duration, instanceType = instanceType)
+            finally:
+                os._exit(0)
+        else:
+            os.waitpid(pid, 0)
 
         ret = Instances()
+        inst = Instance(id = self.addPrefix(prefix, instId),
+            instanceId = instId,
+            imageId = imageId)
+        ret.append(inst)
+        return ret
+
+    def _setState(self, instanceStore, instanceId, state):
+        return instanceStore.setState(instanceId, state)
+
+    def _doLaunchImage(self, instanceStore, instanceId, img, duration = None,
+            instanceType = None):
+        if not img.getIsDeployed():
+            self._setState(instanceStore, instanceId, 'Preparing image')
+            imgFile = self._prepareImage(img)
+            self._setState(instanceStore, instanceId, 'Publishing image')
+            self._publishImage(imgFile)
+
+        imageId = img.getImageId()
+
+        self._setState(instanceStore, instanceId, 'Launching')
         try:
-            reservation = self.cloudClient.launchInstances([imageId],
+            realId = self.cloudClient.launchInstances([imageId],
                 duration = duration)
-            inst = Instance(id = self.addPrefix(prefix, str(reservation)),
-                instanceId = str(reservation),
-                imageId = imageId)
-            ret.append(inst)
-            return ret
+            instanceStore.setId(instanceId, realId)
+            # We no longer manage the state ourselves
+            self._setState(instanceStore, instanceId, None)
         except:
             raise
 
-    def _deployImage(self, image):
+    def _prepareImage(self, image):
         imageId = image.getImageId()
         # Get rid of the trailing .gz
         assert(imageId.endswith('.gz'))
@@ -361,8 +473,96 @@ class Driver(driver.BaseDriver):
         # Convert from .tgz to compressed image
         retfile = self.cloudClient._repackageImage(dFileName)
         os.unlink(dFileName)
-        # Now publish the image
-        self._publishImage(retfile)
+        return retfile
 
     def _publishImage(self, fileName):
         self.cloudClient.transferInstance(fileName)
+
+class InstanceStore(object):
+    __slots__ = [ '_store', '_prefix' ]
+    DEFAULT_EXPIRATION = 300
+
+    def __init__(self, store, prefix):
+        self._store = store
+        self._prefix = prefix
+
+    def newKey(self, realId = None, imageId = None, expiration = None,
+            state = None):
+        if state is None:
+            state = 'Creating'
+        nkey = self._store.newKey(keyPrefix = self._prefix, keyLength = 6)
+        instId = os.path.basename(nkey)
+        if imageId is not None:
+            self.setImageId(instId, imageId)
+        if realId is not None:
+            self.setId(instId, realId)
+        self.setState(instId, state)
+        self.setExpiration(instId, expiration)
+        return instId
+
+    def enumerate(self):
+        return self._store.enumerate(self._prefix)
+
+    def getImageId(self, instanceId):
+        return self._get(instanceId, 'imageId')
+
+    def setImageId(self, instanceId, imageId):
+        return self._set(instanceId, 'imageId', imageId)
+
+    def getId(self, instanceId):
+        return self._get(instanceId, 'id')
+
+    def setId(self, instanceId, realId):
+        return self._set(instanceId, 'id', realId)
+
+    def getState(self, instanceId, default = None):
+        return self._get(instanceId, 'state', default = default)
+
+    def setState(self, instanceId, state):
+        ret = self._set(instanceId, 'state', state)
+        if state is not None:
+            # Also set the expiration
+            self.setExpiration(instanceId)
+        return ret
+
+    def getPid(self, instanceId):
+        ret = self._get(instanceId, 'pid')
+        if ret is None:
+            return ret
+        return int(ret)
+
+    def setPid(self, instanceId, pid = None):
+        if pid is None:
+            pid = os.getpid()
+        return self._set(instanceId, 'pid', pid)
+
+    def getExpiration(self, instanceId):
+        exp = self._get(instanceId, 'expiration')
+        if exp is None:
+            return None
+        return int(float(exp))
+
+    def setExpiration(self, instanceId, expiration = None):
+        if expiration is None:
+            expiration = self.DEFAULT_EXPIRATION
+        return self._set(instanceId, 'expiration',
+            int(time.time() + expiration))
+
+    def _get(self, instanceId, key, default = None):
+        instanceId = self._getInstanceId(instanceId)
+        fkey = os.path.join(self._prefix, instanceId, key)
+        return self._store.get(fkey, default = default)
+
+    def _set(self, instanceId, key, value):
+        instanceId = self._getInstanceId(instanceId)
+        fkey = os.path.join(self._prefix, instanceId, key)
+        if value is not None:
+            return self._store.set(fkey, value)
+        return self._store.delete(fkey)
+
+    def _getInstanceId(self, key):
+        return os.path.basename(key)
+
+    def delete(self, key):
+        instanceId = self._getInstanceId(key)
+        self._store.delete(os.path.join(self._prefix, instanceId))
