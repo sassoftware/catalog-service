@@ -106,6 +106,20 @@ class BaseStorage(object):
         key = self._sanitizeKey(key)
         return self._real_is_collection(key)
 
+    def newKey(self, keyPrefix = None, keyLength = None):
+        if keyLength is None:
+            keyLength = self.keyLength
+        for i in range(5):
+            newKey = self._generateString(keyLength)
+            if keyPrefix:
+                key = self.separator.join([keyPrefix, newKey])
+            else:
+                key = newKey
+            if not self.exists(key):
+                return key
+
+        raise StorageError("Failed to generate a new key")
+
     def store(self, val, keyPrefix = None):
         """Generate a new key, and store the value.
         @param val: value to store
@@ -116,17 +130,7 @@ class BaseStorage(object):
         @rtype: C{str}
         @raises StorageError: if the module was unable to generate a new key
         """
-        for i in range(5):
-            newKey = self._generateString(self.keyLength)
-            if keyPrefix:
-                key = self.separator.join([keyPrefix, newKey])
-            else:
-                key = newKey
-            if not self.exists(key):
-                break
-        else: # for
-            raise StorageError("Failed to generate a new key")
-
+        key = self.newKey(keyPrefix = keyPrefix)
         self.set(key, val)
         return key
 
@@ -138,6 +142,8 @@ class BaseStorage(object):
         @return: True if the key exists, False otherwise
         """
         key = self._sanitizeKey(key)
+        if self.isCollection(key):
+            return self._real_delete_collection(key)
         return self._real_delete(key)
 
     #{ Methods that could be overwritten in subclasses
@@ -174,6 +180,9 @@ class BaseStorage(object):
         raise NotImplementedError()
 
     def _real_delete(self, key):
+        raise NotImplementedError()
+
+    def _real_delete_collection(self, key):
         raise NotImplementedError()
 
     def _real_enumerate(self, keyPrefix):
@@ -218,6 +227,10 @@ class DiskStorage(BaseStorage):
         fpath = self._getFileForKey(key)
         if os.path.exists(fpath):
             os.unlink(fpath)
+
+    def _real_delete_collection(self, key):
+        fpath = self._getFileForKey(key)
+        util.rmtree(fpath, ignore_errors = True)
 
     def _real_enumerate(self, keyPrefix):
         # Get rid of trailing /
