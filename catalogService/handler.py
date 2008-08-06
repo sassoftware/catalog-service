@@ -504,7 +504,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
 
         prefix = req.getAbsoluteURI()
-        imgs = drv.getImages(prefix = prefix)
+        imgs, imgFiles = drv.getImages(prefix = prefix)
 
         return Response(data = imgs)
 

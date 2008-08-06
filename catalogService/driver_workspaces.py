@@ -128,7 +128,9 @@ class Driver(driver.BaseDriver):
         imgs = self.getImagesFromGrid(prefix = prefix)
         found = set()
 
-        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        imgFiles = {}
+
+        imageDataLookup = self._getMintImages()
         # Convert the images coming from rbuilder to .gz, to match what we're
         # storing in globus
         imageDataLookup = dict((x + '.gz', y)
@@ -141,19 +143,38 @@ class Driver(driver.BaseDriver):
             if not imgData:
                 continue
             found.add(imageId)
+            # Record image files
+            imgFiles[imageId] = imgData['imageFiles']
+
             image.setBuildId(imgData['buildId'])
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
                 method(val)
 
+            ifiles = imgData['imageFiles']
+            if not ifiles:
+                shortName = imageId
+                longName = "%s/%s" % (imgData['buildId'], shortName)
+            else:
+                shortName = os.path.basename(ifiles[0])
+                longName = "%s/%s" % (imgData['buildId'], shortName)
+            image.setShortName(shortName)
+            image.setLongName(longName)
+
         # loop over the images known by rBuilder but not known by Workspaces
         for imageId, imgData in imageDataLookup.iteritems():
             cloudId = "vws/%s" % self.cloudClient.getCloudId()
+            ifiles = imgData['imageFiles']
+            if not ifiles:
+                longName = "%s/%s" % (imgData['buildId'], imageId)
+            else:
+                longName = "%s/%s" % (imgData['buildId'],
+                    os.path.basename(ifiles[0]))
             image = Image(id = os.path.join(prefix, imageId),
                     imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True, buildId = imgData['buildId'],
-                    shortName = imageId, longName = imageId,
+                    longName = longName,
                     cloudName = cloudId, cloudType = 'vws',
                     cloudAlias = self.cloudClient.getCloudAlias())
             for key, methodName in images.buildToNodeFieldMap.iteritems():
@@ -161,7 +182,9 @@ class Driver(driver.BaseDriver):
                 method = getattr(image, methodName)
                 method(val)
             imgs.append(image)
-        return imgs
+            # Record image files
+            imgFiles[imageId] = imgData['imageFiles']
+        return imgs, imgFiles
 
     def getImagesFromGrid(self, imageIds = None, owners = None, prefix = None):
         imageIds = self.cloudClient.listImages()
@@ -297,6 +320,27 @@ class Driver(driver.BaseDriver):
     def terminateInstance(self, instanceId, prefix = None):
         raise NotImplementedError
 
+    def _getMintImages(self):
+        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        for imgSha1, imgData in imageDataLookup.iteritems():
+            # XXX This should come as part of the getAllWorkspacesBuilds()
+            # call
+            imgFile = self._getBuildImageFile(imgSha1, imgData)
+            imgData['imageFiles'] = imgFile
+        return imageDataLookup
+
+    def _getBuildImageFile(self, imgSha1, imgData):
+        buildId = imgData['buildId']
+        build = self.mintClient.getBuild(buildId)
+        fileUrls = [ x['fileUrls'] for x in build.getFiles()
+            if x['sha1'] == imgSha1 ]
+        if not fileUrls:
+            return []
+        ret = []
+        for f in fileUrls:
+            ret.extend([ x[2] for x in f ])
+        return ret
+
     def _getInstanceStorePrefix(self):
         return "%s/%s" % (self.cloudClient.getCloudId().replace('/', '_'),
             self.cloudClient._userCertHash)
@@ -384,7 +428,7 @@ class Driver(driver.BaseDriver):
 
         # Prefix doesn't matter here, we're just trying to match the image
         # by ID
-        imgs = self.getImages(prefix = 'aaa')
+        imgs, imgFiles = self.getImages(prefix = 'aaa')
 
         fimgs = [ x for x in imgs if x.getImageId() == imageId ]
 
@@ -397,6 +441,7 @@ class Driver(driver.BaseDriver):
             raise errors.HttpNotFound()
 
         img = fimgs[0]
+        iFiles = imgFiles.get(imageId, [])
 
         keyPrefix = self._getInstanceStorePrefix()
         instanceStore = InstanceStore(store, keyPrefix)
@@ -425,7 +470,8 @@ class Driver(driver.BaseDriver):
 
                 os.chdir('/')
                 self._doLaunchImage(instanceStore, instId, img,
-                    duration = duration, instanceType = instanceType)
+                    duration = duration, instanceType = instanceType,
+                    imageFiles = iFiles)
             finally:
                 self.cloudClient.close()
                 os._exit(0)
@@ -447,10 +493,10 @@ class Driver(driver.BaseDriver):
         return instanceStore.setState(instanceId, state)
 
     def _doLaunchImage(self, instanceStore, instanceId, img, duration = None,
-            instanceType = None):
+            instanceType = None, imageFiles = None):
         if not img.getIsDeployed():
             self._setState(instanceStore, instanceId, 'Preparing image')
-            imgFile = self._prepareImage(img)
+            imgFile = self._prepareImage(img, imageFiles)
             self._setState(instanceStore, instanceId, 'Publishing image')
             self._publishImage(imgFile)
 
@@ -466,7 +512,7 @@ class Driver(driver.BaseDriver):
         except:
             raise
 
-    def _prepareImage(self, image):
+    def _prepareImage(self, image, imageFiles):
         imageId = image.getImageId()
         # Get rid of the trailing .gz
         assert(imageId.endswith('.gz'))
@@ -474,9 +520,7 @@ class Driver(driver.BaseDriver):
         build = self.mintClient.getBuild(image.getBuildId())
         # XXX lots of shortcuts here. Instead of building a proper URL and do
         # it remotely, we'll just fetch the file if we have a path to it.
-        fileUrls = [ x['fileUrls'] for x in build.getFiles()
-            if imageSha1 == x['sha1'] ]
-        fileUrls = [ x[2] for x in fileUrls[0] if os.path.exists(x[2]) ]
+        fileUrls = [ x for x in imageFiles if os.path.exists(x) ]
         if not fileUrls:
             return
         fileUrl = fileUrls[0]
