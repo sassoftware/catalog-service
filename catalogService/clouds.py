@@ -8,7 +8,7 @@ import xmlNode
 
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'
-    __slots__ = [ 'id', 'cloudName', 'description', 'cloudType' ]
+    __slots__ = [ 'id', 'cloudName', 'description', 'cloudType', 'cloudAlias' ]
 
 class BaseClouds(xmlNode.BaseNodeCollection):
     tag = "clouds"

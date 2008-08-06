@@ -53,9 +53,11 @@ class WorkspaceCloudClient(object):
         r"\[ (.+) \]$")
     _timeFormat = "%a %b %d %H:%M:%S %Z %Y"
 
-    def __init__(self, properties, caCert, userCert, userKey, sshPubKey):
+    def __init__(self, properties, caCert, userCert, userKey, sshPubKey,
+                 cloudAlias):
         self._properties = properties
         self._caCert = caCert
+        self._cloudAlias = cloudAlias
 
         self._tmpDir = tempfile.mkdtemp(prefix="vws-session-")
 
@@ -91,6 +93,9 @@ class WorkspaceCloudClient(object):
 
     def getCloudId(self):
         return self._properties.get('vws.factory')
+
+    def getCloudAlias(self):
+        return self._cloudAlias
 
     def listImages(self):
         cmdline = self._cmdline('--list')

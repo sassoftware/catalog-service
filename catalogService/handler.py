@@ -260,7 +260,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
         cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
             cloudCred['userCert'], cloudCred['userKey'],
-            cloudCred['sshPubKey'])
+            cloudCred['sshPubKey'], cloudCred['alias'])
         return cli
 
     def _getPathInfo(self, path):
@@ -443,7 +443,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if not globuslib.WorkspaceCloudClient.isFunctional():
             return []
         return [
-            dict(factory = tmp_cloud1,
+            dict(alias = tmp_alias1,
+                 factory = tmp_cloud1,
                  repository = tmp_repo1,
                  factoryIdentity = tmp_factoryIdentity,
                  repositoryIdentity = tmp_repoIdentity,
@@ -452,7 +453,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  userKey = tmp_userKey,
                  sshPubKey = tmp_ssh_pubkey,
                  description = tmp_cloud1Desc),
-            dict(factory = tmp_cloud2,
+            dict(alias = tmp_alias2,
+                 factory = tmp_cloud2,
                  repository = tmp_repo2,
                  factoryIdentity = tmp_factoryIdentity,
                  repositoryIdentity = tmp_repoIdentity,
@@ -461,7 +463,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                  userKey = tmp_userKey,
                  sshPubKey = tmp_ssh_pubkey,
                  description = tmp_cloud2Desc),
-            dict(factory = tmp_cloud3,
+            dict(alias = tmp_alias3,
+                 factory = tmp_cloud3,
                  repository = tmp_repo3,
                  factoryIdentity = tmp_cloud3FactoryIdentity,
                  repositoryIdentity = tmp_cloud3RepoIdentity,
@@ -482,7 +485,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             _, _ = self.getEC2Credentials()
             nodes.append(driver_ec2.Cloud(id = prefix + '/ec2',
                 cloudName = 'ec2',
-                description = "Amazon Elastic Compute Cloud"))
+                description = "Amazon Elastic Compute Cloud",
+                cloudAlias = 'ec2'))
         except errors.MissingCredentials:
             pass
         nodes.extend(self._enumerateVwsClouds(prefix + '/vws'))
@@ -789,7 +793,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             nodeName = cred['factory']
             cloudName = "vws/%s" % cred['factory']
             node = driver_workspaces.Cloud(cloudName = cloudName,
-                description = cred['description'])
+                description = cred['description'],
+                cloudAlias = cred['alias'])
             nodeId = "%s/%s" % (prefix, urllib.quote(nodeName, safe=":"))
             node.setId(nodeId)
             nodes.append(node)
@@ -799,9 +804,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 class HTTPServer(BaseHTTPServer.HTTPServer):
     pass
 
+tmp_alias1 = "speedy"
 tmp_cloud1 = "speedy.eng.rpath.com:8443"
 tmp_cloud1Desc = "Super Speedy Super Cloud"
 tmp_repo1 = "speedy.eng.rpath.com:2811"
+tmp_alias2 = "snaily"
 tmp_cloud2 = "snaily.eng.rpath.com:8443"
 tmp_cloud2Desc = "Super Slow Micro Cloud"
 tmp_repo2 = "speedy.eng.rpath.com:2811"
@@ -1020,6 +1027,7 @@ dbYb5MZfyowL0QZsEJAhSo1R5vzLTXjYAUCJrPZ0LKo=
 -----END RSA PRIVATE KEY-----
 """
 
+tmp_alias3 = "nimbus"
 tmp_cloud3 = "tp-grid3.ci.uchicago.edu:8445"
 tmp_cloud3Desc = "Nimbus Cloud at University of Chicago"
 tmp_repo3 = "tp-vm1.ci.uchicago.edu:2811"

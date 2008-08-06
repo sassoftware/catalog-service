@@ -151,9 +151,11 @@ class Driver(driver.BaseDriver):
         for imageId, imgData in imageDataLookup.iteritems():
             cloudId = "vws/%s" % self.cloudClient.getCloudId()
             image = Image(id = os.path.join(prefix, imageId),
-                    imageId = imageId, cloud = cloudId, isDeployed = False,
+                    imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True, buildId = imgData['buildId'],
-                    shortName = imageId, longName = imageId)
+                    shortName = imageId, longName = imageId,
+                    cloudName = cloudId, cloudType = 'vws',
+                    cloudAlias = self.cloudClient.getCloudAlias())
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 val = imgData.get(key)
                 method = getattr(image, methodName)
@@ -169,10 +171,12 @@ class Driver(driver.BaseDriver):
             imageName = imageId
             qimageId = self._urlquote(imageId)
             image = Image(id = os.path.join(prefix, qimageId),
-                    imageId = imageId, cloud = cloudId, isDeployed = True,
+                    imageId = imageId, isDeployed = True,
                     is_rBuilderImage = False,
                     shortName = os.path.basename(imageName),
-                    longName = imageName)
+                    longName = imageName,
+                    cloudName = cloudId, cloudType = 'vws',
+                    cloudAlias = self.cloudClient.getCloudAlias())
             imgs.append(image)
         return imgs
 
@@ -240,7 +244,10 @@ class Driver(driver.BaseDriver):
                 instanceId = instId,
                 dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
-                launchTime = instObj.getStartTime())
+                launchTime = instObj.getStartTime(),
+                cloudName = cloudId,
+                cloudType = 'vws',
+                cloudAlias = self.cloudClient.getCloudAlias(),)
 
             nodes.append(inst)
         return nodes
@@ -255,6 +262,7 @@ class Driver(driver.BaseDriver):
         cloud.setId(prefix)
         cloud.setCloudType('vws')
         cloud.setCloudName('vws/%s' % cloudId)
+        cloud.setCloudAlias(self.cloudClient.getCloudAlias())
         cloud.setInstanceTypes(instanceTypes)
 
         env.append(cloud)
@@ -424,10 +432,14 @@ class Driver(driver.BaseDriver):
         else:
             os.waitpid(pid, 0)
 
+        cloudId = "vws/%s" % self.cloudClient.getCloudId()
         ret = Instances()
         inst = Instance(id = self.addPrefix(prefix, instId),
             instanceId = instId,
-            imageId = imageId)
+            imageId = imageId,
+            cloudName = cloudId,
+            cloudType = 'vws',
+            cloudAlias = self.cloudClient.getCloudAlias(),)
         ret.append(inst)
         return ret
 

@@ -12,7 +12,7 @@ class BaseImage(xmlNode.BaseNode):
             'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
             'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
-            'cloud']
+            'cloudName', 'cloudType', 'cloudAlias' ]
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
@@ -36,7 +36,9 @@ class BaseImage(xmlNode.BaseNode):
         self.setBuildName(kwargs.get('buildName'))
         self.setIsPrivate_rBuilder(kwargs.get('isPrivate_rBuilder'))
         self.setIs_rBuilderImage(kwargs.get('is_rBuilderImage'))
-        self.setCloud(kwargs.get('cloud'))
+        self.setCloudName(kwargs.get('cloudName'))
+        self.setCloudType(kwargs.get('cloudType'))
+        self.setCloudAlias(kwargs.get('cloudAlias'))
 
     def setId(self, data):
         self.id = None
@@ -233,17 +235,41 @@ class BaseImage(xmlNode.BaseNode):
             return None
         return xmllib.BooleanNode.fromString(self.is_rBuilderImage.getText())
 
-    def setCloud(self, data):
-        self.cloud = None
+    def setCloudAlias(self, data):
+        self.cloudAlias = None
         if data is None:
             return self
-        self.cloud = xmllib.GenericNode().setName('cloud').characters(data)
+        self.cloudAlias = xmllib.GenericNode().setName('cloudAlias').characters(data)
         return self
 
-    def getCloud(self):
-        if self.cloud is None:
+    def getCloudAlias(self):
+        if self.cloudAlias is None:
             return None
-        return self.cloud.getText()
+        return self.cloudAlias.getText()
+
+    def setCloudName(self, data):
+        self.cloudName = None
+        if data is None:
+            return self
+        self.cloudName = xmllib.GenericNode().setName('cloudName').characters(data)
+        return self
+
+    def getCloudName(self):
+        if self.cloudName is None:
+            return None
+        return self.cloudName.getText()
+
+    def setCloudType(self, data):
+        self.cloudType = None
+        if data is None:
+            return self
+        self.cloudType = xmllib.GenericNode().setName('cloudType').characters(data)
+        return self
+
+    def getCloudType(self):
+        if self.cloudType is None:
+            return None
+        return self.cloudType.getText()
 
     def __repr__(self):
         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),

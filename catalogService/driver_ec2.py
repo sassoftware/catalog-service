@@ -124,7 +124,9 @@ class Driver(driver.BaseDriver):
             rs = self.ec2conn.get_all_images(image_ids = imageIds, owners = owners)
             node.extend(Image(id=self.addPrefix(prefix, x.id), imageId=x.id,
                               ownerId=x.ownerId, longName=x.location,
-                              state=x.state, isPublic=x.is_public, cloud='ec2')
+                              state=x.state, isPublic=x.is_public,
+                              cloudName='ec2', cloudType='ec2',
+                              cloudAlias='ec2')
                               for x in rs if x.id.startswith('ami-'))
             return node
         except EC2ResponseError, e:
@@ -183,6 +185,7 @@ class Driver(driver.BaseDriver):
         cloud.setId(prefix)
         cloud.setCloudName('ec2')
         cloud.setCloudType('ec2')
+        cloud.setCloudAlias('ec2')
         cloud.setInstanceTypes(instanceTypes)
         cloud.setKeyPairs(keyPairs)
         cloud.setSecurityGroups(securityGroups)
@@ -260,7 +263,10 @@ class Driver(driver.BaseDriver):
                 ramdisk=x.ramdisk,
                 reservationId=reservationId,
                 ownerId=ownerId,
-                launchIndex=launchIndex)
+                launchIndex=launchIndex,
+                cloudName='ec2',
+                cloudType='ec2',
+                cloudAlias='ec2',)
             yield inst
 
     def _getInstancesFromResultSet(self, resultSet, prefix=None):
