@@ -14,7 +14,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'previousState', 'instanceType', 'launchTime',
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
-                  'cloudName',]
+                  'cloudName', 'cloudType', 'cloudAlias', ]
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
