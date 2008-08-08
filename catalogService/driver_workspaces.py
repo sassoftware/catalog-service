@@ -321,10 +321,9 @@ class Driver(driver.BaseDriver):
         raise NotImplementedError
 
     def _getMintImages(self):
-        imageDataLookup = self.mintClient.getAllWorkspacesBuilds()
+        imageDataLookup = self.mintClient.getAllVwsBuilds()
         for imgSha1, imgData in imageDataLookup.iteritems():
-            # XXX This should come as part of the getAllWorkspacesBuilds()
-            # call
+            # XXX This should come as part of the getAllVwsBuilds() call
             imgFile = self._getBuildImageFile(imgSha1, imgData)
             imgData['imageFiles'] = imgFile
         return imageDataLookup
