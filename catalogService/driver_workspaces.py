@@ -502,13 +502,16 @@ class Driver(driver.BaseDriver):
 
         imageId = img.getImageId()
 
-        self._setState(instanceStore, instanceId, 'Launching')
-        try:
-            realId = self.cloudClient.launchInstances([imageId],
-                duration = duration)
+        def callback(realId):
             instanceStore.setId(instanceId, realId)
             # We no longer manage the state ourselves
             self._setState(instanceStore, instanceId, None)
+
+        self._setState(instanceStore, instanceId, 'Launching')
+        try:
+            # The callback will deal with setting the real ID and the state
+            realId = self.cloudClient.launchInstances([imageId],
+                duration = duration, callback = callback)
         except:
             raise
 

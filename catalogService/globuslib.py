@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import StringIO
+import select
 import subprocess
 import tempfile
 import time
@@ -113,7 +114,7 @@ class WorkspaceCloudClient(object):
         if returncode != 0:
             raise Exception("XXX 1")
 
-    def launchInstances(self, imageIds, duration):
+    def launchInstances(self, imageIds, duration, callback):
         # duration is time in minutes
         # We only launch an instance for now
         imageId = imageIds[0]
@@ -126,8 +127,50 @@ class WorkspaceCloudClient(object):
                 raise
         cmdline = self._cmdline('--run', '--name', imageId,
                                 '--hours', str(hours))
-        stdout, stderr, returncode = self._exec(cmdline)
-        return self._parseLaunchInstances(stdout, historyDir)
+        instanceId, returnCode = self._execLaunchInstances(cmdline,
+            historyDir, callback)
+        return instanceId
+
+    def _execLaunchInstances(self, cmdline, historyDir, callback):
+        p = self._execCmdBackend(cmdline)
+        pobj = select.poll()
+        flags = select.POLLIN | select.POLLERR | POLLHUP
+        pobj.register(p.stdout.fileno(), flags)
+        pobj.register(p.stderr.fileno(), flags)
+
+        hndl = 'vm-001'
+        xmlFile = os.path.join(historyDir, hndl, "vw-epr.xml")
+
+        # poll for .2 s
+        tmout = 200
+        fdCount = 2
+        instanceId = None
+        while fdCount:
+            ret = pobj.poll(tmout)
+            # Get rid of the output
+            for fd in ret:
+                data = os.read(fd, 1024)
+                if data == "":
+                    pobj.unregister(fd)
+                    fdCount -= 1
+            if tmout is None or not os.path.exists(xmlFile):
+                # File doesn't exist, or we already read it
+                continue
+            # Don't consume CPU by looping tightly, just block until we have
+            # the data available from now on
+            tmout = None
+            instanceId = cls._parseEprFile(xmlFile)
+            callback(instanceId)
+        p.wait()
+        return instanceId, p.returncode
+
+    @classmethod
+    def _parseEprFile(cls, xmlFile):
+            # Parse the file and extract the instance ID
+        epr = EPR()
+        epr.parse(file(xmlFile))
+        # The callback will tie the reservation ID to the instance ID
+        return epr.id
 
     def _createConfigFile(self):
         self._configFile = os.path.join(self._tmpDir, "cloud.properties")
@@ -200,8 +243,9 @@ class WorkspaceCloudClient(object):
         chash = sio.readline().strip()
         return csubj, ciss, chash
 
-    def _exec(self, cmdline, stdinData = None):
-        if stdinData is not None:
+    @classmethod
+    def _execCmdBackend(cls, cmdline, withStdin = False):
+        if withStdin:
             stdin = subprocess.PIPE
         else:
             stdin = file(os.devnull)
@@ -212,6 +256,11 @@ class WorkspaceCloudClient(object):
         env['PATH'] = env['PATH'] + ':%s/bin' % javaHome
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
             stderr = subprocess.PIPE, stdin = stdin, env = env)
+        return p
+
+    @classmethod
+    def _exec(cls, cmdline, stdinData = None):
+        p = cls._execCmdBackend(cmdline, withStdin = (stdinData is not None))
         stdout, stderr = p.communicate(stdinData)
         return stdout, stderr, p.returncode
 
