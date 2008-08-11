@@ -131,10 +131,11 @@ class WorkspaceCloudClient(object):
             historyDir, callback)
         return instanceId
 
-    def _execLaunchInstances(self, cmdline, historyDir, callback):
-        p = self._execCmdBackend(cmdline)
+    @classmethod
+    def _execLaunchInstances(cls, cmdline, historyDir, callback):
+        p = cls._execCmdBackend(cmdline)
         pobj = select.poll()
-        flags = select.POLLIN | select.POLLERR | POLLHUP
+        flags = select.POLLIN | select.POLLERR | select.POLLHUP
         pobj.register(p.stdout.fileno(), flags)
         pobj.register(p.stderr.fileno(), flags)
 
@@ -148,11 +149,14 @@ class WorkspaceCloudClient(object):
         while fdCount:
             ret = pobj.poll(tmout)
             # Get rid of the output
-            for fd in ret:
-                data = os.read(fd, 1024)
+            for fd, evt in ret:
+                if not evt & (select.POLLIN | select.POLLERR | select.POLLHUP):
+                    continue
+                data = cls._processData(pobj, fd)
                 if data == "":
                     pobj.unregister(fd)
                     fdCount -= 1
+
             if tmout is None or not os.path.exists(xmlFile):
                 # File doesn't exist, or we already read it
                 continue
@@ -163,6 +167,10 @@ class WorkspaceCloudClient(object):
             callback(instanceId)
         p.wait()
         return instanceId, p.returncode
+
+    @classmethod
+    def _processData(cls, pollObj, fd):
+        return os.read(fd, 1024)
 
     @classmethod
     def _parseEprFile(cls, xmlFile):
