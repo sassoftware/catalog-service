@@ -261,7 +261,8 @@ class Driver(driver.BaseDriver):
                 # The child process hasn't updated the reservation id yet (or
                 # it died but the instance hasn't expired yet).
                 # Synthesize a globuslib.Instance with not much info in it
-                inst = globuslib.Instance(_id = reservId)
+                state = instanceStore.getState(stKey)
+                inst = globuslib.Instance(_id = reservId, _state = state)
                 gInsts.append((stKey, imageId, inst))
                 continue
 
@@ -537,6 +538,8 @@ class Driver(driver.BaseDriver):
         build = self.mintClient.getBuild(image.getBuildId())
 
         downloadUrl = imageExtraData['downloadUrl']
+        # XXX temporary fix for a broken URL - misa 20080812
+        downloadUrl = downloadUrl.replace('?id=', '?fileId=')
 
         # XXX follow redirects
         uobj = urllib.urlopen(downloadUrl)
