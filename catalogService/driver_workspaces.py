@@ -203,67 +203,97 @@ class Driver(driver.BaseDriver):
         return imgs
 
     def getInstances(self, store, instanceIds = None, prefix = None):
+        # For the comments below, reservation ID is the ID in the globus cloud
+        # (a monotonically increasing integer), while the instance ID is the
+        # ID we generated ourselves.
         cloudId = 'vws/%s' % self.cloudClient.getCloudId()
 
-        instObjs = self.cloudClient.listInstances()
+        globusInsts = self.cloudClient.listInstances()
         # Hash the instances
-        instObjsHash = dict((x.getId(), x) for x in instObjs)
+        globusInstsHash = dict((x.getId(), x) for x in globusInsts)
+        del globusInsts
 
         # List the instances we have in the store
         keyPrefix = self._getInstanceStorePrefix()
         instanceStore = InstanceStore(store, keyPrefix)
-        localInstances = instanceStore.enumerate()
+        storeInstKeys = instanceStore.enumerate()
 
-        ret = []
+        tmpInstanceKeys = dict()
+        reservIdHash = dict()
+        for stKey in storeInstKeys:
+            instId = os.path.basename(stKey)
+            reservId = instanceStore.getId(stKey)
+            expiration = instanceStore.getExpiration(stKey)
 
-        for liKey in localInstances:
-            stateKey = liKey + '/state'
-            fId = os.path.basename(liKey)
-            # Grab the ID
-            rInstId = instanceStore.getId(liKey)
-            if not rInstId:
-                state = instanceStore.getState(liKey, 'Cleaning up')
-                expiration = instanceStore.getExpiration(liKey)
+            if reservId is None and (expiration is None
+                                     or time.time() > float(expiration)):
+                # This instance exists only in the store, and expired
+                instanceStore.delete(stKey)
+                continue
 
-                if expiration is None or time.time() > float(expiration):
-                    # This one expired
-                    instanceStore.delete(liKey)
+            imageId = instanceStore.getImageId(stKey)
+            # Did we find this instance in our store already?
+            if reservId in reservIdHash:
+                # If the previously found instance already has an image ID,
+                # prefer it. Also, if neither this instance nor the other one
+                # have an image ID, prefer the first (i.e. not this one)
+                otherInstKey, otherInstImageId = reservIdHash[reservId]
+                if otherInstImageId is not None or imageId is None:
+                    instanceStore.delete(stKey)
                     continue
 
-                inst = globuslib.Instance(_id = fId,
-                    _state = state,
-                    _imageId = instanceStore.getImageId(liKey))
+                # We prefer this instance over the one we previously found
+                del reservIdHash[reservId]
+                del tmpInstanceKeys[(otherInstKey, reservId)]
 
-                ret.append((None, inst))
+            if reservId is not None:
+                reservIdHash[reservId] = (stKey, imageId)
+            tmpInstanceKeys[(stKey, reservId)] = imageId
+
+        # Done with the preference selection
+        del reservIdHash
+
+        gInsts = []
+
+        # Walk through the list again
+        for (stKey, reservId), imageId in tmpInstanceKeys.iteritems():
+            if reservId is None:
+                # The child process hasn't updated the reservation id yet (or
+                # it died but the instance hasn't expired yet).
+                # Synthesize a globuslib.Instance with not much info in it
+                inst = globuslib.Instance(_id = reservId)
+                gInsts.append((stKey, imageId, inst))
                 continue
-            rInstId = int(rInstId)
-            if rInstId not in instObjsHash:
+
+            reservId = int(reservId)
+            if reservId not in globusInstsHash:
                 # We no longer have this instance, get rid of it
-                instanceStore.delete(liKey)
+                instanceStore.delete(stKey)
                 continue
-            # Instance exists in both globus and the local store.
-            instObj = instObjsHash.pop(rInstId)
-            instObj.setId(fId)
-            ret.append((rInstId, instObj))
-            # Get rid of the state, if one exists
-            instanceStore.delete(stateKey)
+            # Instance exists both in the store and in globus
+            inst = globusInstsHash.pop(reservId)
+            gInsts.append((stKey, imageId, inst))
+            # If a state file exists, get rid of it, we are getting the state
+            # from globus
+            instanceStore.setState(stKey, None)
 
         # For everything else, create an instance ID
-        for rInstId, instObj in instObjsHash.items():
-            nkey = instanceStore.newKey(realId = rInstId)
-            instObj.setId(nkey)
-            ret.append((rInstId, instObj))
-        ret.sort(key = lambda x: x[0])
+        for reservId, inst in globusInstsHash.iteritems():
+            nkey = instanceStore.newKey(realId = reservId)
+            gInsts.append((nkey, None, inst))
+
+        gInsts.sort(key = lambda x: x[1])
 
         nodes = Instances()
 
-        for rId, instObj in ret:
-            instId = str(instObj.getId())
+        for stKey, imageId, instObj in gInsts:
+            instId = str(os.path.basename(stKey))
             longInstId = os.path.join(prefix, instId)
-            if rId is not None:
-                instId = "%s-%s" % (instId, rId)
+            reservationId = str(instObj.getId())
             inst = Instance(id = longInstId,
+                imageId = imageId,
                 instanceId = instId,
+                reservationId = reservId,
                 dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime(),
