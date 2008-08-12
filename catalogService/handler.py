@@ -161,7 +161,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         pathInfo = self._getPathInfo(path)
         if pathInfo.get('cloud') == 'vws':
             cloudId = urllib.unquote(pathInfo.get('cloudId'))
-            cli = self._getVwsClient(cloudId)
+            cli = self._getVwsClient(cloudId, req)
 
             try:
                 if pathInfo.get('resource') == 'images':
@@ -245,8 +245,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         rMap = cls._split_query(query)
         return path, rMap.get('_method', defaultMethod)
 
-    def _getVwsClient(self, cloudId):
-        creds = self.getVwsCredentials()
+    def _getVwsClient(self, cloudId, req):
+        creds = self.getVwsCredentials(req)
         cloudCred = [ x for x in creds if x['factory'] == cloudId ]
         if not cloudCred:
             raise errors.HttpNotFound
@@ -438,10 +438,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(data = imgs)
 
-    def getVwsCredentials(self):
+    def getVwsCredentials(self, req):
         from catalogService import globuslib
         if not globuslib.WorkspaceCloudClient.isFunctional():
             return []
+        store = self._getCredentialsDataStore()
         return [
             dict(alias = tmp_alias1,
                  factory = tmp_cloud1,
@@ -489,12 +490,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 cloudAlias = 'ec2'))
         except errors.MissingCredentials:
             pass
-        nodes.extend(self._enumerateVwsClouds(prefix + '/vws'))
+        nodes.extend(self._enumerateVwsClouds(prefix + '/vws', req))
         return Response(data = nodes)
 
     def enumerateVwsClouds(self, req):
         prefix = req.getAbsoluteURI()
-        nodes = self._enumerateVwsClouds(prefix)
+        nodes = self._enumerateVwsClouds(prefix, req)
         return Response(data = nodes)
 
     def enumerateVwsImages(self, req, cloudClient):
@@ -676,7 +677,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import environment
         import driver_workspaces
 
-        cloudClient = self._getVwsClient(cloudId)
+        cloudClient = self._getVwsClient(cloudId, req)
 
         cfg = driver_workspaces.Config()
         drv = driver_workspaces.Driver(cloudClient, cfg, self.mintClient)
@@ -714,7 +715,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise errors.HttpNotFound
         cloudId = urllib.unquote(cloudId)
 
-        cloudClient = self._getVwsClient(cloudId)
+        cloudClient = self._getVwsClient(cloudId, req)
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
@@ -784,9 +785,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cfg = StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
-    def _enumerateVwsClouds(self, prefix):
+    def _getCredentialsDataStore(self):
+        path = self.storageConfig.storagePath + '/credentials'
+        cfg = StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
+
+    def _enumerateVwsClouds(self, prefix, req):
         import driver_workspaces
-        creds = self.getVwsCredentials()
+        creds = self.getVwsCredentials(req)
 
         nodes = driver_workspaces.clouds.BaseClouds()
         for cred in creds:
