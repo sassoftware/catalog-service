@@ -551,7 +551,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def serveCrossDomainFile(self):
         path = "crossdomain.xml"
         f = open(path)
-        return Response(contentType = 'application/xml', fileObj = f)
+        return Response(fileObj = f)
 
     def addUserData(self, req, userData):
         # Split the arguments
@@ -586,7 +586,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # A trailing / means retrieving the contents from a collection
             if not store.isCollection(key):
                 data = xmlHeader + '<list></list>'
-                return Response(contentType = "application/xml", data = data, code = 200)
+                return Response(data = data, code = 200)
                 #raise Exception("XXX 2", prefix, keyPath)
 
         if store.isCollection(key):
@@ -602,7 +602,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # Grab contents and wrap them in some XML
             data = [ store.get(x) for x in snodes ]
             data = xmlHeader + '<list>%s</list>' % ''.join(data)
-            return Response(contentType = "application/xml", data = data, code = 200)
+            return Response(data = data, code = 200)
 
         data = store.get(key)
         if data is None:
@@ -667,9 +667,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         node = drv.getEnvironment(cloudId, prefix=prefix)
 
         cloudClient.close()
-        hndlr = environment.Handler()
-        data = hndlr.toXml(node)
-        return Response(data = data)
+        return Response(data = node)
 
 
     def newEC2Instance(self, req, cloudId):
@@ -686,10 +684,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         prefix = req.getAbsoluteURI()
         response = drv.newInstance(data, prefix = prefix)
 
-        hndlr = newInstance.Handler()
-        data = hndlr.toXml(response)
-
-        return Response(contentType="application/xml", data = data)
+        return Response(data = response)
 
     def newVwsInstance(self, req, cloudId):
         if cloudId is None:
@@ -716,10 +711,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise
         # Don't close the client on success, the driver will do it for us
 
-        hndlr = newInstance.Handler()
-        data = hndlr.toXml(response)
-
-        return Response(contentType="application/xml", data = data)
+        return Response(data = response)
 
     def terminateEC2Instance(self, req, cloudId, instanceId, prefix):
         import driver_ec2
@@ -733,10 +725,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         prefix = req.getSchemeNetloc() + prefix
         response = drv.terminateInstance(instanceId, prefix = prefix)
 
-        hndlr = driver_ec2.instances.Handler()
-        data = hndlr.toXml(response)
-
-        return Response(contentType="application/xml", data = data)
+        return Response(data = response)
 
     def terminateVwsInstance(self, req, cloudId, instanceId, prefix):
         import driver_workspaces
@@ -749,12 +738,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = req.read(dataLen)
 
         prefix = req.getSchemeNetloc() + prefix
-        response = drv.terminateInstance(instanceId, prefix = prefix)
+        response = drv.terminateInstances([instanceId], prefix = prefix)
 
-        hndlr = driver_ec2.instances.Handler()
-        data = hndlr.toXml(response)
-
-        return Response(contentType="application/xml", data = data)
+        return Response(data = response)
 
     def _getUserDataStore(self):
         path = self.storageConfig.storagePath + '/userData'

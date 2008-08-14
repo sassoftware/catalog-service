@@ -116,7 +116,7 @@ class WorkspaceCloudClient(object):
 
     def launchInstances(self, imageIds, duration, callback):
         # duration is time in minutes
-        # We only launch an instance for now
+        # We only launch one instance for now
         imageId = imageIds[0]
         hours = duration / 60.0
         historyDir = "%s/history" % self._tmpDir
@@ -130,6 +130,25 @@ class WorkspaceCloudClient(object):
         instanceId, returnCode = self._execLaunchInstances(cmdline,
             historyDir, callback)
         return instanceId
+
+    def terminateInstances(self, instanceIds):
+        handleDir = os.path.join(self._tmpDir, "history", 'vm-998')
+        try:
+            os.makedirs(handleDir)
+        except OSError, e:
+            if e.errno != 17:
+                raise
+        for instanceId in instanceIds:
+            # Create EPR file
+            f = file(os.path.join(handleDir, 'vw-epr.xml'), "w")
+            f.write(eprTemplate % dict(id = instanceId,
+                factory = self.getCloudId()))
+            f.close()
+            cmdline = self._cmdline('--terminate',
+                                    '--handle', os.path.basename(handleDir))
+            stdout, stderr, returncode = self._exec(cmdline)
+            if returncode != 0:
+                raise Exception("XXX 1")
 
     @classmethod
     def _execLaunchInstances(cls, cmdline, historyDir, callback):
@@ -503,3 +522,13 @@ class EPR(object):
                 self.id = int(node.childNodes[0].data)
         finally:
             dom.unlink()
+
+eprTemplate = """
+<WORKSPACE_EPR xsi:type="ns1:EndpointReferenceType" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ns1="http://schemas.xmlsoap.org/ws/2004/03/addressing">
+ <ns1:Address xsi:type="ns1:AttributedURI">https://%(factory)s/wsrf/services/WorkspaceService</ns1:Address>
+  <ns1:ReferenceProperties xsi:type="ns1:ReferencePropertiesType">
+    <ns2:WorkspaceKey xmlns:ns2="http://www.globus.org/2008/06/workspace">%(id)s</ns2:WorkspaceKey>
+  </ns1:ReferenceProperties>
+  <ns1:ReferenceParameters xsi:type="ns1:ReferenceParametersType"/>
+</WORKSPACE_EPR>
+"""

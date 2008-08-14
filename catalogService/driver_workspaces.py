@@ -4,7 +4,7 @@
 
 import os
 import time
-
+import signal
 import urllib
 
 from rpath_common import xmllib
@@ -290,11 +290,13 @@ class Driver(driver.BaseDriver):
         for stKey, imageId, instObj in gInsts:
             instId = str(os.path.basename(stKey))
             longInstId = os.path.join(prefix, instId)
-            reservationId = str(instObj.getId())
+            reservationId = instObj.getId()
+            if reservationId is not None:
+                reservationId = str(reservationId)
             inst = Instance(id = longInstId,
                 imageId = imageId,
                 instanceId = instId,
-                reservationId = reservId,
+                reservationId = reservationId,
                 dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime(),
@@ -347,8 +349,48 @@ class Driver(driver.BaseDriver):
             instanceType = instanceType, prefix = prefix)
         return ret
 
-    def terminateInstance(self, instanceId, prefix = None):
-        raise NotImplementedError
+    def terminateInstances(self, store, instanceIds, prefix = None):
+        keyPrefix = self._getInstanceStorePrefix()
+        instanceStore = InstanceStore(store, keyPrefix)
+
+        instIdSet = set(os.path.basename(x) for x in instanceIds)
+        insts = self.getInstances(store, prefix=prefix)
+        # Grab the instances we know about
+        eInsts = [ x for x in insts if x.getInstanceId() in instIdSet ]
+
+        # Separate the ones that really exist in globus
+        nonGlobusInstIds = [ x.getInstanceId() for x in eInsts
+            if x.getReservationId() is None ]
+
+        globusInstIds = [ x.getReservationId() for x in eInsts
+            if x.getReservationId() is not None ]
+
+        if globusInstIds:
+            self.cloudClient.terminateInstances(globusInstIds)
+            # Don't bother to remove the instances from the store,
+            # getInstances() should take care of that
+
+        # Now, for non-globus instances, try to kill the pid
+        for instId in nonGlobusInstIds:
+            pid = instanceStore.getPid(instId)
+            if pid is not None:
+                # try to kill the child process
+                pid = int(pid)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError, e:
+                    if e.errno != 3: # no such process
+                        raise
+
+            # The instance doesn't exist anymore
+            instanceStore.delete(instId)
+
+        nodes = Instances()
+        nodes.extend(eInsts)
+        # Set state
+        for inst in eInsts:
+            inst.setState("Terminating")
+        return nodes
 
     def _getMintImages(self):
         imageDataLookup = self.mintClient.getAllVwsBuilds()
@@ -487,6 +529,8 @@ class Driver(driver.BaseDriver):
                     imageExtraData = imgExtraData)
             finally:
                 self.cloudClient.close()
+                # Get rid of the pid file, we're done here
+                instanceStore.deletePid(instId)
                 os._exit(0)
         else:
             os.waitpid(pid, 0)
@@ -614,6 +658,9 @@ class InstanceStore(object):
         if pid is None:
             pid = os.getpid()
         return self._set(instanceId, 'pid', pid)
+
+    def deletePid(self, instanceId):
+        return self._set(instanceId, 'pid',  None)
 
     def getExpiration(self, instanceId):
         exp = self._get(instanceId, 'expiration')
