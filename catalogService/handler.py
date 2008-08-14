@@ -732,7 +732,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         cfg = driver_workspaces.Config()
 
-        drv = driver_workspaces.Driver(cloudId, cfg, self.mintClient)
+        cli = self._getVwsClient(cloudId, req)
+        drv = driver_workspaces.Driver(cli, cfg, self.mintClient)
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
