@@ -738,9 +738,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = req.read(dataLen)
 
         prefix = req.getSchemeNetloc() + prefix
-        response = drv.terminateInstances([instanceId], prefix = prefix)
+        response = drv.terminateInstances(self._getInstanceDataStore(),
+            [instanceId], prefix = prefix)
 
-        return Response(data = response)
+        return Response(data = response[0])
 
     def _getUserDataStore(self):
         path = self.storageConfig.storagePath + '/userData'
