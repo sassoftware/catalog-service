@@ -685,7 +685,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = req.read(dataLen)
 
         prefix = req.getAbsoluteURI()
-        response = drv.newInstance(data, prefix = prefix)
+        response = drv.newInstance(data, prefix = prefix,
+                requestIPAddress = req.getRequestIP())
 
         return Response(data = response)
 

@@ -19,6 +19,15 @@ from catalogService import newInstance
 from catalogService import keypairs
 from catalogService import securityGroups
 
+CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
+CATALOG_DEF_SECURITY_GROUP_DESC = 'Default EC2 Catalog Security Group'
+CATALOG_DEF_SECURITY_GROUP_PERMS = (
+        # proto  start_port  end_port
+        ('tcp',  80,         80),
+        ('tcp',  443,        443),
+        ('tcp',  8003 ,      8003),
+)
+
 class Connection_EC2(EC2Connection.EC2Connection):
     "EC2 Connection"
 
@@ -118,6 +127,33 @@ class Driver(driver.BaseDriver):
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.reason, e.body)
 
+    def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
+        assert(remoteIPAddress)
+        # add the security group if it's not present already
+        try:
+            self.ec2conn.create_security_group(CATALOG_DEF_SECURITY_GROUP,
+                    CATALOG_DEF_SECURITY_GROUP_DESC)
+        except EC2ResponseError, e:
+            if e.status == 400 and e.code == 'InvalidGroup.Duplicate':
+                pass # ignore this error
+            else:
+                raise errors.ResponseError(e.status, e.reason, e.body)
+
+        # open ingress for ports 80, 443, and 8003 on TCP
+        # for the IP address
+        for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS:
+            try:
+                self.ec2conn.authorize_security_group(CATALOG_DEF_SECURITY_GROUP,
+                        ip_protocol=proto, from_port=from_port, to_port=to_port,
+                        cidr_ip='%s/32' % remoteIPAddress)
+            except EC2ResponseError, e:
+                if e.status == 400 and e.code == 'InvalidPermission.Duplicate':
+                    pass # ignore this error
+                else:
+                    raise errors.ResponseError(e.status, e.reason, e.body)
+
+        return CATALOG_DEF_SECURITY_GROUP
+
     def getAllImages(self, imageIds = None, owners = None, prefix = None):
         node = Images()
         try:
@@ -194,7 +230,7 @@ class Driver(driver.BaseDriver):
 
         return env
 
-    def newInstance(self, launchData, prefix=None):
+    def newInstance(self, launchData, prefix=None, requestIPAddress=None):
         hndlr = newInstance.Handler()
         node = hndlr.parseString(launchData)
         assert(isinstance(node, newInstance.BaseNewInstance))
@@ -218,6 +254,15 @@ class Driver(driver.BaseDriver):
             sgId = sg.getId()
             sgId = self._extractId(sgId)
             securityGroups.append(sgId)
+
+        # TODO: Need to get the client's IP out of the launchdata, falling
+        # back to the requestIP passed in from the handler if it doesn't exist
+        remoteIPAddress = requestIPAddress
+
+        if remoteIPAddress and CATALOG_DEF_SECURITY_GROUP in securityGroups:
+            # Create/update the default security group that opens TCP
+            # ports 80, 443, and 8003 for traffic from the requesting IP address
+            self._updateCatalogDefaultSecurityGroup(remoteIPAddress)
 
         userData = node.getUserData()
 
