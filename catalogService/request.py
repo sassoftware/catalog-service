@@ -48,6 +48,9 @@ class BaseRequest(object):
     def getHeader(self, key):
         "Return a specific header"
 
+    def getRequestIP(self):
+        "Returns the IP address from which the request was issued"
+
     def read(self, amt = None):
         "Called when reading the request body"
 

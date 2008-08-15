@@ -58,6 +58,9 @@ class StandaloneRequest(brequest.BaseRequest):
                     res = val
         return res
 
+    def getRequestIP(self):
+        return self.getHeader('X-Forwarded-For') or self._req.host
+
     def iterHeaders(self):
         for k, v in self._req.headers.items():
             yield k, v

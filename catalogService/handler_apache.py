@@ -65,6 +65,10 @@ class ApacheRequest(brequest.BaseRequest):
     def getHeader(self, key):
         return self._req.headers_in.get(key, None)
 
+    def getRequestIP(self):
+        return self.getHeader('X-Forwarded-For') or \
+                self._req.get_remote_host(apache.REMOTE_NOLOOKUP)
+
     def iterHeaders(self):
         return self._req.headers_in.iteritems()
 
