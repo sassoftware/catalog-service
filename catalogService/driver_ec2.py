@@ -23,6 +23,7 @@ CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
 CATALOG_DEF_SECURITY_GROUP_DESC = 'Default EC2 Catalog Security Group'
 CATALOG_DEF_SECURITY_GROUP_PERMS = (
         # proto  start_port  end_port
+        ('tcp',  22,         22),
         ('tcp',  80,         80),
         ('tcp',  443,        443),
         ('tcp',  8003 ,      8003),
