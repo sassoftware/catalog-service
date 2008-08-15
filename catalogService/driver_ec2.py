@@ -195,14 +195,26 @@ class Driver(driver.BaseDriver):
             raise errors.ResponseError(e.status, e.reason, e.body)
 
     def getAllSecurityGroups(self, groupNames = None, prefix = None):
+        defSecurityGroup = None
         try:
             rs = self.ec2conn.get_all_security_groups(groupnames = groupNames)
             ret = SecurityGroups()
-            ret.extend(
-                SecurityGroup(id=self.addPrefix(prefix, x.name),
-                        ownerId=x.owner_id, groupName=x.name,
-                        description=x.description)
-                        for x in rs)
+            for sg in rs:
+                sgObj = SecurityGroup(
+                        id=self.addPrefix(prefix, sg.name),
+                        ownerId=sg.owner_id, groupName=sg.name,
+                        description=sg.description)
+                # We will add this group as the first one
+                if sg.name == CATALOG_DEF_SECURITY_GROUP:
+                    defSecurityGroup = sgObj
+                    continue
+                ret.append(sgObj)
+            if defSecurityGroup is None:
+                defSecurityGroup = SecurityGroup(
+                    id = self.addPrefix(prefix, CATALOG_DEF_SECURITY_GROUP),
+                    groupName = CATALOG_DEF_SECURITY_GROUP,
+                    description = CATALOG_DEF_SECURITY_GROUP_DESC)
+            ret.insert(0, defSecurityGroup)
             return ret
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.reason, e.body)
