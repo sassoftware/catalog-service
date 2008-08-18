@@ -1,6 +1,60 @@
 #
 # Copyright (c) 2008 rPath, Inc.
 #
+"""
+Summary
+=======
+This module implements the abstract interface with a web server, and HTTP
+method handles for the abstraction.
+
+URL format
+==========
+C{/<TOPLEVEL>/clouds}
+    - (GET): enumerate available clouds
+        Return an enumeration of clouds, with the ID in the format::
+            /<TOPLEVEL>/clouds/<cloudName>
+        C{<cloudName>} is generally composed of C{<cloudType>} or
+        C{<cloudType>/<cloudId>}
+        (for the cases where the cloud only exists as a single deployment, like
+        Amazon's EC2, or, respectively, as multiple deployments, like Globus
+        clouds).
+
+C{/<TOPLEVEL>/clouds/<cloudType>}
+    - (GET): enumerate available clouds for this type
+
+C{/<TOPLEVEL>/clouds/<cloudName>/images}
+    - (GET): enumerate available images for this cloud.
+        - Return an enumeration of images, with the ID in the format::
+            /<TOPLEVEL>/clouds/<cloudName>/images/<imageId>
+    - (POST): publish a new image for this cloud (not valid for EC2).
+
+C{/<TOPLEVEL>/clouds/<cloudName>/instances}
+    - (GET): enumerate available images for this cloud.
+        - Return an enumeration of instances, with the ID in the format::
+            /<TOPLEVEL>/clouds/<cloudName>/instances/<instanceId>
+    - (POST): Launch a new instance.
+
+C{/<TOPLEVEL>/clouds/<cloudName>/instanceTypes}
+    - (GET): enumerate available instance types.
+
+C{/<TOPLEVEL>/clouds/<cloudName>/instances/<instanceId>}
+    - (DELETE): Terminate a running instance.
+
+C{/<TOPLEVEL>/clouds/<cloudName>/users/<user>/environment}
+    - (GET): retrieve the launch environment
+
+C{/<TOPLEVEL>/users/<user>/library}
+    - (GET): Enumerate the keys defined in the store.
+        - Return an enumeration of URIs in the format::
+            /<TOPLEVEL>/users/<user>/library/<key>
+    - (POST): Create a new entry in the store.
+
+C{/<TOPLEVEL>/users/<user>/library/<key>}
+    - (GET): Retrieve the contents of a key (if not a collection), or
+      enumerate the collection.
+    - (PUT): Update a key (if not a collection).
+    - (POST): Create a new entry in a collection.
+"""
 
 import base64
 import BaseHTTPServer
@@ -29,11 +83,19 @@ if not hasattr(BaseHTTPServer, '_quote_html'):
     BaseHTTPServer._quote_html = _quote_html
 
 class StorageConfig(config.BaseConfig):
+    """
+    Storage configuration object.
+    @ivar storagePath: Path used for persisting the values.
+    @type storagePath: C{str}
+    """
     def __init__(self, storagePath):
         config.BaseConfig.__init__(self)
         self.storagePath = storagePath
 
 class StandaloneRequest(brequest.BaseRequest):
+    """
+    Request object, qualified for a standalone HTTP server.
+    """
     __slots__ = [ '_req', 'read' ]
 
     def __init__(self, req):
@@ -69,6 +131,28 @@ class StandaloneRequest(brequest.BaseRequest):
         self._req.path = path
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    """
+    Request handler for a REST HTTP server.
+    The implementation does not assume a particular implementation of a web
+    server. This can be subclassed to handle mod_python based REST servers.
+    As such, server-specific details like the format of requests, the way one
+    reads incoming HTTP headers or sends outgoing HTTP headers etc are
+    abstracted out into C{Request} and C{Response} objects.
+
+    @cvar toplevel: a prefix for the path part of the URI, that can change
+    based on how the service is deployed. For example, a deployment may choose
+    to use C{/catalog} while another one may use C{/rest}.
+    @type toplevel: C{str}
+
+    @cvar storageConfig: Storage configuration object.
+    @type storageConfig: L{StorageConfig} instance
+
+    @cvar logLevel: Log level.
+    @type logLevel: C{int}
+
+    @newfield rest_url: REST URL, REST URLs
+    @newfield rest_method: REST Method, REST Methods
+    """
     toplevel = 'TOPLEVEL'
     storageConfig = StorageConfig(storagePath = "storage")
     logLevel = 1
@@ -78,15 +162,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             '  <message>%(message)s</message>',
             '</fault>'))
 
-
     def send_error(self, code, message = '', shortMessage = ''):
         # we have to override this method because the superclass assumes
         # we want to send back HTML. other than the content type, we're
         # not really changing much
-        try:
-            short, long = self.responses[code]
-        except KeyError:
-            short, long = '???', '???'
+        short, long = self.responses.get(code, ("???", "???"))
         if message is None:
             message = short
         if shortMessage is None:
@@ -110,18 +190,34 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 *args, **kwargs)
 
     def do_GET(self):
+        """
+        Respond to a GET request
+        """
         return self.processRequest(self._do_GET)
 
     def do_POST(self):
+        """
+        Respond to a POST request
+        """
         return self.processRequest(self._do_POST)
 
     def do_PUT(self):
+        """
+        Respond to a PUT request
+        """
         return self.processRequest(self._do_PUT)
 
     def do_DELETE(self):
+        """
+        Respond to a DELETE request
+        """
         return self.processRequest(self._do_DELETE)
 
     def processRequest(self, method):
+        """
+        Wrapper for calling a method. This method deals with creating request
+        objects, exception handling etc.
+        """
         if self.logLevel > 0:
             # Dump the headers
             for k, v in sorted(self.headers.items()):
@@ -141,11 +237,25 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_error(errcode, str(e), repr(e))
             return errcode
 
+    #{ Real implementation for HTTP method handling
     def _do_GET(self, req):
+        """
+        Handle a GET request.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{GET}
+        """
         # we know the method, we're just using common code to strip it.
-        path, method = self._get_method(req.getRelativeURI(), 'GET')
+        path, method = self._get_HTTP_method(req.getRelativeURI(), 'GET')
         # now record the stripped path as the original path for consistency
+        # We do this because we sometimes tunnel GET/PUT/DELETE methods
+        # through POST.
         req.setPath(path)
+        # This is only handled by standalone servers. In a mod_python
+        # environment, most likely crossdomain.xml is handled directly by
+        # apache.
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
         # We serve clouds both with and without trailing /
@@ -201,14 +311,30 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         raise errors.HttpNotFound
 
     def _do_PUT(self, req):
+        """
+        Handle a PUT request.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{PUT}
+        """
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             return self._handleResponse(self.setUserData(req, self.path[len(p):]))
 
     def _do_POST(self, req):
+        """
+        Handle a POST request.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{POST}
+        """
         p = '/%s/users/' % self.toplevel
         # Look for a method
-        path, method = self._get_method(req.getRelativeURI(), 'POST')
+        path, method = self._get_HTTP_method(req.getRelativeURI(), 'POST')
         if method == 'GET':
             return self._do_GET(req)
 
@@ -227,6 +353,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self._handleInstances(req, method, pathInfo)
 
     def _do_DELETE(self, req):
+        """
+        Handle a DELETE request.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{DELETE}
+        """
         p = '/%s/users/' % self.toplevel
         if self.path.startswith(p):
             self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
@@ -236,8 +370,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if pathInfo.get('resource') == 'instances':
             self._handleInstances(req, 'DELETE', pathInfo)
 
+    #} Real implementation for HTTP method handling
+
     @classmethod
-    def _get_method(cls, path, defaultMethod):
+    def _get_HTTP_method(cls, path, defaultMethod):
         """
         Given a path, retrieve the method from it (part of the query)
         Return path and method (None if no method)
@@ -249,6 +385,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return path, rMap.get('_method', defaultMethod)
 
     def _getVwsClient(self, cloudId, req):
+        """
+        Instantiate a Globus Virtual Workspaces client.
+        """
         creds = self.getVwsCredentials(req)
         cloudCred = [ x for x in creds if x['factory'] == cloudId ]
         if not cloudCred:
@@ -305,6 +444,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return {}
 
     def _handleInstances(self, req, method, pathInfo):
+        """
+        """
         cloudName = pathInfo.get('cloud')
         cloudMap = dict(ec2 = 'EC2', vws = 'Vws')
         if cloudName not in cloudMap:
@@ -362,6 +503,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
 
     def _auth(self, req):
+        """
+        Authenticate a request. If no authentication information is present,
+        or if the authentication information does not verify, an HTTP 403
+        (Forbidden) is sent back.
+        """
         authData = self.headers['Authorization']
         if authData[:6] != 'Basic ':
             self._send_403()
@@ -387,7 +533,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_header(k, v)
         self.end_headers()
 
-        response.serveResponse(self.wfile.write)
+        response.serveResponseBody(self.wfile.write)
 
     def _getMintConfig(self):
         import mint.config
@@ -461,6 +607,15 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return ret
 
     def enumerateClouds(self, req):
+        """
+        Enumerate available clouds.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{GET}
+        @rest_url: C{/clouds}
+        """
         import driver_ec2
         nodes = clouds.BaseClouds()
         prefix = req.getAbsoluteURI()
@@ -478,11 +633,24 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = nodes)
 
     def enumerateVwsClouds(self, req):
+        """
+        Enumerate available Globus Virtual Workspaces clouds.
+
+        @param req: Requst object.
+        @type req: L{brequest.BaseRequest}
+
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/vws}
+        """
         prefix = req.getAbsoluteURI()
         nodes = self._enumerateVwsClouds(prefix, req)
         return Response(data = nodes)
 
     def enumerateVwsImages(self, req, cloudClient):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/vws/.../images}
+        """
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
@@ -494,6 +662,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = imgs)
 
     def enumerateVwsInstances(self, req, cloudClient):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/vws/.../instances}
+        """
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
@@ -505,6 +677,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = nodes)
 
     def enumerateEC2Instances(self, req):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/ec2/instances}
+        """
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -518,6 +694,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = node)
 
     def enumerateEC2InstanceTypes(self, req):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/ec2/instanceTypes}
+        """
         import images
         import driver_ec2
 
@@ -540,6 +720,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def enumerateUserInfo(self, req):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/userinfo}
+        """
         # we have to authenticate to get here, so we'll have a mintAuth obejct
         # XXX should this call be a UserInfo xml marshalling object?
         data = "<userinfo><username>%s</username></userinfo>" % \
@@ -552,11 +736,19 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def serveCrossDomainFile(self):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/crossdomain.xml}
+        """
         path = "crossdomain.xml"
         f = open(path)
         return Response(fileObj = f)
 
     def addUserData(self, req, userData):
+        """
+        @rest_method: C{POST}
+        @rest_url: C{/users/.../library}
+        """
         # Split the arguments
         userData = userData.split('/')
         if userData[0] != req.getUser():
@@ -574,6 +766,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def getUserData(self, req, prefix, keyPath):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/users/.../library}
+        @rest_url: C{/users/.../library/...}
+        """
         # Split the arguments
         arr = keyPath.split('/')
         if arr[0] != req.getUser():
@@ -613,6 +810,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = data)
 
     def setUserData(self, req, userData):
+        """
+        @rest_method: C{PUT}
+        @rest_url: C{/users/.../library/...}
+        """
         userData = userData.split('/')
         if userData[0] != req.getUser():
             raise Exception("XXX 1")
@@ -628,6 +829,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def deleteUserData(self, req, userData):
+        """
+        @rest_method: C{DELETE}
+        @rest_url: C{/users/.../library/...}
+        """
         userData = userData.split('/')
         if userData[0] != req.getUser():
             raise Exception("XXX 1")
@@ -640,6 +845,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(contentType = "text/xml", data = response)
 
     def getEnvironmentEC2(self, req, cloudPrefix):
+        """
+        @rest_method: C{DELETE}
+        @rest_url: C{/clouds/ec2/users/.../environment}
+        """
         import environment
         import driver_ec2
 
@@ -658,6 +867,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = data)
 
     def getEnvironmentVWS(self, req, cloudPrefix, cloudId):
+        """
+        @rest_method: C{DELETE}
+        @rest_url: C{/clouds/vws/.../users/.../environment}
+        """
         import environment
         import driver_workspaces
 
@@ -674,6 +887,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
     def newEC2Instance(self, req, cloudId):
+        """
+        @rest_method: C{POST}
+        @rest_url: C{/clouds/ec2/instances}
+        """
         import driver_ec2
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
@@ -691,6 +908,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = response)
 
     def newVwsInstance(self, req, cloudId):
+        """
+        @rest_method: C{POST}
+        @rest_url: C{/clouds/vws/.../instances}
+        """
         if cloudId is None:
             raise errors.HttpNotFound
         cloudId = urllib.unquote(cloudId)
@@ -718,6 +939,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = response)
 
     def terminateEC2Instance(self, req, cloudId, instanceId, prefix):
+        """
+        @rest_method: C{DELETE}
+        @rest_url: C{/clouds/ec2/instances/...}
+        """
         import driver_ec2
 
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
@@ -732,6 +957,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return Response(data = response)
 
     def terminateVwsInstance(self, req, cloudId, instanceId, prefix):
+        """
+        @rest_method: C{DELETE}
+        @rest_url: C{/clouds/vws/.../instances/...}
+        """
         import driver_workspaces
 
         cfg = driver_workspaces.Config()
@@ -778,24 +1007,3 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             node.setId(nodeId)
             nodes.append(node)
         return nodes
-
-
-class HTTPServer(BaseHTTPServer.HTTPServer):
-    pass
-
-if __name__ == '__main__':
-    import optparse
-    parser = optparse.OptionParser()
-    parser.add_option('-c', '--config-file', dest = 'configFile',
-            help = 'location of config file to use')
-    parser.add_option('-p', '--port', dest = 'port', type = 'int',
-            default = 1234, help = 'port to listen on')
-
-    options, args = parser.parse_args()
-    storageConfig = StorageConfig(storagePath = "storage")
-    if options.configFile:
-        storageConfig.read(options.configFile)
-    BaseRESTHandler.storageConfig = storageConfig
-
-    h = HTTPServer(("", options.port), BaseRESTHandler)
-    h.serve_forever()
