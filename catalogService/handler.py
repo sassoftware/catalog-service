@@ -63,6 +63,7 @@ import urllib
 
 from catalogService import clouds
 from catalogService import config
+from catalogService import environment
 from catalogService import newInstance
 from catalogService import request as brequest
 from catalogService import storage
@@ -258,57 +259,67 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # apache.
         if path == '/crossdomain.xml':
             return self._handleResponse(self.serveCrossDomainFile())
-        # We serve clouds both with and without trailing /
-        validCloudsPaths = [ '/%s/clouds' % self.toplevel ]
-        validCloudsPaths.append(validCloudsPaths[0] + '/')
-        if path in validCloudsPaths:
-            return self._handleResponse(self.enumerateClouds(req))
-        if path == '/%s/clouds/vws' % self.toplevel:
-            return self._handleResponse(self.enumerateVwsClouds(req))
-        if path == '/%s/clouds/ec2/images' % self.toplevel:
-            return self._handleResponse(self.enumerateEC2Images(req))
-        if path == '/%s/clouds/ec2/instances' % self.toplevel:
-            return self._handleResponse(self.enumerateEC2Instances(req))
-        if path == '/%s/clouds/ec2/instanceTypes' % self.toplevel:
-            return self.enumerateEC2InstanceTypes(req)
         pathInfo = self._getPathInfo(path)
-        if pathInfo.get('cloud') == 'vws':
-            cloudId = urllib.unquote(pathInfo.get('cloudId'))
+        resourceType = pathInfo.get('resourceType')
+        if resourceType == 'clouds':
+            resourceName = pathInfo.get('resourceName')
+            if resourceName == 'users':
+                resourceId = pathInfo.get('resourceId')
+                if resourceId != 'environment':
+                    raise errors.HttpNotFound
+                userId = pathInfo.get('userId')
+                if userId != req.getUser():
+                    for k, v in req.iterHeaders():
+                        print >> sys.stderr, "%s: %s" % (k, v)
+                        sys.stderr.flush()
+                    raise Exception("XXX 1", userId, req.getUser())
+                cloudType = pathInfo.get('cloudType')
+                if cloudType == 'ec2':
+                    method = self.getEnvironmentEC2
+                elif cloudType == 'vws':
+                    method = self.getEnvironmentVWS
+                else:
+                    raise errors.HttpNotFound
+                return self._handleResponse(method(req, pathInfo))
+            return self._do_GET_clouds(req, pathInfo)
+
+        if resourceType == 'userinfo':
+            return self.enumerateUserInfo(req)
+
+        if resourceType == 'users':
+            return self._handleResponse(self.getUserData(req, pathInfo))
+
+        raise errors.HttpNotFound
+
+    def _do_GET_clouds(self, req, pathInfo):
+        cloudType = pathInfo.get('cloudType')
+        if cloudType is None:
+            return self._handleResponse(self.enumerateClouds(req))
+        # XXX do not hardcode the cloud type here
+        cloudId = pathInfo.get('cloudId')
+        resourceName = pathInfo.get('resourceName')
+        if cloudType == 'ec2':
+            if resourceName == 'images':
+                return self._handleResponse(self.enumerateEC2Images(req))
+            if resourceName == 'instances':
+                return self._handleResponse(self.enumerateEC2Instances(req))
+            if resourceName == 'instanceTypes':
+                return self.enumerateEC2InstanceTypes(req)
+        if cloudType == 'vws':
+            if cloudId is None:
+                return self._handleResponse(self.enumerateVwsClouds(req))
+            cloudId = urllib.unquote(cloudId)
             cli = self._getVwsClient(cloudId, req)
 
             try:
-                if pathInfo.get('resource') == 'images':
+                if resourceName == 'images':
                     return self._handleResponse(self.enumerateVwsImages(req,
                             cli))
-                if pathInfo.get('resource') == 'instances':
+                if resourceName == 'instances':
                     return self._handleResponse(self.enumerateVwsInstances(req,
                             cli))
             finally:
                 cli.close()
-        if path == '/%s/userinfo' % self.toplevel:
-            return self.enumerateUserInfo(req)
-        p = '/%s/users/' % self.toplevel
-        if path.startswith(p):
-            return self._handleResponse(self.getUserData(req, p, path[len(p):]))
-        if pathInfo.get('resource') == 'users':
-            # Grab the user part
-            arr = pathInfo['instanceId'].split('/')
-            userId = urllib.unquote(arr[0])
-            if userId != req.getUser():
-                for k, v in req.iterHeaders():
-                    print >> sys.stderr, "%s: %s" % (k, v)
-                    sys.stderr.flush()
-                raise Exception("XXX 1", userId, req.getUser())
-            cloudPrefix = '%s/clouds/%s' % (self.toplevel, pathInfo['cloud'])
-            if 'cloudId' in pathInfo:
-                cloudPrefix += '/%s' % pathInfo['cloudId']
-            if arr[1:] == ['environment']:
-                if pathInfo['cloud'] == 'ec2':
-                    return self._handleResponse(self.getEnvironmentEC2(req,
-                        cloudPrefix))
-                return self._handleResponse(self.getEnvironmentVWS(req,
-                    cloudPrefix, pathInfo['cloudId']))
-        raise errors.HttpNotFound
 
     def _do_PUT(self, req):
         """
@@ -319,9 +330,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{PUT}
         """
-        p = '/%s/users/' % self.toplevel
-        if self.path.startswith(p):
-            return self._handleResponse(self.setUserData(req, self.path[len(p):]))
+        path, method = self._get_HTTP_method(req.getRelativeURI(), 'PUT')
+        pathInfo = self._getPathInfo(path)
+        resourceType = pathInfo.get('resourceType')
+        if resourceType == 'users':
+            return self._handleResponse(self.setUserData(req, pathInfo))
 
     def _do_POST(self, req):
         """
@@ -332,24 +345,24 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{POST}
         """
-        p = '/%s/users/' % self.toplevel
         # Look for a method
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'POST')
         if method == 'GET':
             return self._do_GET(req)
 
-        if path.startswith(p):
-            pRest = path[len(p):]
+        pathInfo = self._getPathInfo(path)
+        resourceType = pathInfo.get('resourceType')
+        if resourceType == 'users':
             if method == 'POST':
-                self._handleResponse(self.addUserData(req, pRest))
+                self._handleResponse(self.addUserData(req, pathInfo))
             elif method == 'DELETE':
-                self._handleResponse(self.deleteUserData(req, pRest))
+                self._handleResponse(self.deleteUserData(req, pathInfo))
             elif method == 'PUT':
-                self._handleResponse(self.setUserData(req, pRest))
+                self._handleResponse(self.setUserData(req, pathInfo))
             return
 
-        pathInfo = self._getPathInfo(path)
-        if pathInfo.get('resource') == 'instances':
+        resourceName = pathInfo.get('resourceName')
+        if (resourceType, resourceName) == ('clouds', 'instances'):
             self._handleInstances(req, method, pathInfo)
 
     def _do_DELETE(self, req):
@@ -361,14 +374,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{DELETE}
         """
-        p = '/%s/users/' % self.toplevel
-        if self.path.startswith(p):
-            self._handleResponse(self.deleteUserData(req, self.path[len(p):]))
-
-        path = self.path
+        path, method = self._get_HTTP_method(req.getRelativeURI(), 'DELETE')
         pathInfo = self._getPathInfo(path)
-        if pathInfo.get('resource') == 'instances':
-            self._handleInstances(req, 'DELETE', pathInfo)
+        resourceType = pathInfo.get('resourceType')
+        if resourceType == 'users':
+            self._handleResponse(self.deleteUserData(req, pathInfo))
+        resourceName = pathInfo.get('resourceName')
+        if resourceType == 'clouds' and resourceName == 'instances':
+            self._handleInstances(req, method, pathInfo)
 
     #} Real implementation for HTTP method handling
 
@@ -413,53 +426,95 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         /<toplevel>/clouds/<cloudname>{/cloudId}/<resource>{/instanceId}
         cloudId is omitted for EC2 since there's only one
         """
-        try:
-            res = {}
-            prefix = '/%s/clouds/' % (self.toplevel)
-            if path.startswith(prefix):
-                pRest = path[len(prefix):]
-                cloud, pRest = pRest.split('/', 1)
-                if cloud == 'ec2':
-                    cloudId = None
-                else:
-                    cloudId, pRest = pRest.split('/', 1)
-                if '/' in pRest:
-                    resource, pRest = pRest.split('/', 1)
-                else:
-                    resource, pRest = pRest, ''
-                res['cloud'] = cloud
-                if cloudId is not None:
-                    res['cloudId'] = urllib.unquote(cloudId)
-                if pRest:
-                    res['instanceId'] = pRest
-                    prefix = path[:- len(pRest)]
-                else:
-                    prefix = path
-                res['resource'] = resource
-                res['prefix'] = prefix
-            return res
-        except:
-            # an empty dict indicates a URL we couldn't handle, which
-            # ultimately results in a 404
+
+        prefix = '/%s/' % self.toplevel
+        if not path.startswith(prefix):
+            # URL doesn't start with the toplevel prefix
+            return {}
+        pRest = path[len(prefix):]
+
+        # Split and eliminate double slashes
+        pComps = [ x for x in pRest.split('/') if x ]
+        if not pComps:
             return {}
 
-    def _handleInstances(self, req, method, pathInfo):
+        res = {}
+        res['prefix'] = prefix + '/'.join(pComps)
+        res['resourceType'] = resourceType = pComps.pop(0)
+
+        if resourceType == 'clouds':
+            if not pComps:
+                # We are only enumerating clouds
+                return res
+
+            res['cloudType'] = cloudType = pComps.pop(0)
+
+            # XXX We should not hardcode things here
+            if cloudType == 'ec2':
+                if not pComps:
+                    return {}
+                res['cloudId'] = 'ec2'
+            elif pComps:
+                res['cloudId'] = pComps.pop(0)
+            if not pComps:
+                return res
+            res['resourceName'] = resourceName = pComps.pop(0)
+            if not pComps:
+                return res
+            if resourceName == 'users':
+                res['userId'] = userId = pComps.pop(0)
+            if not pComps:
+                # We need more stuff specified here
+                return {}
+            res['resourceId'] = pComps.pop(0)
+            if pComps:
+                # Extra junk at the end
+                return {}
+            # Chop off the last part of the prefix, generally when a resource
+            # ID is available we are prepending it at the end ourselves
+            res['prefix'] = os.path.dirname(res['prefix'])
+            return res
+
+        if resourceType == 'userinfo':
+            # Nothing more than userinfo supported
+            if pComps:
+                return {}
+            return res
+
+        if resourceType == 'users':
+            # We need a user ID first
+            if not pComps:
+                return {}
+            res['userId'] = userId = pComps.pop(0)
+            # It is important for users if the path ends with a /
+            if path.endswith('/'):
+                pComps.append('')
+            res['storeKey'] = '/'.join(pComps)
+            # The prefix should not have the store key
+            res['prefix'] = prefix + '/'.join([resourceType, userId, ""])
+            return res
+
+        # an empty dict indicates a URL we couldn't handle, which
+        # ultimately results in a 404
+        return {}
+
+    def _handleInstances(self, req, httpMethod, pathInfo):
         """
         """
-        cloudName = pathInfo.get('cloud')
+        cloudType = pathInfo.get('cloudType')
         cloudMap = dict(ec2 = 'EC2', vws = 'Vws')
-        if cloudName not in cloudMap:
+        if cloudType not in cloudMap:
             # these are currently the only two clouds we handle
             raise errors.HttpNotFound
         cloudId = pathInfo.get('cloudId')
-        if method == 'DELETE':
-            methodName = 'terminate%sInstance' % cloudMap[cloudName]
+        if httpMethod == 'DELETE':
+            methodName = 'terminate%sInstance' % cloudMap[cloudType]
             method = getattr(self, methodName)
-            instanceId = pathInfo.get('instanceId')
+            instanceId = pathInfo.get('resourceId')
             prefix = pathInfo.get('prefix', '')
             return self._handleResponse(method(req, cloudId, instanceId,
                 prefix))
-        methodName = 'new%sInstance' % cloudMap[cloudName]
+        methodName = 'new%sInstance' % cloudMap[cloudType]
         method = getattr(self, methodName)
         return self._handleResponse(method(req, cloudId))
 
@@ -744,38 +799,42 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         f = open(path)
         return Response(fileObj = f)
 
-    def addUserData(self, req, userData):
+    def addUserData(self, req, pathInfo):
         """
         @rest_method: C{POST}
         @rest_url: C{/users/.../library}
         """
         # Split the arguments
-        userData = userData.split('/')
-        if userData[0] != req.getUser():
-            raise Exception("XXX 1", userData[0], req.getUser())
+        userId = pathInfo.get('userId')
+        if userId != req.getUser():
+            raise Exception("XXX 1", userId, req.getUser())
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
         store = self._getUserDataStore()
 
-        keyPrefix = '/'.join(x for x in userData if x not in ('', '.', '..'))
+        storeKey = pathInfo['storeKey']
+        # Sanitize key
+        keyPrefix = self._sanitizeKey(storeKey)
 
         newId = store.store(data, keyPrefix = keyPrefix)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s/%s</id>' % (
             req.getAbsoluteURI(), os.path.basename(newId))
         return Response(contentType = "text/xml", data = response)
 
-    def getUserData(self, req, prefix, keyPath):
+    def getUserData(self, req, pathInfo):
         """
         @rest_method: C{GET}
         @rest_url: C{/users/.../library}
         @rest_url: C{/users/.../library/...}
         """
-        # Split the arguments
-        arr = keyPath.split('/')
-        if arr[0] != req.getUser():
-            raise Exception("XXX 1", arr[0], req.getUser())
+        userId = pathInfo['userId']
+        if userId != req.getUser():
+            raise Exception("XXX 1", userId, req.getUser())
 
+        keyPath = self._sanitizeKey(pathInfo['storeKey'])
+
+        prefix = pathInfo['prefix']
         prefix = "%s%s" % (req.getSchemeNetloc(), prefix)
         store = self._getUserDataStore()
 
@@ -809,49 +868,52 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             raise errors.HttpNotFound
         return Response(data = data)
 
-    def setUserData(self, req, userData):
+    def setUserData(self, req, pathInfo):
         """
         @rest_method: C{PUT}
         @rest_url: C{/users/.../library/...}
         """
-        userData = userData.split('/')
-        if userData[0] != req.getUser():
-            raise Exception("XXX 1")
+        userId = pathInfo['userId']
+        if userId != req.getUser():
+            raise Exception("XXX 1", userId, req.getUser())
 
         dataLen = req.getContentLength()
         data = req.read(dataLen)
 
+        key = self._sanitizeKey(pathInfo['storeKey'])
+
         store = self._getUserDataStore()
-        key = '/'.join(x for x in userData if x not in ('', '.', '..'))
         store.set(key, data)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
             req.getAbsoluteURIPath(), )
         return Response(contentType = "text/xml", data = response)
 
-    def deleteUserData(self, req, userData):
+    def deleteUserData(self, req, pathInfo):
         """
         @rest_method: C{DELETE}
         @rest_url: C{/users/.../library/...}
         """
-        userData = userData.split('/')
-        if userData[0] != req.getUser():
-            raise Exception("XXX 1")
+        userId = pathInfo['userId']
+        if userId != req.getUser():
+            raise Exception("XXX 1", userId, req.getUser())
 
         store = self._getUserDataStore()
-        key = '/'.join(x for x in userData if x not in ('', '.', '..'))
+
+        storeKey = pathInfo['storeKey']
+        key = self._sanitizeKey(storeKey)
         store.delete(key)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
             req.getAbsoluteURIPath(), )
         return Response(contentType = "text/xml", data = response)
 
-    def getEnvironmentEC2(self, req, cloudPrefix):
+    def getEnvironmentEC2(self, req, pathInfo):
         """
         @rest_method: C{DELETE}
         @rest_url: C{/clouds/ec2/users/.../environment}
         """
-        import environment
         import driver_ec2
 
+        cloudPrefix = pathInfo['prefix']
         awsPublicKey, awsPrivateKey = self.getEC2Credentials()
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
@@ -866,14 +928,15 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         return Response(data = data)
 
-    def getEnvironmentVWS(self, req, cloudPrefix, cloudId):
+    def getEnvironmentVWS(self, req, pathInfo):
         """
         @rest_method: C{DELETE}
         @rest_url: C{/clouds/vws/.../users/.../environment}
         """
-        import environment
         import driver_workspaces
 
+        cloudPrefix = pathInfo['prefix']
+        cloudId = urllib.unquote(pathInfo['cloudId'])
         cloudClient = self._getVwsClient(cloudId, req)
 
         cfg = driver_workspaces.Config()
@@ -1007,3 +1070,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             node.setId(nodeId)
             nodes.append(node)
         return nodes
+
+    @classmethod
+    def _sanitizeKey(cls, key):
+        return '/'.join(x for x in key.split('/') if x not in ('.', '..'))
