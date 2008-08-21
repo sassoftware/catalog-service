@@ -43,13 +43,13 @@ C{/<TOPLEVEL>/clouds/<cloudName>/instances/<instanceId>}
 C{/<TOPLEVEL>/clouds/<cloudName>/users/<user>/environment}
     - (GET): retrieve the launch environment
 
-C{/<TOPLEVEL>/users/<user>/library}
+C{/<TOPLEVEL>/users/<user>}
     - (GET): Enumerate the keys defined in the store.
         - Return an enumeration of URIs in the format::
-            /<TOPLEVEL>/users/<user>/library/<key>
+            /<TOPLEVEL>/users/<user>/<key>
     - (POST): Create a new entry in the store.
 
-C{/<TOPLEVEL>/users/<user>/library/<key>}
+C{/<TOPLEVEL>/users/<user>/<key>}
     - (GET): Retrieve the contents of a key (if not a collection), or
       enumerate the collection.
     - (PUT): Update a key (if not a collection).
@@ -60,6 +60,8 @@ import base64
 import BaseHTTPServer
 import os, sys
 import urllib
+
+from conary.lib import util
 
 from catalogService import clouds
 from catalogService import config
@@ -131,6 +133,9 @@ class StandaloneRequest(brequest.BaseRequest):
     def setPath(self, path):
         self._req.path = path
 
+    def getServerPort(self):
+        return self._req.server.server_port
+
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     """
     Request handler for a REST HTTP server.
@@ -162,6 +167,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             '  <code>%(code)s</code>',
             '  <message>%(message)s</message>',
             '</fault>'))
+    _logDestination = None
 
     def send_error(self, code, message = '', shortMessage = ''):
         # we have to override this method because the superclass assumes
@@ -173,7 +179,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if shortMessage is None:
             shortMessage = short
         self.log_error("code %d, message %s", code, message)
-        print >> sys.stderr, "code %d, message %s" % (code, message)
         sys.stderr.flush()
         content = (self.error_message_format %
                {'code': code, 'message': BaseHTTPServer._quote_html(message)})
@@ -185,10 +190,48 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
             self.wfile.write(content)
 
-    def log_message(self, *args, **kwargs):
-        if self.logLevel > 0:
-            BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
-                *args, **kwargs)
+    def log_message(self, format, *args):
+        self.log(1, format, *args)
+
+    def log_error(self, format, *args):
+        self.log(0, format, tag = "ERROR", *args)
+
+    def log_request(self, code="-", size="-"):
+        self.log(0, '"%s" %s %s',
+                  self.requestline, str(code), str(size))
+
+    def log(self, logLevel, format, *args, **kwargs):
+        if logLevel > self.logLevel:
+            return
+        dargs = dict(addressString = self.address_string(),
+            timestamp = self.log_date_time_string(),
+            data = format % args,
+            )
+        tag = kwargs.pop('tag', None)
+        if tag is None:
+            templ = "%(addressString)s - - [%(timestamp)s] %(data)s\n"
+        else:
+            templ = "%(addressString)s - - [%(timestamp)s] (%(tag)s) %(data)s\n"
+            dargs['tag'] = tag
+        f, shouldClose = self.getLogStream()
+        f.write(templ % dargs)
+        if shouldClose:
+            f.close()
+
+    def getLogStream(self):
+        # Default to stderr
+        ld = self._logDestination
+        if ld is None:
+            ld = sys.stderr
+
+        if hasattr(ld, 'write'):
+            f = ld
+            shouldClose = False
+        else:
+            f = file(ld, "a")
+            shouldClose = True
+
+        return f, shouldClose
 
     def do_GET(self):
         """
@@ -219,23 +262,27 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         Wrapper for calling a method. This method deals with creating request
         objects, exception handling etc.
         """
-        if self.logLevel > 0:
-            # Dump the headers
-            for k, v in sorted(self.headers.items()):
-                print >> sys.stderr, "    %-20s : %s" % (k, v)
-                sys.stderr.flush()
-
         req = self._createRequest()
         if req is None:
             # _createRequest does all the work to send back the error codes
             return
+
         try:
             return method(req)
-        except Exception, e:
-            errcode = 500
-            if hasattr(e, 'errcode'):
-                errcode = e.errcode
-            self.send_error(errcode, str(e), repr(e))
+        except:
+            stream, shouldClose = self.getLogStream()
+            excType, excValue, tb = sys.exc_info()
+
+            errcode = getattr(excValue, 'errcode', 500)
+            if errcode == 500:
+                util.formatTrace(excType, excValue, tb, stream = stream,
+                    withLocals = False)
+                util.formatTrace(excType, excValue, tb, stream = stream,
+                    withLocals = True)
+            if shouldClose:
+                stream.close()
+
+            self.send_error(errcode, str(excValue), repr(excValue))
             return errcode
 
     #{ Real implementation for HTTP method handling
@@ -248,6 +295,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{GET}
         """
+        self.log(1, "_do_GET")
         # we know the method, we're just using common code to strip it.
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'GET')
         # now record the stripped path as the original path for consistency
@@ -330,6 +378,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{PUT}
         """
+        self.log(1, "_do_PUT")
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'PUT')
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
@@ -345,6 +394,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{POST}
         """
+        self.log(1, "_do_POST")
         # Look for a method
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'POST')
         if method == 'GET':
@@ -374,6 +424,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         @rest_method: C{DELETE}
         """
+        self.log(1, "_do_DELETE")
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'DELETE')
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
@@ -537,17 +588,22 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return req
 
     def _validateHeaders(self):
-        if 'Host' not in self.headers:
+        req = self._newRequest()
+        host = req.getHeader('Host')
+        if host is None:
             # Missing Host: header
             self.send_error(400)
             return
 
-        if 'Authorization' not in self.headers:
+        if not req.getHeader('Authorization'):
             self._send_403()
             return
 
-        self.host = self.headers['Host']
-        self.port = self.server.server_port
+        self.host = host
+        self.port = req.getServerPort()
+        return req
+
+    def _newRequest(self):
         req = StandaloneRequest(self)
         return req
 
@@ -563,7 +619,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         or if the authentication information does not verify, an HTTP 403
         (Forbidden) is sent back.
         """
-        authData = self.headers['Authorization']
+        authData = req.getHeader('Authorization')
         if authData[:6] != 'Basic ':
             self._send_403()
             return False
@@ -802,7 +858,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def addUserData(self, req, pathInfo):
         """
         @rest_method: C{POST}
-        @rest_url: C{/users/.../library}
+        @rest_url: C{/users/<userId>}
         """
         # Split the arguments
         userId = pathInfo.get('userId')
@@ -825,8 +881,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def getUserData(self, req, pathInfo):
         """
         @rest_method: C{GET}
-        @rest_url: C{/users/.../library}
-        @rest_url: C{/users/.../library/...}
+        @rest_url: C{/users/<userId>/<key>}
+        @rest_url: C{/users/<userId>/<key>/}
         """
         userId = pathInfo['userId']
         if userId != req.getUser():
@@ -871,7 +927,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def setUserData(self, req, pathInfo):
         """
         @rest_method: C{PUT}
-        @rest_url: C{/users/.../library/...}
+        @rest_url: C{/users/<userId>/<key>}
         """
         userId = pathInfo['userId']
         if userId != req.getUser():
@@ -891,7 +947,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def deleteUserData(self, req, pathInfo):
         """
         @rest_method: C{DELETE}
-        @rest_url: C{/users/.../library/...}
+        @rest_url: C{/users/<userId>/<key>}
         """
         userId = pathInfo['userId']
         if userId != req.getUser():

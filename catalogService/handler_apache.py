@@ -88,6 +88,9 @@ class ApacheRequest(brequest.BaseRequest):
         rfile = self.makefile('r', 0)
         return rfile.read(*args, **kwargs)
 
+    def getServerPort(self):
+        return self._req.server.port
+
 class ApacheHandler(bhandler.BaseRESTHandler):
     def end_headers(self):
         headerData = self.wfile.getvalue()
@@ -136,3 +139,6 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         res = bhandler.BaseRESTHandler._createRequest(self)
         self.req.setUser(res.getUser())
         return self.req
+
+    def _newRequest(self):
+        return ApacheRequest(reqObj)

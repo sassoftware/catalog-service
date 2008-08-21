@@ -3,6 +3,8 @@
 #
 
 import urllib
+from conary.lib import util
+
 from catalogService import xmlNode
 
 class BaseRequest(object):
@@ -26,7 +28,7 @@ class BaseRequest(object):
         return self._userId
 
     def setPassword(self, password):
-        self._password = password
+        self._password = util.ProtectedString(password)
 
     def getPassword(self):
         return self._password
@@ -64,6 +66,9 @@ class BaseRequest(object):
 
     def iterHeaders(self):
         "Iterate over the headers"
+
+    def getServerPort(self):
+        "Return the server port"
     #}
 
 
