@@ -263,14 +263,15 @@ class Driver(driver.BaseDriver):
         keyName = self._extractId(keyName)
 
         securityGroups = []
+        clientSuppliedRemoteIP = None
         for sg in (node.getSecurityGroups() or []):
             sgId = sg.getId()
             sgId = self._extractId(sgId)
             securityGroups.append(sgId)
+            if sgId == CATALOG_DEF_SECURITY_GROUP:
+                clientSuppliedRemoteIP = sg.getRemoteIp()
 
-        # TODO: Need to get the client's IP out of the launchdata, falling
-        # back to the requestIP passed in from the handler if it doesn't exist
-        remoteIPAddress = requestIPAddress
+        remoteIPAddress = clientSuppliedRemoteIP or requestIPAddress
 
         if remoteIPAddress and CATALOG_DEF_SECURITY_GROUP in securityGroups:
             # Create/update the default security group that opens TCP
