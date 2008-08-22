@@ -17,7 +17,7 @@ class BaseNewInstance(xmlNode.BaseNode):
     tag = 'newInstance'
     __slots__ = [ 'image', 'minCount', 'maxCount', 'keyPair',
                   'securityGroups', 'userData', 'instanceType',
-                  'duration' ]
+                  'duration', 'remoteIp' ]
 
 class Handler(xmllib.DataBinder):
     countClass = BaseCount
