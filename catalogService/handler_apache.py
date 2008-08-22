@@ -92,36 +92,16 @@ class ApacheRequest(brequest.BaseRequest):
         return self._req.server.port
 
 class ApacheHandler(bhandler.BaseRESTHandler):
-    def end_headers(self):
-        headerData = self.wfile.getvalue()
-        if headerData:
-            statusLine = headerData.splitlines()[0]
-            code, msg = statusLine.split(None, 1)[1].split(None, 1)
-            code = int(code)
-            if code != 200:
-                self.req._req.status = code
-        headers = [x.split(': ', 1) for x in headerData.splitlines()[1:] if x]
-        for key, val in headers:
-            self.req._req.headers_out[key] = val
-        bhandler.BaseRESTHandler.end_headers(self)
-
     def __init__(self, toplevel, storagePath, req, *args, **kwargs):
         bhandler.BaseRESTHandler.__init__(self, req, *args, **kwargs)
         self.toplevel = toplevel
-        self.headers = dict(req.iterHeaders())
         self.requestline = req.requestline
         self.request_version = req._req.protocol
         self.path = req._req.unparsed_uri
         self.command = req._req.method
         self.req = req
-        # socketserver closes the input and output files
-        self.wfile = util.BoundedStringIO()
         self.rfile = self.req.makefile('r', 0)
         self.storageConfig = bhandler.StorageConfig(storagePath = storagePath)
-
-    def setAuthHeader(self, username, passwd):
-        self.headers['Authorization'] = 'Basic %s' % \
-                base64.b64encode('%s:%s' % (username, passwd))
 
     def handleApacheRequest(self):
         methodName = 'do_%s' % self.command
@@ -129,11 +109,30 @@ class ApacheHandler(bhandler.BaseRESTHandler):
             return apache.HTTP_NOT_FOUND
         method = getattr(self, methodName)
         res = method()
-        # self.wfile is a BoundedStringIO that the SimpleHTTPServer wrote to
-        self.wfile.seek(0)
 
-        util.copyfileobj(self.wfile, self.req._req)
-        return 0
+        return self.req._req.status
+
+    def send_header(self, keyword, value):
+        if self.req._req.status != apache.OK:
+            table = self.req._req.err_headers_out
+        else:
+            table = self.req._req.headers_out
+        table[keyword] = value
+
+    def send_response(self, code, message = None):
+        if code == 200:
+            self.req._req.status = apache.OK
+        else:
+            self.req._req.status = code
+
+    def end_headers(self):
+        self.req._req.send_http_header()
+
+    def _sendContentType(self, contentType):
+        self.req._req.content_type = contentType
+
+    def _getWriteMethod(self):
+        return self.req._req.write
 
     def _newRequest(self):
         return self.req

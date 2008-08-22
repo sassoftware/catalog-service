@@ -106,6 +106,15 @@ class StandaloneRequest(brequest.BaseRequest):
         self._req = req
         self.read = self._req.rfile.read
 
+        # We need to initialize the auth data
+        authData = self.getHeader('Authorization')
+        if authData and authData[:6] == 'Basic ':
+            authData = authData[6:]
+            authData = base64.decodestring(authData)
+            authData = authData.split(':', 1)
+            self.setUser(authData[0])
+            self.setPassword(authData[1])
+
     def getRelativeURI(self):
         return self._req.path
 
@@ -188,7 +197,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(content)))
         self.end_headers()
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
-            self.wfile.write(content)
+            self._getWriteMethod()(content)
+        self._ret_status_code = code
 
     def log_message(self, format, *args):
         self.log(1, format, *args)
@@ -265,10 +275,11 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         req = self._createRequest()
         if req is None:
             # _createRequest does all the work to send back the error codes
-            return
+            return self._ret_status_code
 
         try:
-            return method(req)
+            response = method(req)
+            return self._handleResponse(response)
         except:
             stream, shouldClose = self.getLogStream()
             excType, excValue, tb = sys.exc_info()
@@ -306,7 +317,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # environment, most likely crossdomain.xml is handled directly by
         # apache.
         if path == '/crossdomain.xml':
-            return self._handleResponse(self.serveCrossDomainFile())
+            return self.serveCrossDomainFile()
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
         if resourceType == 'clouds':
@@ -328,44 +339,42 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     method = self.getEnvironmentVWS
                 else:
                     raise errors.HttpNotFound
-                return self._handleResponse(method(req, pathInfo))
+                return method(req, pathInfo)
             return self._do_GET_clouds(req, pathInfo)
 
         if resourceType == 'userinfo':
             return self.enumerateUserInfo(req)
 
         if resourceType == 'users':
-            return self._handleResponse(self.getUserData(req, pathInfo))
+            return self.getUserData(req, pathInfo)
 
         raise errors.HttpNotFound
 
     def _do_GET_clouds(self, req, pathInfo):
         cloudType = pathInfo.get('cloudType')
         if cloudType is None:
-            return self._handleResponse(self.enumerateClouds(req))
+            return self.enumerateClouds(req)
         # XXX do not hardcode the cloud type here
         cloudId = pathInfo.get('cloudId')
         resourceName = pathInfo.get('resourceName')
         if cloudType == 'ec2':
             if resourceName == 'images':
-                return self._handleResponse(self.enumerateEC2Images(req))
+                return self.enumerateEC2Images(req)
             if resourceName == 'instances':
-                return self._handleResponse(self.enumerateEC2Instances(req))
+                return self.enumerateEC2Instances(req)
             if resourceName == 'instanceTypes':
                 return self.enumerateEC2InstanceTypes(req)
         if cloudType == 'vws':
             if cloudId is None:
-                return self._handleResponse(self.enumerateVwsClouds(req))
+                return self.enumerateVwsClouds(req)
             cloudId = urllib.unquote(cloudId)
             cli = self._getVwsClient(cloudId, req)
 
             try:
                 if resourceName == 'images':
-                    return self._handleResponse(self.enumerateVwsImages(req,
-                            cli))
+                    return self.enumerateVwsImages(req, cli)
                 if resourceName == 'instances':
-                    return self._handleResponse(self.enumerateVwsInstances(req,
-                            cli))
+                    return self.enumerateVwsInstances(req, cli)
             finally:
                 cli.close()
 
@@ -383,7 +392,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
         if resourceType == 'users':
-            return self._handleResponse(self.setUserData(req, pathInfo))
+            return self.setUserData(req, pathInfo)
 
     def _do_POST(self, req):
         """
@@ -404,16 +413,16 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         resourceType = pathInfo.get('resourceType')
         if resourceType == 'users':
             if method == 'POST':
-                self._handleResponse(self.addUserData(req, pathInfo))
+                return self.addUserData(req, pathInfo)
             elif method == 'DELETE':
-                self._handleResponse(self.deleteUserData(req, pathInfo))
+                return self.deleteUserData(req, pathInfo)
             elif method == 'PUT':
-                self._handleResponse(self.setUserData(req, pathInfo))
-            return
+                return self.setUserData(req, pathInfo)
+            raise errors.HttpNotFound
 
         resourceName = pathInfo.get('resourceName')
         if (resourceType, resourceName) == ('clouds', 'instances'):
-            self._handleInstances(req, method, pathInfo)
+            return self._handleInstances(req, method, pathInfo)
 
     def _do_DELETE(self, req):
         """
@@ -429,10 +438,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
         if resourceType == 'users':
-            self._handleResponse(self.deleteUserData(req, pathInfo))
+            return self.deleteUserData(req, pathInfo)
         resourceName = pathInfo.get('resourceName')
         if resourceType == 'clouds' and resourceName == 'instances':
-            self._handleInstances(req, method, pathInfo)
+            return self._handleInstances(req, method, pathInfo)
 
     #} Real implementation for HTTP method handling
 
@@ -563,11 +572,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             method = getattr(self, methodName)
             instanceId = pathInfo.get('resourceId')
             prefix = pathInfo.get('prefix', '')
-            return self._handleResponse(method(req, cloudId, instanceId,
-                prefix))
+            return method(req, cloudId, instanceId, prefix)
         methodName = 'new%sInstance' % cloudMap[cloudType]
         method = getattr(self, methodName)
-        return self._handleResponse(method(req, cloudId))
+        return method(req, cloudId)
 
     @staticmethod
     def _split_query(query):
@@ -595,10 +603,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_error(400)
             return
 
-        if not req.getHeader('Authorization'):
-            self._send_403()
-            return
-
         self.host = host
         self.port = req.getServerPort()
         return req
@@ -608,10 +612,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return req
 
     def _send_403(self):
-        self.send_response(403, "Forbidden")
-        self.send_header('Content-Type', 'text/html')
-        self.send_header('Connection', 'close')
-        self.end_headers()
+        self._ret_status_code = 403
+        return self._handleResponse(
+            Response(code = 403, contentType = "text/html",
+                     headers = dict(Connection = 'close')))
 
     def _auth(self, req):
         """
@@ -619,16 +623,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         or if the authentication information does not verify, an HTTP 403
         (Forbidden) is sent back.
         """
-        authData = req.getHeader('Authorization')
-        if authData[:6] != 'Basic ':
+        if req.getUser() is None:
             self._send_403()
             return False
-        authData = authData[6:]
-        authData = base64.decodestring(authData)
-        authData = authData.split(':', 1)
-        req.setUser(authData[0])
-        req.setPassword(authData[1])
-        self.mintClient = self._getMintClient(authData)
+        self.mintClient = self._getMintClient((req.getUser(), req.getPassword()))
         # explicitly authenticate the credentials against rBuilder to get
         # the rBuilder userId. raise permission denied if we're not authorized
         self.mintAuth = self.mintClient.checkAuth()
@@ -640,18 +638,24 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def _handleResponse(self, response):
         response.addContentLength()
         self.send_response(response.getCode())
+        self._sendContentType(response.getContentType())
         for k, v in response.iterHeaders():
             self.send_header(k, v)
         self.end_headers()
 
-        response.serveResponseBody(self.wfile.write)
+        response.serveResponseBody(self._getWriteMethod())
+
+    def _sendContentType(self, contentType):
+        self.send_header('Content-Type', contentType)
+
+    def _getWriteMethod(self):
+        return self.wfile.write
 
     def _getMintConfig(self):
         import mint.config
         if not hasattr(self, 'mintCfg'):
             self.mintCfg = mint.config.getConfig()
         return self.mintCfg
-
 
     def _getMintClient(self, authToken):
         if self.storageConfig.rBuilderUrl:
@@ -821,14 +825,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         prefix = req.getAbsoluteURI()
         node = drv.getAllInstanceTypes(prefix=prefix)
 
-        hndlr = images.Handler()
-        data = hndlr.toXml(node)
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/xml")
-        self.send_header("Content-Length", len(data))
-        self.end_headers()
-        self.wfile.write(data)
+        return Response(data = node)
 
     def enumerateUserInfo(self, req):
         """
@@ -840,11 +837,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = "<userinfo><username>%s</username></userinfo>" % \
                 self.mintAuth.username
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/xml")
-        self.send_header("Content-Length", len(data))
-        self.end_headers()
-        self.wfile.write(data)
+        return Response(data = data)
 
     def serveCrossDomainFile(self):
         """
@@ -876,7 +869,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         newId = store.store(data, keyPrefix = keyPrefix)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s/%s</id>' % (
             req.getAbsoluteURI(), os.path.basename(newId))
-        return Response(contentType = "text/xml", data = response)
+        return Response(data = response)
 
     def getUserData(self, req, pathInfo):
         """
@@ -901,7 +894,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # A trailing / means retrieving the contents from a collection
             if not store.isCollection(key):
                 data = xmlHeader + '<list></list>'
-                return Response(data = data, code = 200)
+                return Response(data = data)
                 #raise Exception("XXX 2", prefix, keyPath)
 
         if store.isCollection(key):
@@ -917,7 +910,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # Grab contents and wrap them in some XML
             data = [ store.get(x) for x in snodes ]
             data = xmlHeader + '<list>%s</list>' % ''.join(data)
-            return Response(data = data, code = 200)
+            return Response(data = data)
 
         data = store.get(key)
         if data is None:
@@ -942,7 +935,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         store.set(key, data)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
             req.getAbsoluteURIPath(), )
-        return Response(contentType = "text/xml", data = response)
+        return Response(data = response)
 
     def deleteUserData(self, req, pathInfo):
         """
@@ -960,7 +953,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         store.delete(key)
         response = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (
             req.getAbsoluteURIPath(), )
-        return Response(contentType = "text/xml", data = response)
+        return Response(data = response)
 
     def getEnvironmentEC2(self, req, pathInfo):
         """

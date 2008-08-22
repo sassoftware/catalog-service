@@ -78,7 +78,7 @@ class Response(object):
     The intention is to simplify the job for methods returning useful data to
     the HTTP client.
     """
-    __slots__ = [ '_headersOut', '_data', '_file', '_code' ]
+    __slots__ = [ '_headersOut', '_data', '_file', '_code', '_contentType' ]
     BUFFER_SIZE = 16384
     def __init__(self, contentType = None, headers = None, data = None,
                  fileObj = None, code = None):
@@ -105,7 +105,7 @@ class Response(object):
             headers = {}
         if contentType is None:
             contentType = 'application/xml'
-        headers['Content-Type'] = contentType
+        self._contentType = contentType
 
         for k, v in headers.iteritems():
             if isinstance(v, list):
@@ -138,6 +138,9 @@ class Response(object):
         assert(isinstance(values, list))
         self._headersOut[key] = [ str(x) for x in values ]
 
+    def getContentType(self):
+        return self._contentType
+
     def addContentLength(self):
         """
         Add a C{Content-Length} header to the response.
@@ -145,6 +148,8 @@ class Response(object):
         file object that were passed in at initialization time.
         """
         hname = 'Content-Length'
+        if self._data is None and self._file is None:
+            return
         if self._data is not None:
             self.addHeader(hname, len(self._data))
             return
@@ -159,6 +164,8 @@ class Response(object):
         """
         if self._data is not None:
             write(self._data)
+            return
+        if self._file is None:
             return
         while 1:
             buf = self._file.read(self.BUFFER_SIZE)
