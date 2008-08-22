@@ -24,19 +24,15 @@ def _handler(req):
     return apache.OK
 
 class ApacheRequest(brequest.BaseRequest):
-    __slots__ = [ '_req', 'read', 'requestline', '_rfile', 'path' ]
+    __slots__ = [ '_req', 'requestline', 'read', 'path' ]
 
     def __init__(self, req):
         self.setPath(req.unparsed_uri)
-        req.assbackwards = 1
-        self._rfile = util.BoundedStringIO()
-        util.copyfileobj(req, self._rfile)
-        self._rfile.seek(0)
         brequest.BaseRequest.__init__(self)
         self._req = req
         self.requestline = '%s %s %s' % \
                 (req.method, req.unparsed_uri, req.protocol)
-        self.read = self._read
+        self.read = self._req.read
 
     def setPath(self, path):
         if path.lower().startswith('http'):
@@ -72,36 +68,19 @@ class ApacheRequest(brequest.BaseRequest):
     def iterHeaders(self):
         return self._req.headers_in.iteritems()
 
-    def makefile(self, mode, bufsize):
-        if 'r' in mode:
-            self._rfile.seek(0)
-            res = util.BoundedStringIO()
-            util.copyfileobj(self._rfile, res)
-            res.seek(0)
-            self._rfile.seek(0)
-            return res
-        elif 'w' in mode:
-            return util.BoundedStringIO()
-
-    def _read(self, *args, **kwargs):
-        # SocketServer will close file objects, so we have to work around it
-        rfile = self.makefile('r', 0)
-        return rfile.read(*args, **kwargs)
-
     def getServerPort(self):
         return self._req.server.port
 
 class ApacheHandler(bhandler.BaseRESTHandler):
     def __init__(self, toplevel, storagePath, req, *args, **kwargs):
-        bhandler.BaseRESTHandler.__init__(self, req, *args, **kwargs)
         self.toplevel = toplevel
         self.requestline = req.requestline
         self.request_version = req._req.protocol
         self.path = req._req.unparsed_uri
         self.command = req._req.method
         self.req = req
-        self.rfile = self.req.makefile('r', 0)
         self.storageConfig = bhandler.StorageConfig(storagePath = storagePath)
+        bhandler.BaseRESTHandler.__init__(self, req, *args, **kwargs)
 
     def handleApacheRequest(self):
         methodName = 'do_%s' % self.command
@@ -112,6 +91,8 @@ class ApacheHandler(bhandler.BaseRESTHandler):
 
         return self.req._req.status
 
+    # We are overriding methods from BaseHTTPRequestHandler to make it work in
+    # the mod_python case
     def send_header(self, keyword, value):
         if self.req._req.status != apache.OK:
             table = self.req._req.err_headers_out
@@ -126,7 +107,28 @@ class ApacheHandler(bhandler.BaseRESTHandler):
             self.req._req.status = code
 
     def end_headers(self):
+        # Supposedly this is optional with newer mod_pythons, but it doesn't
+        # hurt to use it
         self.req._req.send_http_header()
+
+    def handle(self):
+        # We don't need the request handler to read from the file descriptors,
+        # the request object is already created by mod_python
+        # All we do here is the dispatching
+        mname = 'do_' + self.command
+        if not hasattr(self, mname):
+            self.send_error(501, "Unsupported method (%r)" % self.command)
+            return
+        method = getattr(self, mname)
+        method()
+
+    def finish(self):
+        # Nothing to be done here in the mod_python case
+        pass
+
+    def setup(self):
+        # Nothing to be done here in the mod_python case
+        pass
 
     def _sendContentType(self, contentType):
         self.req._req.content_type = contentType
@@ -135,4 +137,5 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         return self.req._req.write
 
     def _newRequest(self):
+        # Request was created outside of the handler, so just pass it through
         return self.req
