@@ -8,7 +8,8 @@ import xmlNode
 
 class BaseSecurityGroup(xmlNode.BaseNode):
     tag = 'securityGroup'
-    __slots__ = [ 'id', 'ownerId', 'groupName', 'description' ]
+    __slots__ = [ 'id', 'ownerId', 'groupName', 'description',
+            'remoteIp' ]
 
 class BaseSecurityGroups(xmlNode.BaseNodeCollection):
     tag = 'securityGroups'
