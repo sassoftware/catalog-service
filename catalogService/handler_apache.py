@@ -12,27 +12,14 @@ from conary.lib import util
 from catalogService import request as brequest
 from catalogService import handler as bhandler
 
-def handler(req):
-    coveragehook.install()
-    try:
-        return _handler(req)
-    finally:
-        coveragehook.save()
-
-def _handler(req):
-    r = ApacheRequest(req)
-    return apache.OK
-
 class ApacheRequest(brequest.BaseRequest):
-    __slots__ = [ '_req', 'requestline', 'read', 'path' ]
+    __slots__ = [ '_req', 'read', 'path' ]
 
     def __init__(self, req):
-        self.setPath(req.unparsed_uri)
         brequest.BaseRequest.__init__(self)
         self._req = req
-        self.requestline = '%s %s %s' % \
-                (req.method, req.unparsed_uri, req.protocol)
         self.read = self._req.read
+        self.setPath(self._req.unparsed_uri)
 
     def setPath(self, path):
         if path.lower().startswith('http'):
@@ -72,11 +59,11 @@ class ApacheRequest(brequest.BaseRequest):
         return self._req.server.port
 
 class ApacheHandler(bhandler.BaseRESTHandler):
+    _successStatusCodes = set([apache.OK, apache.HTTP_OK])
+
     def __init__(self, toplevel, storagePath, req, *args, **kwargs):
         self.toplevel = toplevel
-        self.requestline = req.requestline
         self.request_version = req._req.protocol
-        self.path = req._req.unparsed_uri
         self.command = req._req.method
         self.req = req
         self.storageConfig = bhandler.StorageConfig(storagePath = storagePath)
@@ -89,22 +76,22 @@ class ApacheHandler(bhandler.BaseRESTHandler):
         method = getattr(self, methodName)
         res = method()
 
+        if self.req._req.status in self._successStatusCodes:
+            return apache.OK
         return self.req._req.status
 
     # We are overriding methods from BaseHTTPRequestHandler to make it work in
     # the mod_python case
     def send_header(self, keyword, value):
-        if self.req._req.status != apache.OK:
-            table = self.req._req.err_headers_out
-        else:
+        if self.req._req.status in self._successStatusCodes:
             table = self.req._req.headers_out
+        else:
+            table = self.req._req.err_headers_out
+
         table[keyword] = value
 
     def send_response(self, code, message = None):
-        if code == 200:
-            self.req._req.status = apache.OK
-        else:
-            self.req._req.status = code
+        self.req._req.status = code
 
     def end_headers(self):
         # Supposedly this is optional with newer mod_pythons, but it doesn't
@@ -114,13 +101,7 @@ class ApacheHandler(bhandler.BaseRESTHandler):
     def handle(self):
         # We don't need the request handler to read from the file descriptors,
         # the request object is already created by mod_python
-        # All we do here is the dispatching
-        mname = 'do_' + self.command
-        if not hasattr(self, mname):
-            self.send_error(501, "Unsupported method (%r)" % self.command)
-            return
-        method = getattr(self, mname)
-        method()
+        pass
 
     def finish(self):
         # Nothing to be done here in the mod_python case
