@@ -191,14 +191,9 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         sys.stderr.flush()
         content = (self.error_message_format %
                {'code': code, 'message': BaseHTTPServer._quote_html(message)})
-        self.send_response(code, shortMessage)
-        self.send_header("Content-Type", "application/xml")
-        self.send_header('Connection', 'close')
-        self.send_header('Content-Length', str(len(content)))
-        self.end_headers()
-        if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
-            self._getWriteMethod()(content)
-        self._ret_status_code = code
+        response = Response(code = code, data = content,
+                            headers = dict(Connection = 'close'))
+        self._handleResponse(response)
 
     def log_message(self, format, *args):
         self.log(1, format, *args)
@@ -636,14 +631,17 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return True
 
     def _handleResponse(self, response):
+        code = response.getCode()
+        self._ret_status_code = code
         response.addContentLength()
-        self.send_response(response.getCode())
+        self.send_response(code)
         self._sendContentType(response.getContentType())
         for k, v in response.iterHeaders():
             self.send_header(k, v)
         self.end_headers()
 
-        response.serveResponseBody(self._getWriteMethod())
+        if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
+            response.serveResponseBody(self._getWriteMethod())
 
     def _sendContentType(self, contentType):
         self.send_header('Content-Type', contentType)

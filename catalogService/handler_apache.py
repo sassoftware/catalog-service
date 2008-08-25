@@ -78,7 +78,13 @@ class ApacheHandler(bhandler.BaseRESTHandler):
 
         if self.req._req.status in self._successStatusCodes:
             return apache.OK
-        return self.req._req.status
+        # return self.req._req.status
+        # Returning a non-OK code will make apache append the standard
+        # response to the end of the request, which is really not what we
+        # want, because we'd end up with a concatenation of xml and html. For
+        # now, return OK until we have a clue what the handlers are supposed
+        # to return.
+        return apache.OK
 
     # We are overriding methods from BaseHTTPRequestHandler to make it work in
     # the mod_python case
