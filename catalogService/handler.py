@@ -862,7 +862,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         data = req.read(dataLen)
         store = self._getUserDataStore()
 
-        storeKey = pathInfo['storeKey']
+        # POSTing to a URL with a trailing / should work (RDST-551)
+        storeKey = pathInfo['storeKey'].rstrip('/')
         # Sanitize key
         keyPrefix = self._sanitizeKey(storeKey)
 
