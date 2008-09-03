@@ -540,13 +540,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             # We need a user ID first
             if not pComps:
                 return {}
-            res['userId'] = userId = pComps.pop(0)
+            res['userId'] = userId = pComps[0]
             # It is important for users if the path ends with a /
             if path.endswith('/'):
                 pComps.append('')
             res['storeKey'] = '/'.join(pComps)
             # The prefix should not have the store key
-            res['prefix'] = prefix + '/'.join([resourceType, userId, ""])
+            res['prefix'] = prefix + '/'.join([resourceType, ""])
             return res
 
         # an empty dict indicates a URL we couldn't handle, which
