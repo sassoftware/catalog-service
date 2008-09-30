@@ -5,6 +5,18 @@
 from rpath_common import xmllib
 
 import xmlNode
+from catalogService import instances
+
+class ImageFactory(object):
+    def __init__(self):
+        self.linker = instances.Linker()
+
+    def __call__(self, *args, **kw):
+        image = BaseImage(*args, **kw)
+        image.setId(self.linker.imageUrl(image.getCloudType(),
+                                         image.getCloudName(),
+                                         image.getId()))
+        return image
 
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'

@@ -6,6 +6,34 @@ from rpath_common import xmllib
 
 import xmlNode
 
+class Linker(object):
+    baseUrl = None
+
+    def instanceUrl(self, cloudType, cloudName, instanceId):
+        instanceId = self._urlquote(instanceId)
+        return '%s/clouds/%s/%s/instances/%s' % (self.baseUrl,
+                                    cloudType, cloudName, instanceId)
+
+    def imageUrl(self, cloudType, cloudName, imageId):
+        imageId = self._urlquote(imageId)
+        return '%s/clouds/%s/%s/images/%s' % (self.baseUrl,
+                                    cloudType, cloudName, imageId)
+
+class InstanceFactory(object):
+    def __init__(self):
+        self.linker = Linker()
+
+    def __call__(self, *args, **kw):
+        instance = BaseInstance(*args, **kw)
+        instance.setId(self.linker.instanceUrl(instance.getCloudType(),
+                                              instance.getCloudName(),
+                                              instance.getId()))
+        instance.setImageId(self.linker.imageUrl(instance.getCloudType(),
+                                                 instance.getCloudName(),
+                                                 instance.getImageId()))
+        return instance
+
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId',
@@ -15,6 +43,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias', ]
+
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"

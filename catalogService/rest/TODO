@@ -1,0 +1,11 @@
+1. The parameters model needs to be rethought.
+2. The spi stuff is completey tangential to the rest model being used
+3. to_xml sucks
+4. The url handling is broken when the upstream url needs to contain 
+   a parameter.
+5. Error handling still sucks
+6. Content-type handling sucks.
+can't have two gazillion storage objects around.
+7. Cloud controller can't call into sub views to get list of available clouds.
+8. CloudID needs to be unquoted everywhere.  Suck.
+9. Add getController

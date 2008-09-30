@@ -188,7 +188,6 @@ class Driver(driver.BaseDriver):
     def getImagesFromGrid(self, imageIds = None, owners = None, prefix = None):
         imageIds = self.cloudClient.listImages()
         imgs = Images()
-        cloudId = 'vws/%s' % self.cloudClient.getCloudId()
         for imageId in imageIds:
             imageName = imageId
             qimageId = self._urlquote(imageId)
