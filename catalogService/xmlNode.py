@@ -6,6 +6,8 @@ from rpath_common import xmllib
 
 class BaseNode(xmllib.BaseNode):
     tag = None
+    # Hint for a slot's type
+    _slotTypeMap = {}
 
     def __init__(self, attrs=None, nsMap = None, **kwargs):
         xmllib.BaseNode.__init__(self, attrs, nsMap = nsMap)
@@ -61,7 +63,11 @@ class BaseNode(xmllib.BaseNode):
             # sub-nodes for this object
             setattr(self, key, value)
             return self
-        if isinstance(value, int):
+        slotType = self._slotTypeMap.get(key)
+        if slotType == bool or isinstance(slotType, xmllib.BooleanNode):
+            cls = xmllib.BooleanNode
+            value = cls.toString(value)
+        elif slotType == int or isinstance(value, int):
             cls = xmllib.IntegerNode
             value = str(value)
         else:
@@ -73,6 +79,9 @@ class BaseNode(xmllib.BaseNode):
         val = getattr(self, key)
         if val is None:
             return None
+        slotType = self._slotTypeMap.get(key)
+        if slotType == bool:
+            return xmllib.BooleanNode.fromString(val.getText())
         if isinstance(val, xmllib.IntegerNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:
@@ -81,6 +90,11 @@ class BaseNode(xmllib.BaseNode):
             return val.getText()
         # Well, this may be a list of values. Just return it
         return val
+
+    def __repr__(self):
+         return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
+            id(self))
+
 
 class BaseNodeCollection(xmllib.SerializableList):
     "Base class for node collections"
