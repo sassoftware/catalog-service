@@ -65,9 +65,11 @@ class AllCloudModelController(BaseHandler):
         moduleDir =  __name__.rsplit('.', 1)[0] + '.drivers'
         for driverName in SUPPORTED_MODULES:
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
-                                     {}, {}, ['drivers']).driver
-            instanceFactory = instances.InstanceFactory()
-            imageFactory = images.ImageFactory()
+                                      {}, {}, ['drivers']).driver
+            instanceFactory = instances.InstanceFactory(
+                getattr(driverClass, 'Instance', None))
+            imageFactory = images.ImageFactory(
+                getattr(driverClass, 'Image', None))
             driver = driverClass(self.mintClient, cfg,
                                  instanceFactory, imageFactory)
             controller =  CloudTypeModelController(self, driverName,
