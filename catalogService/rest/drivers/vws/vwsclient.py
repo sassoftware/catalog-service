@@ -32,6 +32,15 @@ class Image(images.BaseImage):
             return None
         return xmllib.BooleanNode.fromString(self.isDeployed.getText())
 
+class Images(images.BaseImages):
+    "Globus Virtual Workspaces Images"
+
+class Instance(instances.BaseInstance):
+    "Globus Virtual Workspaces Instance"
+
+class Instances(instances.BaseInstances):
+    "Globus Virtual Workspaces Instances"
+
 class ImageFactory(object):
     def __init__(self):
         self.linker = instances.Linker()
@@ -238,32 +247,29 @@ class VWSClient(object):
             nodes.append(inst)
         return nodes
 
-
-
-        pass
-
     def _daemonize(self, function, *args, **kw):
         pid = os.fork()
         if pid:
             os.waitpid(pid, 0)
         try:
-            pid = os.fork()
-            if pid:
-                # The first child exits and is waited by the parent
-                os._exit(0)
-            # Redirect stdin, stdout, stderr
-            fd = os.open(os.devnull, os.O_RDWR)
-            os.dup2(fd, 0)
-            os.dup2(fd, 1)
-            os.dup2(fd, 2)
-            os.close(fd)
-            # Create new process group
-            os.setsid()
+            try:
+                pid = os.fork()
+                if pid:
+                    # The first child exits and is waited by the parent
+                    os._exit(0)
+                # Redirect stdin, stdout, stderr
+                fd = os.open(os.devnull, os.O_RDWR)
+                os.dup2(fd, 0)
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+                os.close(fd)
+                # Create new process group
+                os.setsid()
 
-            os.chdir('/')
-            function(*args, **kw)
-        except Exception:
-            os._exit(1)
+                os.chdir('/')
+                function(*args, **kw)
+            except Exception:
+                os._exit(1)
         finally:
             os._exit(0)
 
@@ -335,7 +341,7 @@ class VWSClient(object):
             imageList.append(image)
         return imageList
 
-    def _addMintDataToImageList(self, imageList)
+    def _addMintDataToImageList(self, imageList):
         imageDataLookup = self.mintClient.getAllVwsBuilds()
         # Convert the images coming from rbuilder to .gz, to match what we're
         # storing in globus
