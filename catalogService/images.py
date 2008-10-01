@@ -8,11 +8,14 @@ import xmlNode
 from catalogService import instances
 
 class ImageFactory(object):
-    def __init__(self):
+    def __init__(self, factory):
+        if factory is None:
+            factory = BaseImage
+        self._factory = factory
         self.linker = instances.Linker()
 
     def __call__(self, *args, **kw):
-        image = BaseImage(*args, **kw)
+        image = self._factory(*args, **kw)
         image.setId(self.linker.imageUrl(image.getCloudType(),
                                          image.getCloudName(),
                                          image.getId()))
@@ -25,7 +28,8 @@ class BaseImage(xmlNode.BaseNode):
             'role', 'publisher', 'awsAccountNumber', 'buildName',
             'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
             'cloudName', 'cloudType', 'cloudAlias' ]
-    _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool)
+    _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
+        is_rBuilderImage = bool)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 

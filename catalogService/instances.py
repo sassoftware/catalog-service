@@ -10,21 +10,24 @@ class Linker(object):
     baseUrl = None
 
     def instanceUrl(self, cloudType, cloudName, instanceId):
-        instanceId = self._urlquote(instanceId)
+        instanceId = xmlNode.BaseNode.urlquote(instanceId)
         return '%s/clouds/%s/%s/instances/%s' % (self.baseUrl,
                                     cloudType, cloudName, instanceId)
 
     def imageUrl(self, cloudType, cloudName, imageId):
-        imageId = self._urlquote(imageId)
+        imageId = xmlNode.BaseNode.urlquote(imageId)
         return '%s/clouds/%s/%s/images/%s' % (self.baseUrl,
                                     cloudType, cloudName, imageId)
 
 class InstanceFactory(object):
-    def __init__(self):
+    def __init__(self, factory):
+        if factory is None:
+            factory = BaseInstance
+        self._factory = factory
         self.linker = Linker()
 
     def __call__(self, *args, **kw):
-        instance = BaseInstance(*args, **kw)
+        instance = self._factory(*args, **kw)
         instance.setId(self.linker.instanceUrl(instance.getCloudType(),
                                               instance.getCloudName(),
                                               instance.getId()))
