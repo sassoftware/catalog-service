@@ -2,6 +2,8 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import urllib
+
 from rpath_common import xmllib
 
 class BaseNode(xmllib.BaseNode):
@@ -9,11 +11,18 @@ class BaseNode(xmllib.BaseNode):
     # Hint for a slot's type
     _slotTypeMap = {}
 
+    # Overrides for whatever was provided in the constructor
+    # This is useful, for instance, for providing some quasi-immutable
+    # defaults
+    _constructorOverrides = {}
+
+
     def __init__(self, attrs=None, nsMap = None, **kwargs):
         xmllib.BaseNode.__init__(self, attrs, nsMap = nsMap)
         for slot in self.__slots__:
             setattr(self, slot, None)
 
+        kwargs.update(self._constructorOverrides)
         for k in self.__slots__:
             method = getattr(self, "set%s%s" % (k[0].upper(), k[1:]))
             method(kwargs.get(k))
@@ -90,6 +99,10 @@ class BaseNode(xmllib.BaseNode):
             return val.getText()
         # Well, this may be a list of values. Just return it
         return val
+
+    @classmethod
+    def urlquote(cls, data):
+        return urllib.quote(data, safe = "")
 
     def __repr__(self):
          return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
