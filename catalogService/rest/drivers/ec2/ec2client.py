@@ -3,8 +3,7 @@ import urllib
 from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
-from catalogService.instances import BaseInstances
-from catalogService.images import BaseImages
+from catalogService import instances
 from catalogService import images
 
 CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
@@ -16,6 +15,19 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
         ('tcp',  443,        443),
         ('tcp',  8003 ,      8003),
 )
+
+class EC2_Image(images.BaseImage):
+    "EC2 Image"
+
+    _constructorOverrides = dict(cloudName = 'aws', cloudType = 'ec2',
+        cloudAlias = 'ec2')
+
+class EC2_Instance(instances.BaseInstance):
+    "EC2 Instance"
+
+    _constructorOverrides = dict(cloudName = 'aws', cloudType = 'ec2',
+        cloudAlias = 'ec2')
+
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None):
@@ -66,6 +78,9 @@ class LaunchInstanceParameters(object):
 
 class EC2Client(object):
     cloudType = 'ec2'
+
+    Image = EC2_Image
+    Instance = EC2_Instance
 
     def __init__(self, mintClient, cfg, instanceFactory, imageFactory):
         self._cfg = cfg
@@ -138,7 +153,7 @@ class EC2Client(object):
 
     def getInstances(self, cloudId, instanceIds):
         resultSet = self.client.get_all_instances(instance_ids = instanceIds)
-        instances = BaseInstances()
+        instances = instances.BaseInstances()
         for reservation in resultSet:
             instances.extend(self._getInstancesFromReservation(reservation))
         return instances
@@ -180,13 +195,13 @@ class EC2Client(object):
         return CATALOG_DEF_SECURITY_GROUP
 
     def _getInstancesFromResult(self, resultSet):
-        instanceList = BaseInstances()
+        instanceList = instances.BaseInstances()
         for i in resultSet:
             instanceList.append(self._getInstance(i))
         return instanceList
 
     def _getInstancesFromReservation(self, reservation):
-        instances = BaseInstances()
+        instances = instances.BaseInstances()
         for instance in reservation.instances:
             instances.append(self._getInstance(instance, reservation))
         return instances
@@ -203,23 +218,18 @@ class EC2Client(object):
         i = self._instanceFactory(id=instance.id, instanceId=instance.id,
                                   launchTime=instance.launch_time,
                                   imageId=instance.image_id,
-                                  cloudName='ec2',
-                                  cloudType='ec2',
-                                  cloudAlias='ec2',
                                   **properties)
         return i
 
 
     def _getImagesFromResult(self, results):
-        imageList = BaseImages()
+        imageList = images.BaseImages()
         for image in results:
             i = self._imageFactory(id=image.id, imageId=image.id,
                                    ownerId=image.ownerId,
                                    longName=image.location,
                                    state=image.state,
-                                   isPublic=image.is_public,
-                                   cloudName='ec2', cloudType='ec2',
-                                   cloudAlias='ec2')
+                                   isPublic=image.is_public)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:
