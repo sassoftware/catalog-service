@@ -99,8 +99,10 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             authData = authData[6:]
             authData = base64.decodestring(authData)
             authData = authData.split(':', 1)
-        from catalogService.spi import  response, site
+        from catalogService.rest import response, site
         from restlib.http import simplehttp
+
+        # XXX don't assume always /TOPLEVEL
         baseUrl = self.path[:9]
         self.path = self.path[9:]
         self.handler = simplehttp.SimpleHttpHandler(
