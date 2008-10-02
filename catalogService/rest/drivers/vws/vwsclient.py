@@ -50,10 +50,10 @@ class VWSClient(object):
     def listClouds(self):
         ret = clouds.BaseClouds()
         for cloudCred in self._getCredentials():
-            cName = "vws/" + cloudCred['factory']
-            cld = self.Cloud(cloudName = cName,
+            cName = cloudCred['factory']
+            cld = self._nodeFactory.newCloud(cloudName = cName,
                              description = cloudCred['description'],
-                             alias = cloudCred['alias'])
+                             cloudAlias = cloudCred['alias'])
             ret.append(cld)
         return ret
 

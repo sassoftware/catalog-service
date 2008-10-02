@@ -32,6 +32,7 @@ class EC2_Cloud(clouds.BaseCloud):
     "EC2 Cloud"
 
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
+    _constructorOverrides['description'] = 'Amazon Elastic Compute Cloud'
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None):
@@ -107,7 +108,7 @@ class EC2Client(object):
 
     def listClouds(self):
         ret = clouds.BaseClouds()
-        ret.append(self.Cloud())
+        ret.append(self._nodeFactory.newCloud())
         return ret
 
     def updateCloud(self, cloudId, parameters):
