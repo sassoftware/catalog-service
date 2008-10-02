@@ -1,14 +1,13 @@
 from catalogService import userData
 from base import BaseModelHandler
-from catalogService.handler import StorageConfig
 from catalogService import storage
 from restlib.handler import RestModelHandler
 
 class UserMixin(object):
-    storageConfig = StorageConfig(storagePath = "storage")
+    storageConfig = storage.StorageConfig(storagePath = "storage")
     def _getUserDataStore(self):
         path = self.storageConfig.storagePath + '/userData'
-        cfg = StorageConfig(storagePath = path)
+        cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
     @classmethod

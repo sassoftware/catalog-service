@@ -18,6 +18,8 @@ import sys
 
 from conary.lib import util
 
+from catalogService import config
+
 #{ Exception classes
 class StorageError(Exception):
     """Base class for all exceptions in the C{storage} module"""
@@ -199,7 +201,7 @@ class DiskStorage(BaseStorage):
     def __init__(self, cfg):
         """Constructor
         @param cfg: Configuration object
-        @type cfg: C{config.PackageCreatorServiceConfiguration}
+        @type cfg: C{StorageConfig}
         """
         self.cfg = cfg
 
@@ -250,3 +252,14 @@ class DiskStorage(BaseStorage):
         if createDirs:
             util.mkdirChain(os.path.dirname(ret))
         return ret
+
+class StorageConfig(config.BaseConfig):
+    """
+    Storage configuration object.
+    @ivar storagePath: Path used for persisting the values.
+    @type storagePath: C{str}
+    """
+    def __init__(self, storagePath):
+        config.BaseConfig.__init__(self)
+        self.storagePath = storagePath
+

@@ -1,6 +1,11 @@
 from conary.lib import util
 
-from catalogService import clouds, images, instances
+from catalogService import clouds
+from catalogService import images
+from catalogService import instances
+from catalogService import storage
+
+import globuslib
 
 class VWS_Cloud(clouds.BaseCloud):
     "Clobus Virtual Workspaces Cloud"
@@ -23,7 +28,7 @@ class VWSClient(object):
     Image = VWS_Image
     Instance = VWS_Instance
 
-    def __init__(self, cfg, mintClient, nodeFactory):
+    def __init__(self, mintClient, cfg, nodeFactory):
         self._cfg = cfg
         self._mintClient = mintClient
         self._nodeFactory = nodeFactory
@@ -43,7 +48,14 @@ class VWSClient(object):
         return cli
 
     def listClouds(self):
-        return [ 'blah' ]
+        ret = clouds.BaseClouds()
+        for cloudCred in self._getCredentials():
+            cName = "vws/" + cloudCred['factory']
+            cld = self.Cloud(cloudName = cName,
+                             description = cloudCred['description'],
+                             alias = cloudCred['alias'])
+            ret.append(cld)
+        return ret
 
     def cloudParameters(self):
         return CloudParameters()
@@ -346,6 +358,31 @@ class VWSClient(object):
             image.baseFileName = mintImageData['baseFileName']
             imageList.append(image)
         return imageList
+
+    def _getCredentials(self):
+        if not globuslib.WorkspaceCloudClient.isFunctional():
+            return []
+
+        store = self._getCredentialsDataStore()
+
+        # XXX in the future we'll have the credentials split by user
+        user = "demo"
+        clouds = store.enumerate(user)
+        keys = ['alias', 'factory', 'repository', 'factoryIdentity',
+            'repositoryIdentity', 'caCert', 'userCert', 'userKey',
+            'sshPubKey', 'description', ]
+        ret = []
+        for cloud in clouds:
+            d = dict((k, store.get("%s/%s" % (cloud, k)))
+                for k in keys)
+            ret.append(d)
+        return ret
+
+    def _getCredentialsDataStore(self):
+        path = self._cfg.storagePath + '/credentials'
+        cfg = storage.StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
+
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None):

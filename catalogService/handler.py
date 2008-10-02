@@ -71,19 +71,9 @@ if not hasattr(BaseHTTPServer, '_quote_html'):
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     BaseHTTPServer._quote_html = _quote_html
 
-class StorageConfig(config.BaseConfig):
-    """
-    Storage configuration object.
-    @ivar storagePath: Path used for persisting the values.
-    @type storagePath: C{str}
-    """
-    def __init__(self, storagePath):
-        config.BaseConfig.__init__(self)
-        self.storagePath = storagePath
-
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    storageConfig = StorageConfig(storagePath = "storage")
+    storageConfig = storage.StorageConfig(storagePath = "storage")
     logLevel = 1
     error_message_format = '\n'.join(('<?xml version="1.0" encoding="UTF-8"?>',
             '<fault>',
