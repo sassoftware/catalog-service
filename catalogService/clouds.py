@@ -4,7 +4,8 @@
 
 from rpath_common import xmllib
 
-import xmlNode
+from catalogService import instances
+from catalogService import xmlNode
 
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'

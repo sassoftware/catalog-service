@@ -1,14 +1,14 @@
 
-from base import BaseHandler
-import users
-import clouds
-from catalogService import instances
-
 import mint.client
 import mint.config
 import mint.shimclient
 
 from restlib.handler import RestHandler
+
+from base import BaseHandler
+import users
+import clouds
+from catalogService import nodeFactory
 
 class CatalogServiceController(RestHandler):
     urls = {'clouds' : clouds.AllCloudModelController,
@@ -55,7 +55,9 @@ class SiteHandler(object):
                 return
             else:
                 parameters['mintAuth'] = mintAuth
-                instances.Linker.baseUrl = request.baseUrl
+                # Pass baseUrl into the factory, we will need it everywhere
+                # so we can generate URLs properly
+                nodeFactory.NodeFactory.baseUrl = request.baseUrl
             return self.restController.handle(response, request,
                                               parameters, url)
         except NotImplementedError:

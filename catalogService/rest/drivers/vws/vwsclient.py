@@ -1,70 +1,32 @@
 from conary.lib import util
 
-from catalogService import images, instances
+from catalogService import clouds, images, instances
 
-class Image(images.BaseImage):
+class VWS_Cloud(clouds.BaseCloud):
+    "Clobus Virtual Workspaces Cloud"
+    _constructorOverrides = dict(cloudType = 'vws')
+
+class VWS_Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
 
     __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId',
                                               'downloadUrl', 'buildPageUrl',
                                               'baseFileName']
+    _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
 
-    def __init__(self, attrs = None, nsMap = None, **kwargs):
-        self.downloadUrl = kwargs.pop('downloadUrl')
-        self.buildPageUrl = kwargs.pop('buildPageUrl')
-        self.baseFileName = kwargs.pop('baseFileName')
-        images.BaseImage.__init__(self, attrs = None, nsMap = None, **kwargs)
-        self.setIsDeployed(kwargs.get('isDeployed'))
-        self.setBuildId(kwargs.get('buildId'))
-        self.downloadUrl = downloadUrl
-
-
-    def setIsDeployed(self, data):
-        self.isDeployed = None
-        if data is None:
-            return self
-        data = xmllib.BooleanNode.toString(data)
-        self.isDeployed = xmllib.GenericNode().setName('isDeployed').characters(data)
-        return self
-
-    def getIsDeployed(self):
-        if self.isDeployed is None:
-            return None
-        return xmllib.BooleanNode.fromString(self.isDeployed.getText())
-
-class Images(images.BaseImages):
-    "Globus Virtual Workspaces Images"
-
-class Instance(instances.BaseInstance):
+class VWS_Instance(instances.BaseInstance):
     "Globus Virtual Workspaces Instance"
-
-class Instances(instances.BaseInstances):
-    "Globus Virtual Workspaces Instances"
-
-class ImageFactory(object):
-    def __init__(self):
-        self.linker = instances.Linker()
-
-    def __call__(self, *args, **kw):
-        image = Image(*args, **kw)
-        image.setId(self.linker.imageUrl(image.getCloudType(),
-                                         image.getCloudName(),
-                                         image.getId()))
-        return image
-
-class Handler(images.Handler):
-    imageClass = Image
-    imagesClass = Images
-
+    _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
 
 class VWSClient(object):
-    def __init__(self, cfg, mintClient, instanceFactory, imageFactory):
+    Cloud = VWS_Cloud
+    Image = VWS_Image
+    Instance = VWS_Instance
+
+    def __init__(self, cfg, mintClient, nodeFactory):
         self._cfg = cfg
         self._mintClient = mintClient
-        self._instanceFactory = instanceFactory
-        self._imageFactory = ImageFactory()
-        self.instancesDir = '/tmp/catalog-service-instances'
-        util.mkdirChain(self.instancesDir)
+        self._nodeFactory = nodeFactory
 
     def _getCloudClient(self, cloudId):
         if cloudId in self.clients:
@@ -79,6 +41,9 @@ class VWSClient(object):
             cloudCred['sshPubKey'], cloudCred['alias'])
         self.clients[cloudId] = cli
         return cli
+
+    def listClouds(self):
+        return [ 'blah' ]
 
     def cloudParameters(self):
         return CloudParameters()

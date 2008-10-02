@@ -7,20 +7,6 @@ from rpath_common import xmllib
 import xmlNode
 from catalogService import instances
 
-class ImageFactory(object):
-    def __init__(self, factory):
-        if factory is None:
-            factory = BaseImage
-        self._factory = factory
-        self.linker = instances.Linker()
-
-    def __call__(self, *args, **kw):
-        image = self._factory(*args, **kw)
-        image.setId(self.linker.imageUrl(image.getCloudType(),
-                                         image.getCloudName(),
-                                         image.getId()))
-        return image
-
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',

@@ -3,6 +3,7 @@ import urllib
 from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
+from catalogService import clouds
 from catalogService import instances
 from catalogService import images
 
@@ -25,9 +26,12 @@ class EC2_Image(images.BaseImage):
 class EC2_Instance(instances.BaseInstance):
     "EC2 Instance"
 
-    _constructorOverrides = dict(cloudName = 'aws', cloudType = 'ec2',
-        cloudAlias = 'ec2')
+    _constructorOverrides = EC2_Image._constructorOverrides.copy()
 
+class EC2_Cloud(clouds.BaseCloud):
+    "EC2 Cloud"
+
+    _constructorOverrides = EC2_Image._constructorOverrides.copy()
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None):
@@ -78,15 +82,15 @@ class LaunchInstanceParameters(object):
 class EC2Client(object):
     cloudType = 'ec2'
 
+    Cloud = EC2_Cloud
     Image = EC2_Image
     Instance = EC2_Instance
 
-    def __init__(self, mintClient, cfg, instanceFactory, imageFactory):
+    def __init__(self, mintClient, cfg, nodeFactory):
         self._cfg = cfg
         self._mintClient = mintClient
         self._client = None
-        self._instanceFactory = instanceFactory
-        self._imageFactory = imageFactory
+        self._nodeFactory = nodeFactory
 
     def _getClient(self):
         if not self._client:
@@ -102,7 +106,9 @@ class EC2Client(object):
     client = property(_getClient)
 
     def listClouds(self):
-        return ['ec2']
+        ret = clouds.BaseClouds()
+        ret.append(self.Cloud())
+        return ret
 
     def updateCloud(self, cloudId, parameters):
         parameters = CloudParameters(parameters)
@@ -214,21 +220,22 @@ class EC2Client(object):
                               resevationId=reservation.id)
         if hasattr(instance, 'ami_launch_index'):
             properties.update(launchIndex=instance.ami_launch_index)
-        i = self._instanceFactory(id=instance.id, instanceId=instance.id,
-                                  launchTime=instance.launch_time,
-                                  imageId=instance.image_id,
-                                  **properties)
+        i = self._nodeFactory.newInstance(id=instance.id,
+                                          instanceId=instance.id,
+                                          launchTime=instance.launch_time,
+                                          imageId=instance.image_id,
+                                          **properties)
         return i
 
 
     def _getImagesFromResult(self, results):
         imageList = images.BaseImages()
         for image in results:
-            i = self._imageFactory(id=image.id, imageId=image.id,
-                                   ownerId=image.ownerId,
-                                   longName=image.location,
-                                   state=image.state,
-                                   isPublic=image.is_public)
+            i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
+                                           ownerId=image.ownerId,
+                                           longName=image.location,
+                                           state=image.state,
+                                           isPublic=image.is_public)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:

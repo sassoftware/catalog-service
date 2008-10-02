@@ -1,14 +1,17 @@
 import urllib
 
 from base import BaseHandler, BaseModelHandler
-from catalogService import images, instances
+from catalogService import clouds
+from catalogService import images
+from catalogService import instances
+from catalogService import nodeFactory
 
 class ImagesController(BaseModelHandler):
     paramName = 'imageId'
     def index(self, response, request, parameters, url):
         cloudId = parameters['cloudId']
-        images = self.driver.getAllImages(cloudId)
-        response.to_xml(images)
+        imgNodes = self.driver.getAllImages(cloudId)
+        response.to_xml(imgNodes)
 
 class InstancesController(BaseModelHandler):
     paramName = 'instanceId'
@@ -41,13 +44,9 @@ class CloudTypeModelController(BaseModelHandler):
     def __init__(self, parent, path, driver, cfg, mintClient):
         BaseModelHandler.__init__(self, parent, path, driver, cfg, mintClient)
 
-    def index(self, request, response, paramaters, url):
+    def index(self, response, request, paramaters, url):
         'iterate available clouds'
-        clouds = []
-        for cloudId in self.driver.listClouds():
-            cloud = {'cloudId' : cloudId, url : self.url(request, cloudId)}
-        response.to_xml({'clouds' : clouds, 
-                         'metadata' : self.url(request, 'metadata')})
+        response.to_xml(self.driver.listClouds())
 
 SUPPORTED_MODULES = ['ec2', 'vws']
 
@@ -55,9 +54,11 @@ class AllCloudModelController(BaseHandler):
 
     paramName = 'cloudType'
 
-    def index(self, request, response, parameters, url):
-        self.to_xml([{'id' : x, 'url' : self.url(request, x)}
-                     for x in self.urls.keys()])
+    def index(self, response, request, parameters, url):
+        cloudNodes = clouds.BaseClouds()
+        for cloudType, cloudController in sorted(self.urls.items()):
+            cloudNodes.extend(cloudController.driver.listClouds())
+        response.to_xml(cloudNodes)
 
     def loadCloudTypes(self, auth, cfg):
         drivers = []
@@ -66,12 +67,15 @@ class AllCloudModelController(BaseHandler):
         for driverName in SUPPORTED_MODULES:
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['drivers']).driver
-            instanceFactory = instances.InstanceFactory(
-                getattr(driverClass, 'Instance', None))
-            imageFactory = images.ImageFactory(
-                getattr(driverClass, 'Image', None))
-            driver = driverClass(self.mintClient, cfg,
-                                 instanceFactory, imageFactory)
+            nodeFact = nodeFactory.NodeFactory(
+                cloudFactory = getattr(driverClass, 'Cloud',
+                    clouds.BaseCloud),
+                imageFactory = getattr(driverClass, 'Image',
+                    images.BaseImage),
+                instanceFactory = getattr(driverClass, 'Instance',
+                    instances.BaseInstance),
+            )
+            driver = driverClass(self.mintClient, cfg, nodeFact)
             controller =  CloudTypeModelController(self, driverName,
                                                    driver, self.cfg,
                                                    self.mintClient)
