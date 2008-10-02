@@ -40,7 +40,6 @@ class LaunchInstanceParameters(object):
         image = node.getImage()
         imageId = image.getId()
         self.imageId = self._extractId(imageId)
-        self.minCount = node.getMinCount() or 1
         self.maxCount = node.getMaxCount() or 1
         keyPair = node.getKeyPair()
         if not keyPair:
@@ -153,10 +152,10 @@ class EC2Client(object):
 
     def getInstances(self, cloudId, instanceIds):
         resultSet = self.client.get_all_instances(instance_ids = instanceIds)
-        instances = instances.BaseInstances()
+        insts = instances.BaseInstances()
         for reservation in resultSet:
-            instances.extend(self._getInstancesFromReservation(reservation))
-        return instances
+            insts.extend(self._getInstancesFromReservation(reservation))
+        return insts
 
     def getAllImages(self, cloudId):
         return self.getImages(cloudId, None)
@@ -201,10 +200,10 @@ class EC2Client(object):
         return instanceList
 
     def _getInstancesFromReservation(self, reservation):
-        instances = instances.BaseInstances()
+        insts = instances.BaseInstances()
         for instance in reservation.instances:
-            instances.append(self._getInstance(instance, reservation))
-        return instances
+            insts.append(self._getInstance(instance, reservation))
+        return insts
 
     def _getInstance(self, instance, reservation=None):
         properties = {'placement' : instance.placement,

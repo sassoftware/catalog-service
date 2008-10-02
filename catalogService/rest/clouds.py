@@ -1,7 +1,7 @@
 import urllib
 
 from base import BaseHandler, BaseModelHandler
-from catalogService import images,instances
+from catalogService import images, instances
 
 class ImagesController(BaseModelHandler):
     paramName = 'imageId'
@@ -14,8 +14,8 @@ class InstancesController(BaseModelHandler):
     paramName = 'instanceId'
     def index(self, response, request, parameters, url):
         cloudId = parameters['cloudId']
-        instances = self.driver.getAllInstances(cloudId)
-        response.to_xml(instances)
+        insts = self.driver.getAllInstances(cloudId)
+        response.to_xml(insts)
 
     def create(self, response, request, parameters, url):
         "launch a new instance"
