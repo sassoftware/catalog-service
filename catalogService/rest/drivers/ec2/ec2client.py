@@ -126,9 +126,6 @@ class EC2Client(object):
         rs = self.client.get_all_images(image_ids = None)
         return [ x.id for x in rs]
 
-    def launchInstanceParameters(self):
-        return LaunchInstanceParameters()
-
     def launchInstances(self, cloudId, imageIds, parameters):
         for imageId in imageIds:
             self.launchInstance(cloudId, imageId, parameters)
