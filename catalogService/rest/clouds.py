@@ -34,12 +34,17 @@ class InstancesController(BaseModelHandler):
         instances = self.driver.terminateInstance(cloudId, instanceId)
         response.to_xml(instances)
 
+class UsersController(BaseModelHandler):
+    paramName = 'userName'
+
 class CloudTypeModelController(BaseModelHandler):
 
     paramName = 'cloudId'
 
     urls = {'images' : ImagesController,
-            'instances' : InstancesController }
+            'instances' : InstancesController,
+            'users' : UsersController,
+           }
 
     def __init__(self, parent, path, driver, cfg, mintClient):
         BaseModelHandler.__init__(self, parent, path, driver, cfg, mintClient)

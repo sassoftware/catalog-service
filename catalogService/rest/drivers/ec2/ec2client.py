@@ -84,8 +84,6 @@ class LaunchInstanceParameters(object):
 
 
 class EC2Client(object):
-    cloudType = 'ec2'
-
     Cloud = EC2_Cloud
     Image = EC2_Image
     Instance = EC2_Instance
@@ -125,10 +123,6 @@ class EC2Client(object):
     def listImageIds(self, cloudId):
         rs = self.client.get_all_images(image_ids = None)
         return [ x.id for x in rs]
-
-    def launchInstances(self, cloudId, imageIds, parameters):
-        for imageId in imageIds:
-            self.launchInstance(cloudId, imageId, parameters)
 
     def launchInstance(self, cloudId, xmlString, requestIPAddress):
         parameters = LaunchInstanceParameters(xmlString,
