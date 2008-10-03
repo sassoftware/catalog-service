@@ -35,17 +35,20 @@ class EC2_Cloud(clouds.BaseCloud):
     _constructorOverrides['description'] = 'Amazon Elastic Compute Cloud'
 
 class LaunchInstanceParameters(object):
-    def __init__(self, xmlString=None):
+    def __init__(self, xmlString=None, requestIPAddress = None):
         if xmlString:
-            self.load(xmlString)
+            self.load(xmlString, requestIPAddress = requestIPAddress)
 
-    def load(self, xmlString):
+    def load(self, xmlString, requestIPAddress):
         from catalogService import newInstance
         node = newInstance.Handler().parseString(xmlString)
         image = node.getImage()
         imageId = image.getId()
         self.imageId = self._extractId(imageId)
+
+        self.minCount = node.getMinCount() or 1
         self.maxCount = node.getMaxCount() or 1
+
         keyPair = node.getKeyPair()
         if not keyPair:
             raise errors.ParameterError('keyPair was not specified')
@@ -61,7 +64,7 @@ class LaunchInstanceParameters(object):
             if sgId == CATALOG_DEF_SECURITY_GROUP:
                 clientSuppliedRemoteIP = sg.getRemoteIp()
 
-        self.remoteIPAddress = clientSuppliedRemoteIP
+        self.remoteIPAddress = clientSuppliedRemoteIP or requestIPAddress
 
         self.userData = node.getUserData()
 
@@ -131,7 +134,8 @@ class EC2Client(object):
             self.launchInstance(cloudId, imageId, parameters)
 
     def launchInstance(self, cloudId, xmlString, requestIPAddress):
-        parameters = LaunchInstanceParameters(xmlString)
+        parameters = LaunchInstanceParameters(xmlString,
+            requestIPAddress = requestIPAddress)
         if (parameters.remoteIPAddress
             and CATALOG_DEF_SECURITY_GROUP in parameters.securityGroups):
             # Create/update the default security group that opens TCP
