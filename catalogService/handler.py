@@ -43,6 +43,10 @@ C{/<TOPLEVEL>/clouds/<cloudName>/instances/<instanceId>}
 C{/<TOPLEVEL>/clouds/<cloudName>/users/<user>/environment}
     - (GET): retrieve the launch environment
 
+C{/<TOPLEVEL>/clouds/<cloudName>/credentials/users/<user>}
+    - (GET): Retrieve the user's credentials (and validate them)
+    - (POST): Store new credentials
+
 C{/<TOPLEVEL>/users/<user>}
     - (GET): Enumerate the keys defined in the store.
         - Return an enumeration of URIs in the format::
@@ -65,6 +69,7 @@ from conary.lib import util
 
 from catalogService import clouds
 from catalogService import config
+from catalogService import credentials
 from catalogService import environment
 from catalogService import newInstance
 from catalogService import request as brequest
@@ -319,7 +324,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             resourceName = pathInfo.get('resourceName')
             if resourceName == 'users':
                 resourceId = pathInfo.get('resourceId')
-                if resourceId != 'environment':
+                if resourceId not in ['environment', 'credentials']:
                     raise errors.HttpNotFound
                 userId = pathInfo.get('userId')
                 if userId != req.getUser():
@@ -328,11 +333,14 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                         sys.stderr.flush()
                     raise Exception("XXX 1", userId, req.getUser())
                 cloudType = pathInfo.get('cloudType')
-                if cloudType == 'ec2':
-                    method = self.getEnvironmentEC2
-                elif cloudType == 'vws':
-                    method = self.getEnvironmentVWS
-                else:
+                methodMap = {
+                    ('ec2', 'environment') : self.getEnvironmentEC2,
+                    ('ec2', 'credentials') : self.getCredentialsEC2,
+                    ('vws', 'environment') : self.getEnvironmentVWS,
+                    ('vws', 'credentials') : self.getCredentialsVWS,
+                }
+                method = methodMap.get((cloudType, resourceId), None)
+                if method is None:
                     raise errors.HttpNotFound
                 return method(req, pathInfo)
             return self._do_GET_clouds(req, pathInfo)
@@ -389,6 +397,27 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if resourceType == 'users':
             return self.setUserData(req, pathInfo)
 
+        resourceName = pathInfo.get('resourceName')
+        resourceId = pathInfo.get('resourceId')
+
+        if (resourceType, resourceName, resourceId) == ('clouds', 'users', 'credentials'):
+                userId = pathInfo.get('userId')
+                if userId != req.getUser():
+                    for k, v in req.iterHeaders():
+                        print >> sys.stderr, "%s: %s" % (k, v)
+                        sys.stderr.flush()
+                    raise Exception("XXX 1", userId, req.getUser())
+                cloudType = pathInfo.get('cloudType')
+                methodMap = {
+                    'ec2' : self.setCredentialsEC2,
+                    'vws' : self.setCredentialsVWS
+                }
+
+                method = methodMap.get(cloudType, None)
+                if method is None:
+                    raise errors.HttpNotFound
+                return method(req, pathInfo)
+
     def _do_POST(self, req):
         """
         Handle a POST request.
@@ -403,6 +432,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         path, method = self._get_HTTP_method(req.getRelativeURI(), 'POST')
         if method == 'GET':
             return self._do_GET(req)
+        if method == 'PUT':
+            return self._do_PUT(req)
 
         pathInfo = self._getPathInfo(path)
         resourceType = pathInfo.get('resourceType')
@@ -452,15 +483,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         rMap = cls._split_query(query)
         return path, rMap.get('_method', defaultMethod)
 
-    def _getVwsClient(self, cloudId, req):
-        """
-        Instantiate a Globus Virtual Workspaces client.
-        """
+    def _getVwsCredentialsForCloud(self, cloudId, req):
         creds = self.getVwsCredentials(req)
         cloudCred = [ x for x in creds if x['factory'] == cloudId ]
         if not cloudCred:
             raise errors.HttpNotFound
-        cloudCred = cloudCred[0]
+        return cloudCred[0]
+
+    def _getVwsClient(self, cloudId, req):
+        """
+        Instantiate a Globus Virtual Workspaces client.
+        """
+        cloudCred = self._getVwsCredentialsForCloud(cloudId, req)
 
         from catalogService import globuslib
         props = globuslib.WorkspaceCloudProperties()
@@ -675,12 +709,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if key not in cred or not cred[key]:
                 raise errors.MissingCredentials
         return (cred.get('awsPublicAccessKeyId'),
-            cred.get('awsSecretAccessKey'))
+            cred.get('awsSecretAccessKey'), cred.get('awsAccountNumber'))
 
     def enumerateEC2Images(self, req):
         import driver_ec2
 
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -735,7 +769,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # Strip trailing /
         prefix = prefix.rstrip('/')
         try:
-            _, _ = self.getEC2Credentials()
+            _, _ = self.getEC2Credentials()[:2]
             nodes.append(driver_ec2.Cloud(id = prefix + '/ec2',
                 cloudName = 'ec2',
                 description = "Amazon Elastic Compute Cloud",
@@ -796,7 +830,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """
         import driver_ec2
 
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -814,7 +848,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         import images
         import driver_ec2
 
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -956,13 +990,13 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def getEnvironmentEC2(self, req, pathInfo):
         """
-        @rest_method: C{DELETE}
+        @rest_method: C{GET}
         @rest_url: C{/clouds/ec2/users/.../environment}
         """
         import driver_ec2
 
         cloudPrefix = pathInfo['prefix']
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -978,7 +1012,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def getEnvironmentVWS(self, req, pathInfo):
         """
-        @rest_method: C{DELETE}
+        @rest_method: C{GET}
         @rest_url: C{/clouds/vws/.../users/.../environment}
         """
         import driver_workspaces
@@ -996,6 +1030,74 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         cloudClient.close()
         return Response(data = node)
 
+    def getCredentialsEC2(self, req, pathInfo):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/ec2/users/.../environment}
+        """
+        import driver_ec2
+
+        awsPublicKey, awsPrivateKey, awsAccountNumber = self.getEC2Credentials()
+
+        fields = credentials.BaseFields()
+        for k, v in [ ('awsAccountNumber', awsAccountNumber),
+                      ('awsAccessKeyId', awsPublicKey),
+                      ('awsSecretAccessKey', awsPrivateKey) ]:
+            fields.append(credentials.BaseField(credentialName = k, value = v))
+
+        node = credentials.BaseCredentials(fields = fields, valid = True)
+        return Response(data = node)
+
+    def getCredentialsVWS(self, req, pathInfo):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/vws/<cloudName>/users/.../environment}
+        """
+        cloudId = pathInfo.get('cloudId')
+        cloudCred = self._getVwsCredentialsForCloud(cloudId, req)
+        fields = credentials.BaseFields()
+        for k in [ 'userCert', 'userKey', 'sshPubKey' ]:
+            v = cloudCred[k]
+            fields.append(credentials.BaseField(credentialName = k, value = v))
+        node = credentials.BaseCredentials(fields = fields, valid = True)
+        return Response(data = node)
+
+    def setCredentialsEC2(self, req, pathInfo):
+        """
+        @rest_method: C{GET}
+        @rest_url: C{/clouds/ec2/users/.../environment}
+        """
+        userId = pathInfo['userId']
+        if userId != req.getUser():
+            raise Exception("XXX 1", userId, req.getUser())
+
+        dataLen = req.getContentLength()
+        data = req.read(dataLen)
+
+        hndlr = credentials.Handler()
+        node = hndlr.parseString(data)
+
+        d = dict((x.getCredentialName(), x.getValue()) for x in node.fields)
+        awsAccountNumber = d.get('awsAccountNumber')
+        awsAccessKeyId = d.get('awsAccessKeyId')
+        awsSecretAccessKey = d.get('awsSecretAccessKey')
+
+        valid = self.mintClient.setEC2CredentialsForUser(self.mintAuth.userId,
+            awsAccountNumber, awsAccessKeyId, awsSecretAccessKey)
+
+        node = credentials.BaseCredentials(valid = valid)
+        return Response(data = node)
+
+    def setCredentialsVWS(self, req, pathInfo):
+        """
+        @rest_method: C{PUT}
+        @rest_url: C{/clouds/vws/<cloudName>/users/.../environment}
+        """
+        # We will not implement this yet, we need to differentiate between
+        # config data and credentials
+        valid = True
+        node = credentials.BaseCredentials(valid = valid)
+        return Response(data = node)
 
     def newEC2Instance(self, req, cloudId):
         """
@@ -1003,7 +1105,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         @rest_url: C{/clouds/ec2/instances}
         """
         import driver_ec2
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
@@ -1056,7 +1158,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         """
         import driver_ec2
 
-        awsPublicKey, awsPrivateKey = self.getEC2Credentials()
+        awsPublicKey, awsPrivateKey = self.getEC2Credentials()[:2]
 
         cfg = driver_ec2.Config(awsPublicKey, awsPrivateKey)
 
