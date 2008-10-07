@@ -1,11 +1,17 @@
 from conary.lib import util
 
 from catalogService import clouds
+from catalogService import environment
 from catalogService import images
 from catalogService import instances
 from catalogService import storage
+from catalogService.rest import baseDriver
 
 import globuslib
+
+# XXX should be pushed to errors
+class HttpNotFound(Exception):
+    pass
 
 class VWS_Cloud(clouds.BaseCloud):
     "Clobus Virtual Workspaces Cloud"
@@ -23,15 +29,25 @@ class VWS_Instance(instances.BaseInstance):
     "Globus Virtual Workspaces Instance"
     _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
 
-class VWSClient(object):
+class VWS_EnvironmentCloud(environment.BaseCloud):
+    "Globus Virtual Workspaces Environment Cloud"
+    _constructorOverrides = VWS_Image._constructorOverrides.copy()
+
+class VWS_InstanceTypes(instances.InstanceTypes):
+    "Globus Virtual Workspaces Instance Types"
+
+    idMap = [
+        ('vws.small', "Small"),
+        ('vws.medium', "Medium"),
+        ('vws.large', "Large"),
+        ('vws.xlarge', "Extra Large"),
+    ]
+
+class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
+    EnvironmentCloud = VWS_EnvironmentCloud
     Image = VWS_Image
     Instance = VWS_Instance
-
-    def __init__(self, mintClient, cfg, nodeFactory):
-        self._cfg = cfg
-        self._mintClient = mintClient
-        self._nodeFactory = nodeFactory
 
     def _getCloudClient(self, cloudId):
         if cloudId in self.clients:
@@ -46,6 +62,15 @@ class VWSClient(object):
             cloudCred['sshPubKey'], cloudCred['alias'])
         self.clients[cloudId] = cli
         return cli
+
+    def isValidCloudName(self, cloudName):
+        try:
+            creds = self._getCredentialsForCloudName(cloudName)
+        except HttpNotFound:
+            return False
+        return True
+        # XXX We have to scan the list of available clouds here
+        return cloudName == 'aws'
 
     def listClouds(self):
         ret = clouds.BaseClouds()
@@ -130,6 +155,17 @@ class VWSClient(object):
 
     def getImage(self, cloudId, imageId):
         return self.getImages(cloudId, [imageId])[0]
+
+    def getEnvironment(self):
+        instTypeNodes = self._getInstanceTypes()
+
+        cloudName = self._nodeFactory.urlParams['cloudName']
+        cloud = self._nodeFactory.newEnvironmentCloud(
+            instanceTypes = instTypeNodes, cloudName = cloudName)
+
+        env = self._nodeFactory.newEnvironment()
+        env.append(cloud)
+        return env
 
     def getAllInstances(self, cloudId):
         return self.getInstances(cloudId, None)
@@ -284,8 +320,6 @@ class VWSClient(object):
         build = self._mintClient.getBuild(image.getBuildId())
 
         downloadUrl = imageExtraData['downloadUrl']
-        # XXX temporary fix for a broken URL - misa 20080812
-        downloadUrl = downloadUrl.replace('?id=', '?fileId=')
 
         # XXX follow redirects
         uobj = urllib.urlopen(downloadUrl)
@@ -378,11 +412,24 @@ class VWSClient(object):
             ret.append(d)
         return ret
 
+    def _getCredentialsForCloudName(self, cloudName):
+        creds = [ x for x in self._getCredentials()
+            if x['factory'] == cloudName ]
+        if creds:
+            return creds[0]
+        raise errors.HttpNotFound
+
     def _getCredentialsDataStore(self):
         path = self._cfg.storagePath + '/credentials'
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
+    def _getInstanceTypes(self):
+        ret = VWS_InstanceTypes()
+        ret.extend(self._nodeFactory.newInstanceType(
+                id = x, instanceTypeId = x, description = y)
+            for (x, y) in VWS_InstanceTypes.idMap)
+        return ret
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None):

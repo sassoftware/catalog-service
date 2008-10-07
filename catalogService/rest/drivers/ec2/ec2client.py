@@ -4,8 +4,12 @@ from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
 from catalogService import clouds
+from catalogService import environment
 from catalogService import instances
 from catalogService import images
+from catalogService import keypairs
+from catalogService import securityGroups
+from catalogService.rest import baseDriver
 
 CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
 CATALOG_DEF_SECURITY_GROUP_DESC = 'Default EC2 Catalog Security Group'
@@ -33,6 +37,21 @@ class EC2_Cloud(clouds.BaseCloud):
 
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
     _constructorOverrides['description'] = 'Amazon Elastic Compute Cloud'
+
+class EC2_EnvironmentCloud(environment.BaseCloud):
+    "EC2 Environment Cloud"
+    _constructorOverrides = EC2_Image._constructorOverrides.copy()
+
+class EC2_InstanceTypes(instances.InstanceTypes):
+    "EC2 Instance Types"
+
+    idMap = [
+        ('m1.small', "Small"),
+        ('m1.large', "Large"),
+        ('m1.xlarge', "Extra Large"),
+        ('c1.medium', "High-CPU Medium"),
+        ('c1.xlarge', "High-CPU Extra Large"),
+    ]
 
 class LaunchInstanceParameters(object):
     def __init__(self, xmlString=None, requestIPAddress = None):
@@ -83,16 +102,11 @@ class LaunchInstanceParameters(object):
         return urllib.unquote(os.path.basename(value))
 
 
-class EC2Client(object):
+class EC2Client(baseDriver.BaseDriver):
     Cloud = EC2_Cloud
+    EnvironmentCloud = EC2_EnvironmentCloud
     Image = EC2_Image
     Instance = EC2_Instance
-
-    def __init__(self, mintClient, cfg, nodeFactory):
-        self._cfg = cfg
-        self._mintClient = mintClient
-        self._client = None
-        self._nodeFactory = nodeFactory
 
     def _getClient(self):
         if not self._client:
@@ -106,6 +120,9 @@ class EC2Client(object):
         return self._client
 
     client = property(_getClient)
+
+    def isValidCloudName(self, cloudName):
+        return cloudName == 'aws'
 
     def listClouds(self):
         ret = clouds.BaseClouds()
@@ -167,6 +184,19 @@ class EC2Client(object):
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]
         return self._getImagesFromResult(rs)
+
+    def getEnvironment(self):
+        instTypeNodes = self._getInstanceTypes()
+        keyPairNodes = self._getKeyPairs()
+        securityGroupNodes = self._getSecurityGroups()
+
+        cloud = self._nodeFactory.newEnvironmentCloud(
+            instanceTypes = instTypeNodes, keyPairs = keyPairNodes,
+            securityGroups = securityGroupNodes)
+
+        env = self._nodeFactory.newEnvironment()
+        env.append(cloud)
+        return env
 
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
         assert(remoteIPAddress)
@@ -240,3 +270,44 @@ class EC2Client(object):
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 getattr(image, methodName)(imageData[key])
         return imageList
+
+    def _getInstanceTypes(self):
+        ret = EC2_InstanceTypes()
+        ret.extend(self._nodeFactory.newInstanceType(
+                id = x, instanceTypeId = x, description = y)
+            for (x, y) in EC2_InstanceTypes.idMap)
+        return ret
+
+    def _getKeyPairs(self, keynames = None):
+        ret = keypairs.BaseKeyPairs()
+        try:
+            rs = self.client.get_all_key_pairs(keynames = keynames)
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
+        ret.extend(self._nodeFactory.newKeyPair(id = x.name, keyName = x.name,
+            keyFingerprint = x.fingerprint) for x in rs)
+        return ret
+
+    def _getSecurityGroups(self, groupNames = None):
+        ret = securityGroups.BaseSecurityGroups()
+        try:
+            rs = self.client.get_all_security_groups(groupnames = groupNames)
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
+        defSecurityGroup = None
+        for sg in rs:
+            sgObj = self._nodeFactory.newSecurityGroup(
+                id = sg.name, groupName = sg.name, ownerId = sg.owner_id,
+                description = sg.description)
+            if sg.name == CATALOG_DEF_SECURITY_GROUP:
+                # We will add this group as the first one
+                defSecurityGroup = sgObj
+                continue
+            ret.append(sgObj)
+        if defSecurityGroup is None:
+            defSecurityGroup = self._nodeFactory.newSecurityGroup(
+                id = CATALOG_DEF_SECURITY_GROUP,
+                groupName = CATALOG_DEF_SECURITY_GROUP,
+                description = CATALOG_DEF_SECURITY_GROUP_DESC)
+        ret.insert(0, defSecurityGroup)
+        return ret
