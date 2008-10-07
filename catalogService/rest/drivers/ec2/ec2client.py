@@ -271,7 +271,7 @@ class EC2Client(baseDriver.BaseDriver):
             imageData = imageDataDict.get(image.imageId.getText(), {})
             image.setIs_rBuilderImage(bool(imageData))
             for key, methodName in images.buildToNodeFieldMap.iteritems():
-                getattr(image, methodName)(imageData[key])
+                getattr(image, methodName)(imageData.get(key))
         return imageList
 
     def _getInstanceTypes(self):
