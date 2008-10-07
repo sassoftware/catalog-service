@@ -198,6 +198,9 @@ class EC2Client(baseDriver.BaseDriver):
         env.append(cloud)
         return env
 
+    def getInstanceTypes(self):
+        return self._getInstanceTypes()
+
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
         assert(remoteIPAddress)
         # add the security group if it's not present already

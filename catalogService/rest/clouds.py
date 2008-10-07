@@ -49,6 +49,14 @@ class InstancesController(BaseCloudModelController):
         instances = self.driver.terminateInstance(cloudName, instanceId)
         response.to_xml(instances)
 
+class InstanceTypesController(BaseCloudModelController):
+    paramName = 'instanceTypeId'
+
+    def index(self, response, request, parameters, url):
+        cloudName = self.getCloudName(parameters)
+        instTypes = self.driver.getInstanceTypes()
+        response.to_xml(instTypes)
+
 class UserEnvironmentController(BaseCloudModelController):
     paramName = 'userName'
     def index(self, response, request, parameters, url):
@@ -67,7 +75,8 @@ class CloudTypeModelController(BaseModelHandler):
 
     urls = dict(images = ImagesController,
                 instances = InstancesController,
-                users = UsersController)
+                users = UsersController,
+                instanceTypes = InstanceTypesController)
 
     def __init__(self, parent, path, driver, cfg, mintClient):
         BaseModelHandler.__init__(self, parent, path, driver, cfg, mintClient)

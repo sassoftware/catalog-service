@@ -167,6 +167,9 @@ class VWSClient(baseDriver.BaseDriver):
         env.append(cloud)
         return env
 
+    def getInstanceTypes(self):
+        return self._getInstanceTypes()
+
     def getAllInstances(self, cloudId):
         return self.getInstances(cloudId, None)
 
