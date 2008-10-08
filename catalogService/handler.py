@@ -58,6 +58,7 @@ C{/<TOPLEVEL>/users/<user>/<key>}
 
 import base64
 import BaseHTTPServer
+import logging
 
 from catalogService import config
 from catalogService import storage
@@ -80,8 +81,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             '  <code>%(code)s</code>',
             '  <message>%(message)s</message>',
             '</fault>'))
-    _logDestination = None
-
+    _logFile = None
 
     def do(self):
         authData = self.headers.get('Authorization', None)
@@ -95,9 +95,58 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # XXX don't assume always /TOPLEVEL
         baseUrl = self.path[:9]
         self.path = self.path[9:]
+        logger = self._getLogger(self.client_address[0])
         self.handler = simplehttp.SimpleHttpHandler(
                                         site.SiteHandler(authData,
                                                          self.storageConfig),
-                                        responseClass=response.CatalogResponse)
+                                        responseClass=response.CatalogResponse,
+                                        logger = logger)
         self.handler.handle(self, baseUrl, authData)
     do_GET = do_POST = do_PUT = do_DELETE = do
+
+    @classmethod
+    def _getLogger(cls, address):
+        if cls._logFile is None:
+            handler = logging.StreamHandler()
+        else:
+            handler = logging.FileHandler(cls._logFile)
+
+        formatter = Formatter()
+        handler.setFormatter(formatter)
+        logger = Logger('catalog-service')
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+
+        logger.setAddress(address)
+
+        return logger
+
+class LogRecord(logging.LogRecord):
+    def __init__(self, address, *args, **kwargs):
+        logging.LogRecord.__init__(self, *args, **kwargs)
+        self.address = address
+
+class Logger(logging.Logger):
+    def setAddress(self, address):
+        self.address = address
+
+    def makeRecord(self, *args, **kwargs):
+        address = getattr(self, 'address', '')
+        return LogRecord(address, *args, **kwargs)
+
+class Formatter(logging.Formatter):
+    _fmt = "%(address)s %(asctime)s %(pathname)s(%(lineno)s) %(levelname)s - %(message)s"
+
+    def __init__(self):
+        logging.Formatter.__init__(self, self.__class__._fmt)
+
+    def formatException(self, ei):
+        from conary.lib import util
+        import StringIO
+        excType, excValue, tb = ei
+        sio = StringIO.StringIO()
+        util.formatTrace(excType, excValue, tb, stream = sio,
+            withLocals = False)
+        util.formatTrace(excType, excValue, tb, stream = sio,
+            withLocals = True)
+        return sio.getvalue().rstrip()
