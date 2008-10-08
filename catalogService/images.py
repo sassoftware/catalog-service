@@ -12,7 +12,8 @@ class BaseImage(xmlNode.BaseNode):
             'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
             'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
-            'cloudName', 'cloudType', 'cloudAlias' ]
+            'cloudName', 'cloudType', 'cloudAlias',
+            '_xmlNodeHash' ]
     def __init__(self, attrs = None, nsMap = None, **kwargs):
         xmlNode.BaseNode.__init__(self, attrs = attrs, nsMap = nsMap)
 
