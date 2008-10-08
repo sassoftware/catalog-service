@@ -1,3 +1,6 @@
+
+import os
+
 from conary.lib import util
 
 from catalogService import clouds
@@ -21,8 +24,9 @@ class VWS_Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
 
     __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId',
-                                              'downloadUrl', 'buildPageUrl',
-                                              'baseFileName']
+                                              'downloadUrl', 'buildPageUrl']
+    _slotTypeMap = images.BaseImage._slotTypeMap.copy()
+    _slotTypeMap.update(dict(isDeployed = bool))
     _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
 
 class VWS_Instance(instances.BaseInstance):
@@ -43,15 +47,24 @@ class VWS_InstanceTypes(instances.InstanceTypes):
         ('vws.xlarge', "Extra Large"),
     ]
 
+class VWS_ImageHandler(images.Handler):
+    imageClass = VWS_Image
+
 class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     EnvironmentCloud = VWS_EnvironmentCloud
     Image = VWS_Image
     Instance = VWS_Instance
 
-    def _getCloudClient(self, cloudId):
-        if cloudId in self.clients:
-            return self.client[cloudId]
+    def __init__(self, *args, **kwargs):
+        baseDriver.BaseDriver.__init__(self, *args, **kwargs)
+        self.client = {}
+
+    def _getCloudClient(self, cloudName):
+        cloudCred = self._getCredentialsForCloudName(cloudName)
+        if cloudName in self.client:
+            return self.client[cloudName]
+
         props = globuslib.WorkspaceCloudProperties()
         props.set('vws.factory', cloudCred['factory'])
         props.set('vws.repository', cloudCred['repository'])
@@ -60,7 +73,7 @@ class VWSClient(baseDriver.BaseDriver):
         cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
             cloudCred['userCert'], cloudCred['userKey'],
             cloudCred['sshPubKey'], cloudCred['alias'])
-        self.clients[cloudId] = cli
+        self.client[cloudName] = cli
         return cli
 
     def isValidCloudName(self, cloudName):
@@ -102,7 +115,8 @@ class VWSClient(baseDriver.BaseDriver):
     def launchInstances(self, cloudId, imageIds, parameters):
         pass
 
-    def launchInstance(self, cloudId, xmlString, requestIPAddress):
+    def launchInstance(self, cloudName, xmlString, requestIPAddress):
+        client = self._getCloudClient(cloudName)
         parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
         image = self.getImage(imageId)
@@ -111,7 +125,7 @@ class VWSClient(baseDriver.BaseDriver):
                         cloudId, imageId, instanceId, image,
                         duration=parameters.duration,
                         instanceType=parameters.instanceType)
-        cloudAlias = self.client[cloudId].getCloudAlias()
+        cloudAlias = client.getCloudAlias()
         instanceList = Instances()
         instance = self.instanceFactory(id=instanceId,
                                         instanceId=instanceId,
@@ -122,24 +136,24 @@ class VWSClient(baseDriver.BaseDriver):
         instanceList.append(instances)
         return instanceList
 
-    def terminateInstances(self, cloudId, instanceIds):
-        self.clients[cloudId].terminateInstances(instanceId)
+    def terminateInstances(self, cloudName, instanceIds):
+        client = self._getCloudClient(cloudName)
+        client.terminateInstances(instanceId)
 
-    def terminateInstance(self, cloudId, instanceId):
-        self.client[cloudId].terminateInstances([instanceId])
-
+    def terminateInstance(self, cloudName, instanceId):
+        return self.terminateInstances(cloudName, [instanceId])
 
     def getAllImages(self, cloudId):
         return self.getImages(cloudId, None)
 
-    def getImages(self, cloudId, imageIds):
-        imageList = self._getImagesFromGrid()
-        imageList = self._addMintDataToImageList(imageList)
+    def getImages(self, cloudName, imageIds):
+        imageList = self._getImagesFromGrid(cloudName)
+        imageList = self._addMintDataToImageList(cloudName, imageList)
         # now that we've grabbed all the images, we can return only the one
         # we want.  This is horribly inefficient.
         if imageIds is not None:
             imagesById = dict((x.getImageId(), x) for x in imageList )
-            newImageList = []
+            newImageList = images.BaseImages()
             for imageId in imageIds:
                 if imageId.endswith('.gz') and imageId not in imagesById:
                     imageId = imageId[:-3]
@@ -147,8 +161,8 @@ class VWSClient(baseDriver.BaseDriver):
             imageList = newImageList
         return imageList
 
-    def getImage(self, cloudId, imageId):
-        return self.getImages(cloudId, [imageId])[0]
+    def getImage(self, cloudName, imageId):
+        return self.getImages(cloudName, [imageId])[0]
 
     def getEnvironment(self):
         instTypeNodes = self._getInstanceTypes()
@@ -167,8 +181,9 @@ class VWSClient(baseDriver.BaseDriver):
     def getAllInstances(self, cloudId):
         return self.getInstances(cloudId, None)
 
-    def getInstances(self, cloudId, instanceIds):
-        globusInsts  = self.client[cloudId].listInstances()
+    def getInstances(self, cloudName, instanceIds):
+        client = self._getCloudClient(cloudName)
+        globusInsts  = client.listInstances()
         globusInstsDict = dict((x.getId(), x) for x in globusInsts)
         storeInstanceKeys = self.instanceStore.enumerate(cloudId)
         for storeKey in storeInstanceKeys:
@@ -326,36 +341,44 @@ class VWSClient(baseDriver.BaseDriver):
         util.copyfileobj(uobj, file(downloadFilePath, "w"))
         return downloadFilePath
 
-    def _prepareImage(self, cloudId, downloadFilePath):
-        retfile = self.client[cloudId]._repackageImage(downloadFilePath)
+    def _prepareImage(self, cloudName, downloadFilePath):
+        client = self._getCloudClient(cloudName)
+        retfile = client._repackageImage(downloadFilePath)
         os.unlink(downloadFilePath)
         return retfile
 
     def _publishImage(self, cloudId, fileName):
-        self.client[cloudId].transferInstance(fileName)
+        client = self._getCloudClient(cloudName)
+        client.transferInstance(fileName)
 
-    def _getImagesFromGrid(self, cloudId):
-        imageIds = self.client[cloudId].listImages()
-        imageList = Images()
+    def _getImagesFromGrid(self, cloudName):
+        client = self._getCloudClient(cloudName)
+        cloudAlias = client.getCloudAlias()
+
+        imageIds = client.listImages()
+        imageList = images.BaseImages()
 
         for imageId in imageIds:
-            image = self._imageFactory(id = imageId,
+            imageName = imageId
+            image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
                     is_rBuilderImage = False,
                     shortName = os.path.basename(imageName),
                     longName = imageName,
-                    cloudName = cloudId, cloudType = 'vws',
-                    cloudAlias = self.client[cloudId].getCloudAlias())
+                    cloudName = cloudName,
+                    cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
 
-    def _addMintDataToImageList(self, imageList):
-        imageDataLookup = self.mintClient.getAllVwsBuilds()
+    def _addMintDataToImageList(self, cloudName, imageList):
+        client = self._getCloudClient(cloudName)
+        cloudAlias = client.getCloudAlias()
+
+        imageDataLookup = self._mintClient.getAllVwsBuilds()
         # Convert the images coming from rbuilder to .gz, to match what we're
         # storing in globus
         imageDataLookup = dict((x + '.gz', y)
             for x, y in imageDataLookup.iteritems())
-        imageList = imageList[:]
         for image in imageList:
             imageId = image.getImageId()
             mintImageData = imageDataLookup.pop(imageId, {})
@@ -363,13 +386,16 @@ class VWSClient(baseDriver.BaseDriver):
             image.setIsDeployed(True)
             if not mintImageData:
                 continue
+            shortName = os.path.basename(mintImageData['baseFileName'])
+            longName = "%s/%s" % (mintImageData['buildId'], shortName)
+            image.setShortName(shortName)
+            image.setLongName(longName)
             image.downloadUrl = mintImageData['downloadUrl']
             image.buildPageUrl = mintImageData['buildPageUrl']
-            image.baseFileName = mintImageData['baseFileName']
             image.setBuildId(mintImageData['buildId'])
 
             for key, methodName in images.buildToNodeFieldMap.iteritems():
-                getattr(image, methodName)(mintImageData[key])
+                getattr(image, methodName)(mintImageData.get(key))
 
             shortName = os.path.basename(mintImageData['baseFileName'])
             longName = "%s/%s" % (mintImageData['buildId'], shortName)
@@ -377,13 +403,16 @@ class VWSClient(baseDriver.BaseDriver):
             image.setLongName(longName)
 
         for imageId, mintImageData in imageDataLookup.iteritems():
-            image = self._imageFactory(id = imageId,
+            shortName = os.path.basename(mintImageData['baseFileName'])
+            longName = "%s/%s" % (mintImageData['buildId'], shortName)
+            image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True,
                     buildId = mintImageData['buildId'],
+                    shortName = shortName,
                     longName = longName,
-                    cloudName = cloudId, cloudType = 'vws',
-                    cloudAlias = self.cloudClient.getCloudAlias())
+                    cloudName = cloudName,
+                    cloudAlias = cloudAlias)
             image.downloadUrl = mintImageData['downloadUrl']
             image.buildPageUrl = mintImageData['buildPageUrl']
             image.baseFileName = mintImageData['baseFileName']

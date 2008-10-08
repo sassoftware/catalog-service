@@ -2,6 +2,8 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import urllib
+
 class NodeFactory(object):
     baseUrl = None
     __slots__ = [ '_urlParams',
@@ -65,23 +67,26 @@ class NodeFactory(object):
 
     @classmethod
     def getImageUrl(cls, node):
-        return cls.join(cls.getCloudUrl(node), 'images', node.getId())
+        return cls.join(cls.getCloudUrl(node), 'images',
+                        cls._quote(node.getId()))
 
     @classmethod
     def getInstanceUrl(cls, node):
-        return cls.join(cls.getCloudUrl(node), 'instances', node.getId())
+        return cls.join(cls.getCloudUrl(node), 'instances',
+                        cls._quote(node.getId()))
 
     def getInstanceTypeUrl(self, node):
         cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'instanceTypes', node.getId())
+        return self.join(cloudUrl, 'instanceTypes', self._quote(node.getId()))
 
     def getKeyPairUrl(self, node):
         cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'keyPairs', node.getId())
+        return self.join(cloudUrl, 'keyPairs', self._quote(node.getId()))
 
     def getSecurityGroupUrl(self, node):
         cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'securityGroups', node.getId())
+        return self.join(cloudUrl, 'securityGroups',
+                         self._quote(node.getId()))
 
     @classmethod
     def _getCloudUrl(cls, cloudType, cloudName):
@@ -96,5 +101,9 @@ class NodeFactory(object):
 
     def _setUrlParams(self, urlParams):
         self._urlParams = urlParams
+
+    @classmethod
+    def _quote(cls, data):
+        return urllib.quote(data, safe="")
 
     urlParams = property(_getUrlParams, _setUrlParams)
