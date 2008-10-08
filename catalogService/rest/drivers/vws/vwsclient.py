@@ -92,12 +92,6 @@ class VWSClient(baseDriver.BaseDriver):
         parameters = CloudParameters(parameters)
         pass
 
-    def listInstanceIds(self, cloudId):
-        self.clients[cloudId].listInstanceIds
-
-    def listImageIds(self, cloudId):
-        pass
-
     def publishImage(self, cloudId, image):
         self.cloudClient.transferInstance(fileName)
         pass

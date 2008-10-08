@@ -133,14 +133,6 @@ class EC2Client(baseDriver.BaseDriver):
         parameters = CloudParameters(parameters)
         pass
 
-    def listInstanceIds(self, cloudId):
-        rs = self.client.get_all_instances(instance_ids = None)
-        return [ x.id for x in rs]
-
-    def listImageIds(self, cloudId):
-        rs = self.client.get_all_images(image_ids = None)
-        return [ x.id for x in rs]
-
     def launchInstance(self, cloudId, xmlString, requestIPAddress):
         parameters = LaunchInstanceParameters(xmlString,
             requestIPAddress = requestIPAddress)
