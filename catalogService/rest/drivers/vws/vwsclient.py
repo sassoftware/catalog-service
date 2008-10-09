@@ -7,6 +7,7 @@ from catalogService import clouds
 from catalogService import environment
 from catalogService import images
 from catalogService import instances
+from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
 
@@ -59,6 +60,7 @@ class VWSClient(baseDriver.BaseDriver):
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self.client = {}
+        self._instanceStore = None
 
     def _getCloudClient(self, cloudName):
         cloudCred = self._getCredentialsForCloudName(cloudName)
@@ -74,6 +76,9 @@ class VWSClient(baseDriver.BaseDriver):
             cloudCred['userCert'], cloudCred['userKey'],
             cloudCred['sshPubKey'], cloudCred['alias'])
         self.client[cloudName] = cli
+
+        keyPrefix = "%s/%s" % (cloudName.replace('/', '_'), cli.userCertHash)
+        self._instanceStore = self._getInstanceStore(cloudName, keyPrefix)
         return cli
 
     def isValidCloudName(self, cloudName):
@@ -120,7 +125,7 @@ class VWSClient(baseDriver.BaseDriver):
         parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
         image = self.getImage(imageId)
-        instanceId = self.instanceStore.newInstance(cloudId, imageId)
+        instanceId = self._instanceStore.newInstance(cloudId, imageId)
         self._daemonize(self._launchInstance,
                         cloudId, imageId, instanceId, image,
                         duration=parameters.duration,
@@ -183,37 +188,40 @@ class VWSClient(baseDriver.BaseDriver):
 
     def getInstances(self, cloudName, instanceIds):
         client = self._getCloudClient(cloudName)
+        cloudAlias = client.getCloudAlias()
         globusInsts  = client.listInstances()
         globusInstsDict = dict((x.getId(), x) for x in globusInsts)
-        storeInstanceKeys = self.instanceStore.enumerate(cloudId)
+        storeInstanceKeys = self._instanceStore.enumerate()
+        reservIdHash = {}
+        tmpInstanceKeys = {}
         for storeKey in storeInstanceKeys:
             instanceId = os.path.basename(storeKey)
-            reservationId = self.instanceStore.getId(storeKey)
-            expiration = self.instanceStore.getExpiration(storeKey)
-            if reservId is None and (expiration is None
+            reservationId = self._instanceStore.getId(storeKey)
+            expiration = self._instanceStore.getExpiration(storeKey)
+            if reservationId is None and (expiration is None
                                      or time.time() > float(expiration)):
                 # This instance exists only in the store, and expired
-                self.instanceStore.delete(stKey)
+                self._instanceStore.delete(storeKey)
                 continue
-            imageId = self.instanceStore.getImageId(stKey)
+            imageId = self._instanceStore.getImageId(storeKey)
 
             # Did we find this instance in our store already?
-            if reservId in reservIdHash:
+            if reservationId in reservIdHash:
                 # If the previously found instance already has an image ID,
                 # prefer it. Also, if neither this instance nor the other one
                 # have an image ID, prefer the first (i.e. not this one)
-                otherInstKey, otherInstImageId = reservIdHash[reservId]
+                otherInstKey, otherInstImageId = reservIdHash[reservationId]
                 if otherInstImageId is not None or imageId is None:
-                    instanceStore.delete(stKey)
+                    self._instanceStore.delete(storeKey)
                     continue
 
                 # We prefer this instance over the one we previously found
-                del reservIdHash[reservId]
-                del tmpInstanceKeys[(otherInstKey, reservId)]
+                del reservIdHash[reservationId]
+                del tmpInstanceKeys[(otherInstKey, reservationId)]
 
-            if reservId is not None:
-                reservIdHash[reservId] = (stKey, imageId)
-            tmpInstanceKeys[(stKey, reservId)] = imageId
+            if reservationId is not None:
+                reservIdHash[reservationId] = (storeKey, imageId)
+            tmpInstanceKeys[(storeKey, reservationId)] = imageId
 
         # Done with the preference selection
         del reservIdHash
@@ -221,56 +229,54 @@ class VWSClient(baseDriver.BaseDriver):
         gInsts = []
 
         # Walk through the list again
-        for (stKey, reservId), imageId in tmpInstanceKeys.iteritems():
-            if reservId is None:
+        for (storeKey, reservationId), imageId in tmpInstanceKeys.iteritems():
+            if reservationId is None:
                 # The child process hasn't updated the reservation id yet (or
                 # it died but the instance hasn't expired yet).
                 # Synthesize a globuslib.Instance with not much info in it
-                state = instanceStore.getState(stKey)
-                inst = globuslib.Instance(_id = reservId, _state = state)
-                gInsts.append((stKey, imageId, inst))
+                state = self._instanceStore.getState(storeKey)
+                inst = globuslib.Instance(_id = reservationId, _state = state)
+                gInsts.append((storeKey, imageId, inst))
                 continue
 
-            reservId = int(reservId)
-            if reservId not in globusInstsHash:
+            reservationId = int(reservationId)
+            if reservationId not in globusInstsDict:
                 # We no longer have this instance, get rid of it
-                instanceStore.delete(stKey)
+                self._instanceStore.delete(storeKey)
                 continue
             # Instance exists both in the store and in globus
-            inst = globusInstsHash.pop(reservId)
-            gInsts.append((stKey, imageId, inst))
+            inst = globusInstsDict.pop(reservationId)
+            gInsts.append((storeKey, imageId, inst))
             # If a state file exists, get rid of it, we are getting the state
             # from globus
-            instanceStore.setState(stKey, None)
+            self._instanceStore.setState(storeKey, None)
 
         # For everything else, create an instance ID
-        for reservId, inst in globusInstsHash.iteritems():
-            nkey = instanceStore.newKey(realId = reservId)
+        for reservationId, inst in globusInstsDict.iteritems():
+            nkey = self._instanceStore.newKey(realId = reservationId)
             gInsts.append((nkey, None, inst))
 
         gInsts.sort(key = lambda x: x[1])
 
-        instanceList = Instances()
+        instanceList = instances.BaseInstances()
 
-        for stKey, imageId, instObj in gInsts:
-            instId = str(os.path.basename(stKey))
-            longInstId = os.path.join(prefix, instId)
+        for storeKey, imageId, instObj in gInsts:
+            instId = str(os.path.basename(storeKey))
             reservationId = instObj.getId()
             if reservationId is not None:
                 reservationId = str(reservationId)
-            inst = Instance(id = longInstId,
+            inst = self._nodeFactory.newInstance(id = instId,
                 imageId = imageId,
                 instanceId = instId,
                 reservationId = reservationId,
                 dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime(),
-                cloudName = cloudId,
-                cloudType = 'vws',
-                cloudAlias = self.cloudClient.getCloudAlias(),)
+                cloudName = cloudName,
+                cloudAlias = cloudAlias)
 
-            nodes.append(inst)
-        return nodes
+            instanceList.append(inst)
+        return instanceList
 
     def _daemonize(self, function, *args, **kw):
         pid = os.fork()
@@ -302,27 +308,27 @@ class VWSClient(baseDriver.BaseDriver):
     def _launchInstance(self, cloudId, imageId, instanceId, image,
                         duration, instanceType):
         try:
-            self.instanceStore.setPid(instanceId)
+            self._instanceStore.setPid(instanceId)
             if not img.getIsDeployed():
-                self.instanceStore.setState(instanceId, 'Downloading image')
+                self._instanceStore.setState(instanceId, 'Downloading image')
                 dlImagePath = self._downloadImage(img, imageExtraData)
-                self.instanceStore.setState(instanceId, 'Preparing image')
+                self._instanceStore.setState(instanceId, 'Preparing image')
                 imgFile = self._prepareImage(dlImagePath)
-                self.instanceStore.setState(instanceId, 'Publishing image')
+                self._instanceStore.setState(instanceId, 'Publishing image')
                 self._publishImage(imgFile)
             imageId = img.getImageId()
 
             def callback(realId):
-                instanceStore.setId(instanceId, realId)
+                self._instanceStore.setId(instanceId, realId)
                 # We no longer manage the state ourselves
-                self.instanceStore.setState(instanceId, None)
-            self.instanceStore.setState(instanceId, 'Launching')
+                self._instanceStore.setState(instanceId, None)
+            self._instanceStore.setState(instanceId, 'Launching')
 
             realId = self.cloudClient.launchInstances([imageId],
                 duration = duration, callback = callback)
 
         finally:
-            self.instanceStore.deletePid(instanceId)
+            self._instanceStore.deletePid(instanceId)
 
     def _downloadImage(self, image, imageExtraData):
         imageId = image.getImageId()
@@ -442,6 +448,14 @@ class VWSClient(baseDriver.BaseDriver):
         path = self._cfg.storagePath + '/credentials'
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
+
+    def _getInstanceStore(self, cloudName, keyPrefix):
+        client = self._getCloudClient(cloudName)
+        path = self._cfg.storagePath + '/instances'
+        cfg = storage.StorageConfig(storagePath = path)
+
+        dstore = storage.DiskStorage(cfg)
+        return instanceStore.InstanceStore(dstore, keyPrefix)
 
     def _getInstanceTypes(self):
         ret = VWS_InstanceTypes()
