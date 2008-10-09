@@ -386,38 +386,31 @@ class VWSClient(baseDriver.BaseDriver):
             image.setIsDeployed(True)
             if not mintImageData:
                 continue
-            shortName = os.path.basename(mintImageData['baseFileName'])
-            longName = "%s/%s" % (mintImageData['buildId'], shortName)
-            image.setShortName(shortName)
-            image.setLongName(longName)
-            image.downloadUrl = mintImageData['downloadUrl']
-            image.buildPageUrl = mintImageData['buildPageUrl']
-            image.setBuildId(mintImageData['buildId'])
+            self._addImageDataFromMintData(image, mintImageData)
 
-            for key, methodName in images.buildToNodeFieldMap.iteritems():
-                getattr(image, methodName)(mintImageData.get(key))
-
-            shortName = os.path.basename(mintImageData['baseFileName'])
-            longName = "%s/%s" % (mintImageData['buildId'], shortName)
-            image.setShortName(shortName)
-            image.setLongName(longName)
-
-        for imageId, mintImageData in imageDataLookup.iteritems():
-            shortName = os.path.basename(mintImageData['baseFileName'])
-            longName = "%s/%s" % (mintImageData['buildId'], shortName)
+        # Add the rest of the images coming from mint
+        for imageId, mintImageData in sorted(imageDataLookup.iteritems()):
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True,
-                    buildId = mintImageData['buildId'],
-                    shortName = shortName,
-                    longName = longName,
                     cloudName = cloudName,
                     cloudAlias = cloudAlias)
-            image.downloadUrl = mintImageData['downloadUrl']
-            image.buildPageUrl = mintImageData['buildPageUrl']
-            image.baseFileName = mintImageData['baseFileName']
+            self._addImageDataFromMintData(image, mintImageData)
             imageList.append(image)
         return imageList
+
+    @classmethod
+    def _addImageDataFromMintData(cls, image, mintImageData):
+        shortName = os.path.basename(mintImageData['baseFileName'])
+        longName = "%s/%s" % (mintImageData['buildId'], shortName)
+        image.setShortName(shortName)
+        image.setLongName(longName)
+        image.setDownloadUrl(mintImageData['downloadUrl'])
+        image.setBuildPageUrl(mintImageData['buildPageUrl'])
+        image.setBuildId(mintImageData['buildId'])
+
+        for key, methodName in images.buildToNodeFieldMap.iteritems():
+            getattr(image, methodName)(mintImageData.get(key))
 
     def _getCredentials(self):
         if not globuslib.WorkspaceCloudClient.isFunctional():
