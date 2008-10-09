@@ -95,12 +95,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # XXX don't assume always /TOPLEVEL
         baseUrl = self.path[:9]
         self.path = self.path[9:]
-        logger = self._getLogger(self.client_address[0])
+        self._logger = self._getLogger(self.address_string())
         self.handler = simplehttp.SimpleHttpHandler(
                                         site.SiteHandler(authData,
                                                          self.storageConfig),
                                         responseClass=response.CatalogResponse,
-                                        logger = logger)
+                                        logger = self._logger)
         self.handler.handle(self, baseUrl, authData)
     do_GET = do_POST = do_PUT = do_DELETE = do
 
@@ -120,6 +120,18 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         logger.setAddress(address)
 
         return logger
+
+    def _log(self, level, msg, *args, **kwargs):
+        if not hasattr(self, '_logger'):
+            return BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
+                msg, *args)
+        return self._logger.log(level, msg, *args, **kwargs)
+
+    def log_message(self, format, *args):
+        return self._log(logging.INFO, format, *args)
+
+    def log_error(self, format, *args):
+        return self._log(logging.ERROR, format, *args)
 
 class LogRecord(logging.LogRecord):
     def __init__(self, address, *args, **kwargs):
