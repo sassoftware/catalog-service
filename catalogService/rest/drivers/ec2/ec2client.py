@@ -108,6 +108,23 @@ class EC2Client(baseDriver.BaseDriver):
     Image = EC2_Image
     Instance = EC2_Instance
 
+    _instanceBotoMap = dict(
+                dnsName = 'dns_name',
+                imageId = 'image_id',
+                instanceType = 'instance_type',
+                kernel = 'kernel',
+                keyName = 'key_name',
+                launchTime = 'launch_time',
+                placement = 'placement',
+                previousState = 'previous_state',
+                privateDnsName = 'private_dns_name',
+                publicDnsName = 'public_dns_name',
+                ramdisk = 'ramdisk',
+                shutdownState = 'shutdown_state',
+                stateCode = 'state_code',
+                state = 'state',
+    )
+
     def _getClient(self):
         if not self._client:
             self._mintAuth = self._mintClient.checkAuth()
@@ -233,18 +250,16 @@ class EC2Client(baseDriver.BaseDriver):
         return insts
 
     def _getInstance(self, instance, reservation=None):
-        properties = {'placement' : instance.placement,
-                      'kernel'    : instance.kernel,
-                      'ramdisk'   : instance.ramdisk}
+        properties = {}
         if reservation:
             properties.update(ownerId=reservation.owner_id,
-                              resevationId=reservation.id)
+                              reservationId=reservation.id)
         if hasattr(instance, 'ami_launch_index'):
-            properties.update(launchIndex=instance.ami_launch_index)
+            properties['launchIndex'] = int(instance.ami_launch_index)
+        for attr, botoAttr in self._instanceBotoMap.items():
+            properties[attr] = getattr(instance, botoAttr, None)
         i = self._nodeFactory.newInstance(id=instance.id,
                                           instanceId=instance.id,
-                                          launchTime=instance.launch_time,
-                                          imageId=instance.image_id,
                                           **properties)
         return i
 

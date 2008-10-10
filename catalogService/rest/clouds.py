@@ -104,31 +104,35 @@ class AllCloudModelController(BaseHandler):
         for driverName in SUPPORTED_MODULES:
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['drivers']).driver
-            nodeFact = nodeFactory.NodeFactory(
-                cloudFactory = getattr(driverClass, 'Cloud',
-                    clouds.BaseCloud),
-                imageFactory = getattr(driverClass, 'Image',
-                    images.BaseImage),
-                instanceFactory = getattr(driverClass, 'Instance',
-                    instances.BaseInstance),
-                instanceTypeFactory = getattr(driverClass, 'InstanceType',
-                    instances.InstanceType),
-                environmentFactory = getattr(driverClass, 'Environment',
-                    environment.BaseEnvironment),
-                environmentCloudFactory = getattr(driverClass, 'EnvironmentCloud',
-                    environment.BaseCloud),
-                keyPairFactory = getattr(driverClass, 'KeyPair',
-                    keypairs.BaseKeyPair),
-                securityGroupFactory = getattr(driverClass, 'SecurityGroup',
-                    securityGroups.BaseSecurityGroup),
-            )
+            nodeFact = self._createNodeFactory(driverClass)
             driver = driverClass(self.mintClient, cfg, nodeFact)
             controller =  CloudTypeModelController(self, driverName,
                                                    driver, self.cfg,
                                                    self.mintClient)
             self.urls[driverName] = controller
 
+    @classmethod
+    def _createNodeFactory(cls, driverClass):
+        nodeFact = nodeFactory.NodeFactory(
+            cloudFactory = getattr(driverClass, 'Cloud',
+                clouds.BaseCloud),
+            imageFactory = getattr(driverClass, 'Image',
+                images.BaseImage),
+            instanceFactory = getattr(driverClass, 'Instance',
+                instances.BaseInstance),
+            instanceTypeFactory = getattr(driverClass, 'InstanceType',
+                instances.InstanceType),
+            environmentFactory = getattr(driverClass, 'Environment',
+                environment.BaseEnvironment),
+            environmentCloudFactory = getattr(driverClass, 'EnvironmentCloud',
+                environment.BaseCloud),
+            keyPairFactory = getattr(driverClass, 'KeyPair',
+                keypairs.BaseKeyPair),
+            securityGroupFactory = getattr(driverClass, 'SecurityGroup',
+                securityGroups.BaseSecurityGroup),
+        )
+        return nodeFact
+
     def _updateController(self, controller, paramName, response, request):
         if isinstance(controller, CloudTypeModelController):
             controller.driver.urlParams = request.urlParams
-
