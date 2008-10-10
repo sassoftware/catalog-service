@@ -1,5 +1,6 @@
 
 import os
+import urllib
 
 from conary.lib import util
 
@@ -114,31 +115,25 @@ class VWSClient(baseDriver.BaseDriver):
         self.cloudClient.transferInstance(fileName)
         pass
 
-    def launchInstanceParameters(self):
-        return LaunchInstanceParameters()
-
-    def launchInstances(self, cloudId, imageIds, parameters):
-        pass
-
     def launchInstance(self, cloudName, xmlString, requestIPAddress):
         client = self._getCloudClient(cloudName)
         parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
-        image = self.getImage(imageId)
-        instanceId = self._instanceStore.newInstance(cloudId, imageId)
+
+        image = self.getImage(cloudName, imageId)
+        instanceId = self._instanceStore.newKey(imageId = imageId)
         self._daemonize(self._launchInstance,
-                        cloudId, imageId, instanceId, image,
+                        cloudName, imageId, instanceId, image,
                         duration=parameters.duration,
                         instanceType=parameters.instanceType)
         cloudAlias = client.getCloudAlias()
-        instanceList = Instances()
-        instance = self.instanceFactory(id=instanceId,
+        instanceList = instances.BaseInstances()
+        instance = self._nodeFactory.newInstance(id=instanceId,
                                         instanceId=instanceId,
                                         imageId=imageId,
-                                        cloudName=cloudId,
-                                        cloudType='vws',
+                                        cloudName=cloudName,
                                         cloudAlias=cloudAlias)
-        instanceList.append(instances)
+        instanceList.append(instance)
         return instanceList
 
     def terminateInstances(self, cloudName, instanceIds):
@@ -154,14 +149,18 @@ class VWSClient(baseDriver.BaseDriver):
     def getImages(self, cloudName, imageIds):
         imageList = self._getImagesFromGrid(cloudName)
         imageList = self._addMintDataToImageList(cloudName, imageList)
+
         # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient.
+        # we want.  This is horribly inefficient, but neither the mint call
+        # nor the grid call allow us to filter by image, at least for now
         if imageIds is not None:
             imagesById = dict((x.getImageId(), x) for x in imageList )
             newImageList = images.BaseImages()
             for imageId in imageIds:
                 if imageId.endswith('.gz') and imageId not in imagesById:
                     imageId = imageId[:-3]
+                if imageId not in imagesById:
+                    continue
                 newImageList.append(imagesById[imageId])
             imageList = newImageList
         return imageList
@@ -465,6 +464,10 @@ class VWSClient(baseDriver.BaseDriver):
         return ret
 
 class LaunchInstanceParameters(object):
+    __slots__ = [
+        'duration', 'imageId', 'instanceType',
+    ]
+
     def __init__(self, xmlString=None):
         if xmlString:
             self.load(xmlString)
@@ -475,11 +478,9 @@ class LaunchInstanceParameters(object):
         image = node.getImage()
         imageId = image.getId()
         self.imageId = self._extractId(imageId)
-        duration = node.getDuration()
-        if duration is None:
+        self.duration = node.getDuration()
+        if self.duration is None:
             raise errors.ParameterError('duration was not specified')
-
-        self.remoteIPAddress = clientSuppliedRemoteIP
 
         instanceType = node.getInstanceType()
         if instanceType is None:
@@ -494,7 +495,3 @@ class LaunchInstanceParameters(object):
         if value is None:
             return None
         return urllib.unquote(os.path.basename(value))
-
-
-
-

@@ -19,6 +19,10 @@ class BaseNewInstance(xmlNode.BaseNode):
                   'securityGroups', 'userData', 'instanceType',
                   'duration', 'remoteIp' ]
 
+    def __repr__(self):
+         return "<%s:image=%s at %#x>" % (self.__class__.__name__,
+            self.getImage(), id(self))
+
 class Handler(xmllib.DataBinder):
     countClass = BaseCount
     newInstanceClass = BaseNewInstance

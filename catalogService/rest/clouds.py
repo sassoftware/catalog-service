@@ -40,14 +40,14 @@ class InstancesController(BaseCloudModelController):
     def create(self, response, request, parameters, url):
         "launch a new instance"
         cloudName = self.getCloudName(parameters)
-        instances = self.driver.launchInstance(cloudName, request.read(),
+        insts = self.driver.launchInstance(cloudName, request.read(),
                                                request.host)
-        response.to_xml(instances)
+        response.to_xml(insts)
 
     def destroy(self, instanceId, response, request, parameters, url):
         cloudName = self.getCloudName(parameters)
-        instances = self.driver.terminateInstance(cloudName, instanceId)
-        response.to_xml(instances)
+        insts = self.driver.terminateInstance(cloudName, instanceId)
+        response.to_xml(insts)
 
 class InstanceTypesController(BaseCloudModelController):
     paramName = 'instanceTypeId'
