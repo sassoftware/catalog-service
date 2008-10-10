@@ -146,11 +146,11 @@ class EC2Client(baseDriver.BaseDriver):
         ret.append(self._nodeFactory.newCloud())
         return ret
 
-    def updateCloud(self, cloudId, parameters):
+    def updateCloud(self, cloudName, parameters):
         parameters = CloudParameters(parameters)
         pass
 
-    def launchInstance(self, cloudId, xmlString, requestIPAddress):
+    def launchInstance(self, cloudName, xmlString, requestIPAddress):
         parameters = LaunchInstanceParameters(xmlString,
             requestIPAddress = requestIPAddress)
         if (parameters.remoteIPAddress
@@ -168,27 +168,27 @@ class EC2Client(baseDriver.BaseDriver):
                 instance_type=parameters.instanceType)
         return self._getInstancesFromReservation(reservation)
 
-    def terminateInstances(self, cloudId, instanceIds):
+    def terminateInstances(self, cloudName, instanceIds):
         resultSet = self.client.terminate_instances(instance_ids=instanceIds)
         return self._getInstancesFromResult(resultSet)
 
-    def terminateInstance(self, cloudId, instanceId):
-        return self.terminateInstances(cloudId, [instanceId])[0]
+    def terminateInstance(self, cloudName, instanceId):
+        return self.terminateInstances(cloudName, [instanceId])[0]
 
-    def getAllInstances(self, cloudId):
-        return self.getInstances(cloudId, None)
+    def getAllInstances(self, cloudName):
+        return self.getInstances(cloudName, None)
 
-    def getInstances(self, cloudId, instanceIds):
+    def getInstances(self, cloudName, instanceIds):
         resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
         return insts
 
-    def getAllImages(self, cloudId):
-        return self.getImages(cloudId, None)
+    def getAllImages(self, cloudName):
+        return self.getImages(cloudName, None)
 
-    def getImages(self, cloudId, imageIds):
+    def getImages(self, cloudName, imageIds):
         rs = self.client.get_all_images(image_ids = imageIds)
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]
