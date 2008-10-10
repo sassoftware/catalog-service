@@ -47,6 +47,12 @@ class WorkspaceCloudProperties(object):
             stream.write("%s=%s\n" % (k, v))
 
 class WorkspaceCloudClient(object):
+    __slots__ = [
+        '_caCert', '_caCertDir', '_caCertHash', '_caCertSubject',
+        '_cloudAlias', '_configFile', '_properties', '_proxyCertPath',
+        '_sshPubKeyPath', '_tmpDir', '_userCertIssuer', '_userCertHash',
+        '_userCertPath', '_userCertSubject', '_userKeyPath', ]
+
     GLOBUS_LOCATION = "/opt/workspace-cloud-client"
     _image_re = re.compile(r"^.*'(.*)'.*$")
     _instance_1_re = re.compile(r"^([\d]+)\. "
@@ -205,6 +211,11 @@ class WorkspaceCloudClient(object):
         self._properties.write(stream)
         stream.write("\nssh.pubkey=%s\n" % self._sshPubKeyPath)
         stream.close()
+
+    def _getUserCertHash(self):
+        return self._userCertHash
+
+    userCertHash = property(_getUserCertHash)
 
     def _initX509(self):
         fd, tmpf = tempfile.mkstemp()

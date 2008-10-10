@@ -62,24 +62,14 @@ C{/<TOPLEVEL>/users/<user>/<key>}
 
 import base64
 import BaseHTTPServer
-import os, sys
-import urllib
+import logging
 
-from conary.lib import util
-
-from catalogService import clouds
 from catalogService import config
 from catalogService import credentials
 from catalogService import environment
 from catalogService import newInstance
 from catalogService import request as brequest
 from catalogService import storage
-from catalogService import userData
-from catalogService import errors
-from catalogService import images
-
-# Make it easy for the producers of responses
-Response = brequest.Response
 
 # Monkeypatch BaseHTTPServer for older Python (e.g. the one that
 # rLS1 has) to include a function that we rely on. Yes, this is gross.
@@ -90,158 +80,96 @@ if not hasattr(BaseHTTPServer, '_quote_html'):
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     BaseHTTPServer._quote_html = _quote_html
 
-class StorageConfig(config.BaseConfig):
-    """
-    Storage configuration object.
-    @ivar storagePath: Path used for persisting the values.
-    @type storagePath: C{str}
-    """
-    def __init__(self, storagePath):
-        config.BaseConfig.__init__(self)
-        self.storagePath = storagePath
-
-class StandaloneRequest(brequest.BaseRequest):
-    """
-    Request object, qualified for a standalone HTTP server.
-    """
-    __slots__ = [ '_req', 'read' ]
-
-    def __init__(self, req):
-        brequest.BaseRequest.__init__(self)
-        self._req = req
-        self.read = self._req.rfile.read
-
-        # We need to initialize the auth data
-        authData = self.getHeader('Authorization')
-        if authData and authData[:6] == 'Basic ':
-            authData = authData[6:]
-            authData = base64.decodestring(authData)
-            authData = authData.split(':', 1)
-            self.setUser(authData[0])
-            self.setPassword(authData[1])
-
-    def getRelativeURI(self):
-        return self._req.path
-
-    def getSchemeNetloc(self):
-        hostport = self._req.host
-        if self._req.port != 80 and ':' not in hostport:
-            hostport = "%s:%s" % (self._req.host, self._req.port)
-        return "http://%s" % (hostport, )
-
-    def getHeader(self, key):
-        res = self._req.headers.get(key, None)
-        if not res:
-            for hdrKey, val in self.iterHeaders():
-                if key.upper() == hdrKey.upper():
-                    res = val
-        return res
-
-    def getRequestIP(self):
-        return self.getHeader('X-Forwarded-For') or self._req.host
-
-    def iterHeaders(self):
-        for k, v in self._req.headers.items():
-            yield k, v
-
-    def setPath(self, path):
-        self._req.path = path
-
-    def getServerPort(self):
-        return self._req.server.server_port
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    """
-    Request handler for a REST HTTP server.
-    The implementation does not assume a particular implementation of a web
-    server. This can be subclassed to handle mod_python based REST servers.
-    As such, server-specific details like the format of requests, the way one
-    reads incoming HTTP headers or sends outgoing HTTP headers etc are
-    abstracted out into C{Request} and C{Response} objects.
-
-    @cvar toplevel: a prefix for the path part of the URI, that can change
-    based on how the service is deployed. For example, a deployment may choose
-    to use C{/catalog} while another one may use C{/rest}.
-    @type toplevel: C{str}
-
-    @cvar storageConfig: Storage configuration object.
-    @type storageConfig: L{StorageConfig} instance
-
-    @cvar logLevel: Log level.
-    @type logLevel: C{int}
-
-    @newfield rest_url: REST URL, REST URLs
-    @newfield rest_method: REST Method, REST Methods
-    """
-    toplevel = 'TOPLEVEL'
-    storageConfig = StorageConfig(storagePath = "storage")
+    storageConfig = storage.StorageConfig(storagePath = "storage")
     logLevel = 1
     error_message_format = '\n'.join(('<?xml version="1.0" encoding="UTF-8"?>',
             '<fault>',
             '  <code>%(code)s</code>',
             '  <message>%(message)s</message>',
             '</fault>'))
-    _logDestination = None
+    _logFile = None
 
-    def send_error(self, code, message = '', shortMessage = ''):
-        # we have to override this method because the superclass assumes
-        # we want to send back HTML. other than the content type, we're
-        # not really changing much
-        short, long = self.responses.get(code, ("???", "???"))
-        if message is None:
-            message = short
-        if shortMessage is None:
-            shortMessage = short
-        self.log_error("code %d, message %s", code, message)
-        sys.stderr.flush()
-        content = (self.error_message_format %
-               {'code': code, 'message': BaseHTTPServer._quote_html(message)})
-        response = Response(code = code, data = content,
-                            headers = dict(Connection = 'close'))
-        self._handleResponse(response)
+    def do(self):
+        authData = self.headers.get('Authorization', None)
+        if authData and authData[:6] == 'Basic ':
+            authData = authData[6:]
+            authData = base64.decodestring(authData)
+            authData = authData.split(':', 1)
+        from catalogService.rest import response, site
+        from restlib.http import simplehttp
+
+        # XXX don't assume always /TOPLEVEL
+        baseUrl = self.path[:9]
+        self.path = self.path[9:]
+        self._logger = self._getLogger(self.address_string())
+        self.handler = simplehttp.SimpleHttpHandler(
+                                        site.SiteHandler(authData,
+                                                         self.storageConfig),
+                                        responseClass=response.CatalogResponse,
+                                        logger = self._logger)
+        self.handler.handle(self, baseUrl, authData)
+    do_GET = do_POST = do_PUT = do_DELETE = do
+
+    @classmethod
+    def _getLogger(cls, address):
+        if cls._logFile is None:
+            handler = logging.StreamHandler()
+        else:
+            handler = logging.FileHandler(cls._logFile)
+
+        formatter = Formatter()
+        handler.setFormatter(formatter)
+        logger = Logger('catalog-service')
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+
+        logger.setAddress(address)
+
+        return logger
+
+    def _log(self, level, msg, *args, **kwargs):
+        if not hasattr(self, '_logger'):
+            return BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
+                msg, *args)
+        return self._logger.log(level, msg, *args, **kwargs)
 
     def log_message(self, format, *args):
-        self.log(1, format, *args)
+        return self._log(logging.INFO, format, *args)
 
     def log_error(self, format, *args):
-        self.log(0, format, tag = "ERROR", *args)
+        return self._log(logging.ERROR, format, *args)
 
-    def log_request(self, code="-", size="-"):
-        self.log(0, '"%s" %s %s',
-                  self.requestline, str(code), str(size))
+class LogRecord(logging.LogRecord):
+    def __init__(self, address, *args, **kwargs):
+        logging.LogRecord.__init__(self, *args, **kwargs)
+        self.address = address
 
-    def log(self, logLevel, format, *args, **kwargs):
-        if logLevel > self.logLevel:
-            return
-        dargs = dict(addressString = self.address_string(),
-            timestamp = self.log_date_time_string(),
-            data = format % args,
-            )
-        tag = kwargs.pop('tag', None)
-        if tag is None:
-            templ = "%(addressString)s - - [%(timestamp)s] %(data)s\n"
-        else:
-            templ = "%(addressString)s - - [%(timestamp)s] (%(tag)s) %(data)s\n"
-            dargs['tag'] = tag
-        f, shouldClose = self.getLogStream()
-        f.write(templ % dargs)
-        if shouldClose:
-            f.close()
+class Logger(logging.Logger):
+    def setAddress(self, address):
+        self.address = address
 
-    def getLogStream(self):
-        # Default to stderr
-        ld = self._logDestination
-        if ld is None:
-            ld = sys.stderr
+    def makeRecord(self, *args, **kwargs):
+        address = getattr(self, 'address', '')
+        return LogRecord(address, *args, **kwargs)
 
-        if hasattr(ld, 'write'):
-            f = ld
-            shouldClose = False
-        else:
-            f = file(ld, "a")
-            shouldClose = True
+class Formatter(logging.Formatter):
+    _fmt = "%(address)s %(asctime)s %(pathname)s(%(lineno)s) %(levelname)s - %(message)s"
 
-        return f, shouldClose
+    def __init__(self):
+        logging.Formatter.__init__(self, self.__class__._fmt)
+
+    def formatException(self, ei):
+        from conary.lib import util
+        import StringIO
+        excType, excValue, tb = ei
+        sio = StringIO.StringIO()
+        util.formatTrace(excType, excValue, tb, stream = sio,
+            withLocals = False)
+        util.formatTrace(excType, excValue, tb, stream = sio,
+            withLocals = True)
+        return sio.getvalue().rstrip()
 
     def do_GET(self):
         """
@@ -1224,3 +1152,4 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     @classmethod
     def _sanitizeKey(cls, key):
         return '/'.join(x for x in key.split('/') if x not in ('.', '..'))
+>>>>>>> other
