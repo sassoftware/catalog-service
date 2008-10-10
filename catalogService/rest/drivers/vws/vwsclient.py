@@ -138,7 +138,30 @@ class VWSClient(baseDriver.BaseDriver):
 
     def terminateInstances(self, cloudName, instanceIds):
         client = self._getCloudClient(cloudName)
-        client.terminateInstances(instanceId)
+
+        instIdSet = set(os.path.basename(x) for x in instanceIds)
+        runningInsts = self.getInstances(cloudName, instanceIds)
+
+        # Separate the ones that really exist in globus
+        nonGlobusInstIds = [ x.getInstanceId() for x in runningInsts
+            if x.getReservationId() is None ]
+
+        globusInstIds = [ x.getReservationId() for x in runningInsts
+            if x.getReservationId() is not None ]
+
+        if globusInstIds:
+            client.terminateInstances(globusInstIds)
+            # Don't bother to remove the instances from the store,
+            # getInstances() should take care of that
+
+        self._killRunningProcessesForInstances(nonGlobusInstIds)
+
+        insts = instances.BaseInstances()
+        insts.extend(runningInsts)
+        # Set state
+        for inst in insts:
+            inst.setState("Terminating")
+        return insts
 
     def terminateInstance(self, cloudName, instanceId):
         return self.terminateInstances(cloudName, [instanceId])
@@ -257,10 +280,17 @@ class VWSClient(baseDriver.BaseDriver):
 
         gInsts.sort(key = lambda x: x[1])
 
+        # Set up the filter for instances the client requested
+        if instanceIds is not None:
+            instanceIds = set(os.path.basename(x) for x in instanceIds)
+
         instanceList = instances.BaseInstances()
 
         for storeKey, imageId, instObj in gInsts:
             instId = str(os.path.basename(storeKey))
+            if instanceIds and instId not in instanceIds:
+                continue
+
             reservationId = instObj.getId()
             if reservationId is not None:
                 reservationId = str(reservationId)
@@ -462,6 +492,22 @@ class VWSClient(baseDriver.BaseDriver):
                 id = x, instanceTypeId = x, description = y)
             for (x, y) in VWS_InstanceTypes.idMap)
         return ret
+
+    def _killRunningProcessesForInstances(self, nonGlobusInstIds):
+        # For non-globus instances, try to kill the pid
+        for instId in nonGlobusInstIds:
+            pid = self._instanceStore.getPid(instId)
+            if pid is not None:
+                # try to kill the child process
+                pid = int(pid)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError, e:
+                    if e.errno != 3: # no such process
+                        raise
+            # At this point the instance doesn't exist anymore
+            self._instanceStore.delete(instId)
+
 
 class LaunchInstanceParameters(object):
     __slots__ = [
