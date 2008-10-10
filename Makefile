@@ -12,12 +12,16 @@
 # full details.
 #
 
-all: default-subdirs default-all
+all: all-subdirs default-all
 
 export TOPDIR = $(shell pwd)
 export DISTDIR = $(TOPDIR)/catalog-service-$(VERSION)
 
+all-subdirs:
+	for d in $(MAKEALLSUBDIRS); do make -C $$d DIR=$$d || exit 1; done
+
 SUBDIRS = catalogService pylint
+MAKEALLSUBDIRS=catalogService
 
 dist_files = $(extra_files)
 

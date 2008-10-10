@@ -15,7 +15,7 @@ class BaseImage(xmlNode.BaseNode):
             'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
             'cloudName', 'cloudType', 'cloudAlias' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
-        is_rBuilderImage = bool)
+                        is_rBuilderImage = bool)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 
