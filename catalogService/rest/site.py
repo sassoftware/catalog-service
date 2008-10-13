@@ -42,10 +42,9 @@ class SiteHandler(object):
                                         cfg.rBuilderUrl % tuple(authToken[:2]))
         else:
             mintCfg = mint.config.getConfig()
-            mintClient = mint.shimclient.ShimMintClient(self.mintCfg, 
-                                                             authToken)
+            mintClient = mint.shimclient.ShimMintClient(self.mintCfg,
+                                                        authToken)
         return mintClient
-
 
     def handle(self, response, request, parameters, url):
         try:
