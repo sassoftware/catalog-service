@@ -1,5 +1,7 @@
 
 import os
+import signal
+import time
 import urllib
 
 from conary.lib import util
@@ -26,7 +28,8 @@ class VWS_Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
 
     __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId',
-                                              'downloadUrl', 'buildPageUrl']
+                                              'downloadUrl', 'buildPageUrl',
+                                              'baseFileName']
     _slotTypeMap = images.BaseImage._slotTypeMap.copy()
     _slotTypeMap.update(dict(isDeployed = bool))
     _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
@@ -121,9 +124,12 @@ class VWSClient(baseDriver.BaseDriver):
         imageId = parameters.imageId
 
         image = self.getImage(cloudName, imageId)
+        if not image:
+            raise errors.HttpNotFound()
+
         instanceId = self._instanceStore.newKey(imageId = imageId)
         self._daemonize(self._launchInstance,
-                        cloudName, imageId, instanceId, image,
+                        cloudName, instanceId, image,
                         duration=parameters.duration,
                         instanceType=parameters.instanceType)
         cloudAlias = client.getCloudAlias()
@@ -311,12 +317,14 @@ class VWSClient(baseDriver.BaseDriver):
         pid = os.fork()
         if pid:
             os.waitpid(pid, 0)
+            return
         try:
             try:
                 pid = os.fork()
                 if pid:
                     # The first child exits and is waited by the parent
-                    os._exit(0)
+                    # the finally part will do the os._exit
+                    return
                 # Redirect stdin, stdout, stderr
                 fd = os.open(os.devnull, os.O_RDWR)
                 os.dup2(fd, 0)
@@ -333,27 +341,31 @@ class VWSClient(baseDriver.BaseDriver):
         finally:
             os._exit(0)
 
+    def _setState(self, instanceId, state):
+        return self._instanceStore.setState(instanceId, state)
 
-    def _launchInstance(self, cloudId, imageId, instanceId, image,
-                        duration, instanceType):
+    def _launchInstance(self, cloudName, instanceId, image, duration,
+                        instanceType):
         try:
             self._instanceStore.setPid(instanceId)
-            if not img.getIsDeployed():
-                self._instanceStore.setState(instanceId, 'Downloading image')
+            if not image.getIsDeployed():
+                self._setState(instanceId, 'Downloading image')
                 dlImagePath = self._downloadImage(img, imageExtraData)
-                self._instanceStore.setState(instanceId, 'Preparing image')
+                self._setState(instanceId, 'Preparing image')
                 imgFile = self._prepareImage(dlImagePath)
-                self._instanceStore.setState(instanceId, 'Publishing image')
+                self._setState(instanceId, 'Publishing image')
                 self._publishImage(imgFile)
-            imageId = img.getImageId()
+            imageId = image.getImageId()
 
             def callback(realId):
                 self._instanceStore.setId(instanceId, realId)
                 # We no longer manage the state ourselves
-                self._instanceStore.setState(instanceId, None)
-            self._instanceStore.setState(instanceId, 'Launching')
+                self._setState(instanceId, None)
+            self._setState(instanceId, 'Launching')
 
-            realId = self.cloudClient.launchInstances([imageId],
+            client = self._getCloudClient(cloudName)
+
+            realId = client.launchInstances([imageId],
                 duration = duration, callback = callback)
 
         finally:
@@ -442,6 +454,7 @@ class VWSClient(baseDriver.BaseDriver):
         image.setLongName(longName)
         image.setDownloadUrl(mintImageData['downloadUrl'])
         image.setBuildPageUrl(mintImageData['buildPageUrl'])
+        image.setBaseFileName(mintImageData['baseFileName'])
         image.setBuildId(mintImageData['buildId'])
 
         for key, methodName in images.buildToNodeFieldMap.iteritems():
