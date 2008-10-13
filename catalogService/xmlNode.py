@@ -3,7 +3,6 @@
 #
 
 import urllib
-import sha
 
 from rpath_common import xmllib
 
@@ -25,9 +24,6 @@ class BaseNode(xmllib.BaseNode):
 
         kwargs.update(self._constructorOverrides)
         for k in self.__slots__:
-            if k.startswith('_'):
-                # Private variable, do not set
-                continue
             method = getattr(self, "set%s%s" % (k[0].upper(), k[1:]))
             method(kwargs.get(k))
 
@@ -44,8 +40,6 @@ class BaseNode(xmllib.BaseNode):
 
     def _iterChildren(self):
         for fName in self.__slots__:
-            if fName.startswith('_'):
-                continue
             fVal = getattr(self, fName)
             if hasattr(fVal, "getElementTree"):
                 yield fVal
@@ -57,18 +51,6 @@ class BaseNode(xmllib.BaseNode):
         nodeName = node.getName()
         if nodeName in self.__slots__:
             setattr(self, nodeName, node)
-
-    def getElementTree(self, *args, **kwargs):
-        eltree = xmllib.BaseNode.getElementTree(self, *args, **kwargs)
-        if '_xmlNodeHash' not in self.__slots__ or self._xmlNodeHash is not None:
-            return eltree
-        # Compute the checksum
-        csum = sha.new()
-        csum.update(xmllib.etree.tostring(eltree, pretty_print = False,
-                    xml_declaration = False, encoding = 'UTF-8'))
-        self._xmlNodeHash = csum.hexdigest()
-        eltree.attrib['xmlNodeHash'] = self._xmlNodeHash
-        return eltree
 
     # Magic function mapper
     def __getattr__(self, name):
