@@ -11,37 +11,24 @@ from conary.lib import util
 from catalogService import logger as rlogging
 from restlib.http import modpython
 
+from catalogService import errors
 from catalogService import storage
+from catalogService.rest import auth
 from catalogService.rest import response, site
 
 class ApacheRESTHandler(object):
-    __slots__ = [ '_basePath', '_req', '_storageConfig' ]
-    def __init__(self, basePath, storagePath):
-        self._basePath = basePath
-        self._storageConfig = storage.StorageConfig(storagePath = storagePath)
+    def __init__(self, pathPrefix, storagePath):
+        self.pathPrefix = pathPrefix
+        self.storageConfig = storage.StorageConfig(storagePath=storagePath)
+        self.handler = modpython.ModPythonHttpHandler(
+                            site.CatalogServiceController(self.storageConfig))
+
+        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
+        self.handler.addCallback(errors.ErrorMessageCallback())
 
     def handle(self, req):
-        coveragehook.install()
-        self.preProcess(req)
-        authData = self.getAuthData(req)
-        logger = self.getLogger(req)
-        controller = site.SiteHandler(authData, self._storageConfig)
-        handler = modpython.ModPythonHttpHandler(controller,
-            responseClass=response.CatalogResponse, logger = logger)
-        return handler.handle(req, self._basePath, authData)
-
-    def preProcess(self, req):
-        """
-        Hook that executes prior to the handler's main code
-        """
-
-    def getAuthData(self, req):
-        """
-        Extract the user's credentials from the request
-        @return: the user's credentials
-        @rtype: C{tuple}
-        """
-        return ("user", "pass")
+        self.handler.setLogger(self.getLogger(req))
+        return self.handler.handle(req, req.uri[len(self.pathPrefix):])
 
     def getLogger(self, req):
         logger = rlogging.getLogger('catalog-service', None)
@@ -50,6 +37,8 @@ class ApacheRESTHandler(object):
 
 def handler(req):
     """Test handler"""
+    coveragehook.install()
     storageDir = os.path.abspath(os.path.join(req.document_root(),
         '..', '..', 'storage'))
-    return ApacheRESTHandler('/TOP', storageDir).handle(req)
+    _handler = ApacheRESTHandler('/TOP', storageDir)
+    return _handler.handle(req)

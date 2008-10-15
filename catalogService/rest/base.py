@@ -1,16 +1,6 @@
-from restlib import handler
+from restlib import controller
 
-class BaseHandler(handler.RestHandler):
-    def __init__(self, parent, path, cfg, mintClient):
-        self.mintClient = mintClient
+class BaseController(controller.RestController):
+    def __init__(self, parent, path, cfg):
         self.cfg = cfg
-        handler.RestHandler.__init__(self, parent, path, [cfg, mintClient])
-
-
-class BaseModelHandler(handler.RestModelHandler):
-    def __init__(self, parent, path, driver, cfg, mintClient):
-        self.driver = driver
-        self.cfg = cfg
-        self.mintClient = mintClient
-        handler.RestModelHandler.__init__(self, parent, path, 
-                                          [driver, cfg, mintClient])
+        controller.RestController.__init__(self, parent, path, [cfg])

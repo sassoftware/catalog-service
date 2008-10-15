@@ -5,17 +5,15 @@
 import urllib
 
 class NodeFactory(object):
-    baseUrl = None
-    __slots__ = [ '_urlParams',
-        'cloudFactory', 'environmentCloudFactory',
+    __slots__ = [ 'cloudFactory', 'environmentCloudFactory',
         'environmentFactory', 'imageFactory', 'instanceFactory',
-        'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory', ]
+        'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
+        'baseUrl', 'cloudType', 'cloudName']
 
     def __init__(self, **kwargs):
         for slot in self.__slots__:
             if not slot.startswith('_'):
                 setattr(self, slot, kwargs.get(slot, None))
-        self._urlParams = None
 
     def newCloud(self, *args, **kwargs):
         node = self.cloudFactory(*args, **kwargs)
@@ -61,19 +59,16 @@ class NodeFactory(object):
         """Join the arguments into a URL"""
         return '/'.join(args)
 
-    @classmethod
-    def getCloudUrl(cls, node):
-        return cls._getCloudUrl(node.getCloudType(), node.getCloudName())
+    def getCloudUrl(self, node):
+        return self._getCloudUrl(node.getCloudType(), node.getCloudName())
 
-    @classmethod
-    def getImageUrl(cls, node):
-        return cls.join(cls.getCloudUrl(node), 'images',
-                        cls._quote(node.getId()))
+    def getImageUrl(self, node):
+        return self.join(self.getCloudUrl(node), 'images',
+                        self._quote(node.getId()))
 
-    @classmethod
-    def getInstanceUrl(cls, node):
-        return cls.join(cls.getCloudUrl(node), 'instances',
-                        cls._quote(node.getId()))
+    def getInstanceUrl(self, node):
+        return self.join(self.getCloudUrl(node), 'instances',
+                        self._quote(node.getId()))
 
     def getInstanceTypeUrl(self, node):
         cloudUrl = self._getCloudUrlFromParams()
@@ -88,22 +83,13 @@ class NodeFactory(object):
         return self.join(cloudUrl, 'securityGroups',
                          self._quote(node.getId()))
 
-    @classmethod
-    def _getCloudUrl(cls, cloudType, cloudName):
-        return cls.join(cls.baseUrl, 'clouds', cloudType, cloudName)
+    def _getCloudUrl(self, cloudType, cloudName):
+        return self.join(self.baseUrl, 'clouds', cloudType, cloudName)
 
     def _getCloudUrlFromParams(self):
-        return self._getCloudUrl(self._urlParams['cloudType'],
-                                 self._urlParams['cloudName'])
-
-    def _getUrlParams(self):
-        return self._urlParams
-
-    def _setUrlParams(self, urlParams):
-        self._urlParams = urlParams
+        return self._getCloudUrl(self.cloudType,
+                                 self.cloudName)
 
     @classmethod
     def _quote(cls, data):
         return urllib.quote(data, safe="")
-
-    urlParams = property(_getUrlParams, _setUrlParams)

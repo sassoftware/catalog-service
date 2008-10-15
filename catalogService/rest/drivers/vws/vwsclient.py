@@ -66,7 +66,8 @@ class VWSClient(baseDriver.BaseDriver):
         self.client = {}
         self._instanceStore = None
 
-    def _getCloudClient(self, cloudName):
+    def _getCloudClient(self):
+        cloudName = self.cloudName
         cloudCred = self._getCredentialsForCloudName(cloudName)
         if cloudName in self.client:
             return self.client[cloudName]
@@ -82,7 +83,7 @@ class VWSClient(baseDriver.BaseDriver):
         self.client[cloudName] = cli
 
         keyPrefix = "%s/%s" % (cloudName.replace('/', '_'), cli.userCertHash)
-        self._instanceStore = self._getInstanceStore(cloudName, keyPrefix)
+        self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
 
     def isValidCloudName(self, cloudName):
@@ -91,8 +92,6 @@ class VWSClient(baseDriver.BaseDriver):
         except HttpNotFound:
             return False
         return True
-        # XXX We have to scan the list of available clouds here
-        return cloudName == 'aws'
 
     def listClouds(self):
         ret = clouds.BaseClouds()
@@ -118,18 +117,18 @@ class VWSClient(baseDriver.BaseDriver):
         self.cloudClient.transferInstance(fileName)
         pass
 
-    def launchInstance(self, cloudName, xmlString, requestIPAddress):
-        client = self._getCloudClient(cloudName)
+    def launchInstance(self, xmlString, requestIPAddress):
+        client = self._getCloudClient()
         parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
 
-        image = self.getImage(cloudName, imageId)
+        image = self.getImage(imageId)
         if not image:
             raise errors.HttpNotFound()
 
         instanceId = self._instanceStore.newKey(imageId = imageId)
         self._daemonize(self._launchInstance,
-                        cloudName, instanceId, image,
+                        instanceId, image,
                         duration=parameters.duration,
                         instanceType=parameters.instanceType)
         cloudAlias = client.getCloudAlias()
@@ -137,16 +136,16 @@ class VWSClient(baseDriver.BaseDriver):
         instance = self._nodeFactory.newInstance(id=instanceId,
                                         instanceId=instanceId,
                                         imageId=imageId,
-                                        cloudName=cloudName,
+                                        cloudName=self.cloudName,
                                         cloudAlias=cloudAlias)
         instanceList.append(instance)
         return instanceList
 
-    def terminateInstances(self, cloudName, instanceIds):
-        client = self._getCloudClient(cloudName)
+    def terminateInstances(self, instanceIds):
+        client = self._getCloudClient()
 
         instIdSet = set(os.path.basename(x) for x in instanceIds)
-        runningInsts = self.getInstances(cloudName, instanceIds)
+        runningInsts = self.getInstances(instanceIds)
 
         # Separate the ones that really exist in globus
         nonGlobusInstIds = [ x.getInstanceId() for x in runningInsts
@@ -169,15 +168,15 @@ class VWSClient(baseDriver.BaseDriver):
             inst.setState("Terminating")
         return insts
 
-    def terminateInstance(self, cloudName, instanceId):
-        return self.terminateInstances(cloudName, [instanceId])
+    def terminateInstance(self, instanceId):
+        return self.terminateInstances([instanceId])
 
-    def getAllImages(self, cloudId):
-        return self.getImages(cloudId, None)
+    def getAllImages(self):
+        return self.getImages(None)
 
-    def getImages(self, cloudName, imageIds):
-        imageList = self._getImagesFromGrid(cloudName)
-        imageList = self._addMintDataToImageList(cloudName, imageList)
+    def getImages(self, imageIds):
+        imageList = self._getImagesFromGrid()
+        imageList = self._addMintDataToImageList(imageList)
 
         # now that we've grabbed all the images, we can return only the one
         # we want.  This is horribly inefficient, but neither the mint call
@@ -194,15 +193,14 @@ class VWSClient(baseDriver.BaseDriver):
             imageList = newImageList
         return imageList
 
-    def getImage(self, cloudName, imageId):
-        return self.getImages(cloudName, [imageId])[0]
+    def getImage(self, imageId):
+        return self.getImages([imageId])[0]
 
     def getEnvironment(self):
         instTypeNodes = self._getInstanceTypes()
 
-        cloudName = self._nodeFactory.urlParams['cloudName']
         cloud = self._nodeFactory.newEnvironmentCloud(
-            instanceTypes = instTypeNodes, cloudName = cloudName)
+            instanceTypes = instTypeNodes, cloudName = self.cloudName)
 
         env = self._nodeFactory.newEnvironment()
         env.append(cloud)
@@ -211,11 +209,11 @@ class VWSClient(baseDriver.BaseDriver):
     def getInstanceTypes(self):
         return self._getInstanceTypes()
 
-    def getAllInstances(self, cloudId):
-        return self.getInstances(cloudId, None)
+    def getAllInstances(self):
+        return self.getInstances(None)
 
-    def getInstances(self, cloudName, instanceIds):
-        client = self._getCloudClient(cloudName)
+    def getInstances(self, instanceIds):
+        client = self._getCloudClient()
         cloudAlias = client.getCloudAlias()
         globusInsts  = client.listInstances()
         globusInstsDict = dict((x.getId(), x) for x in globusInsts)
@@ -307,7 +305,7 @@ class VWSClient(baseDriver.BaseDriver):
                 dnsName = instObj.getName(),
                 publicDnsName = instObj.getIp(), state = instObj.getState(),
                 launchTime = instObj.getStartTime(),
-                cloudName = cloudName,
+                cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
@@ -344,7 +342,7 @@ class VWSClient(baseDriver.BaseDriver):
     def _setState(self, instanceId, state):
         return self._instanceStore.setState(instanceId, state)
 
-    def _launchInstance(self, cloudName, instanceId, image, duration,
+    def _launchInstance(self, instanceId, image, duration,
                         instanceType):
         try:
             self._instanceStore.setPid(instanceId)
@@ -363,7 +361,7 @@ class VWSClient(baseDriver.BaseDriver):
                 self._setState(instanceId, None)
             self._setState(instanceId, 'Launching')
 
-            client = self._getCloudClient(cloudName)
+            client = self._getCloudClient()
 
             realId = client.launchInstances([imageId],
                 duration = duration, callback = callback)
@@ -388,18 +386,18 @@ class VWSClient(baseDriver.BaseDriver):
         util.copyfileobj(uobj, file(downloadFilePath, "w"))
         return downloadFilePath
 
-    def _prepareImage(self, cloudName, downloadFilePath):
-        client = self._getCloudClient(cloudName)
+    def _prepareImage(self, downloadFilePath):
+        client = self._getCloudClient()
         retfile = client._repackageImage(downloadFilePath)
         os.unlink(downloadFilePath)
         return retfile
 
-    def _publishImage(self, cloudId, fileName):
-        client = self._getCloudClient(cloudName)
+    def _publishImage(self, fileName):
+        client = self._getCloudClient()
         client.transferInstance(fileName)
 
-    def _getImagesFromGrid(self, cloudName):
-        client = self._getCloudClient(cloudName)
+    def _getImagesFromGrid(self):
+        client = self._getCloudClient()
         cloudAlias = client.getCloudAlias()
 
         imageIds = client.listImages()
@@ -412,13 +410,13 @@ class VWSClient(baseDriver.BaseDriver):
                     is_rBuilderImage = False,
                     shortName = os.path.basename(imageName),
                     longName = imageName,
-                    cloudName = cloudName,
+                    cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
 
-    def _addMintDataToImageList(self, cloudName, imageList):
-        client = self._getCloudClient(cloudName)
+    def _addMintDataToImageList(self, imageList):
+        client = self._getCloudClient()
         cloudAlias = client.getCloudAlias()
 
         imageDataLookup = self._mintClient.getAllVwsBuilds()
@@ -440,7 +438,7 @@ class VWSClient(baseDriver.BaseDriver):
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True,
-                    cloudName = cloudName,
+                    cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
             self._addImageDataFromMintData(image, mintImageData)
             imageList.append(image)
@@ -491,8 +489,8 @@ class VWSClient(baseDriver.BaseDriver):
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
-    def _getInstanceStore(self, cloudName, keyPrefix):
-        client = self._getCloudClient(cloudName)
+    def _getInstanceStore(self, keyPrefix):
+        client = self._getCloudClient()
         path = self._cfg.storagePath + '/instances'
         cfg = storage.StorageConfig(storagePath = path)
 

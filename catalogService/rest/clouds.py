@@ -1,6 +1,9 @@
 import urllib
 
-from base import BaseHandler, BaseModelHandler
+from restlib import controller
+
+from base import BaseController
+
 from catalogService import clouds
 from catalogService import environment
 from catalogService import images
@@ -9,130 +12,94 @@ from catalogService import keypairs
 from catalogService import nodeFactory
 from catalogService import securityGroups
 
-class CloudIdMixIn(object):
-    def getCloudName(self, parameters):
-        cloudName = parameters['cloudName']
-        cloudName = urllib.unquote(cloudName)
-        if not self.driver.isValidCloudName(cloudName):
-            raise UnsupportedCloudId(cloudName)
-        return cloudName
+from catalogService.rest.response import XmlResponse
 
-class BaseCloudController(BaseHandler, CloudIdMixIn):
-    "Base class for Cloud Controllers"
 
-class BaseCloudModelController(BaseModelHandler, CloudIdMixIn):
-    "Base class for Cloud Model Controllers"
+class BaseCloudController(controller.RestController):
+    def __init__(self, parent, path, driver, cfg):
+        self.cfg = cfg
+        self.driver = driver
+        controller.RestController.__init__(self, parent, path, [driver, cfg])
 
-class ImagesController(BaseCloudModelController):
-    paramName = 'imageId'
-    def index(self, response, request, parameters, url):
-        cloudName = self.getCloudName(parameters)
-        imgNodes = self.driver.getAllImages(cloudName)
-        response.to_xml(imgNodes)
+class ImagesController(BaseCloudController):
+    modelName = 'imageId'
 
-class InstancesController(BaseCloudModelController):
-    paramName = 'instanceId'
-    def index(self, response, request, parameters, url):
-        cloudName = self.getCloudName(parameters)
-        insts = self.driver.getAllInstances(cloudName)
-        response.to_xml(insts)
+    def index(self, request, cloudName):
+        imgNodes = self.driver(request, cloudName).getAllImages()
+        return XmlResponse(imgNodes)
 
-    def create(self, response, request, parameters, url):
+class InstancesController(BaseCloudController):
+    modelName = 'instanceId'
+    def index(self, request, cloudName):
+        insts = self.driver(request, cloudName).getAllInstances()
+        return XmlResponse(insts)
+
+    def create(self, request, cloudName):
         "launch a new instance"
-        cloudName = self.getCloudName(parameters)
-        insts = self.driver.launchInstance(cloudName, request.read(),
-                                               request.host)
-        response.to_xml(insts)
+        insts = self.driver(request, cloudName).launchInstance(request.read(),
+                                                               request.host)
+        return XmlResponse(insts)
 
-    def destroy(self, instanceId, response, request, parameters, url):
-        cloudName = self.getCloudName(parameters)
-        insts = self.driver.terminateInstance(cloudName, instanceId)
-        response.to_xml(insts)
+    def destroy(self, request, cloudName, instanceId):
+        insts = self.driver(request, cloudName).terminateInstance(instanceId)
+        return XmlResponse(insts)
 
-class InstanceTypesController(BaseCloudModelController):
-    paramName = 'instanceTypeId'
+class InstanceTypesController(BaseCloudController):
+    modelName = 'instanceTypeId'
 
-    def index(self, response, request, parameters, url):
-        cloudName = self.getCloudName(parameters)
-        instTypes = self.driver.getInstanceTypes()
-        response.to_xml(instTypes)
+    def index(self, request, cloudName):
+        return XmlResponse(self.driver(request, cloudName).getInstanceTypes())
 
-class UserEnvironmentController(BaseCloudModelController):
-    paramName = 'userName'
-    def index(self, response, request, parameters, url):
-        cloudName = self.getCloudName(parameters)
-        response.to_xml(self.driver.getEnvironment())
+class UserEnvironmentController(BaseCloudController):
+    def index(self, request, cloudName, userName):
+        return XmlResponse(self.driver(request, cloudName).getEnvironment())
 
 
-class UsersController(BaseCloudModelController):
-    paramName = 'userName'
+class UsersController(BaseCloudController):
+    modelName = 'userName'
 
     urls = dict(environment = UserEnvironmentController)
 
-class CloudTypeModelController(BaseModelHandler):
+class CloudTypeModelController(BaseCloudController):
 
-    paramName = 'cloudName'
+    modelName = 'cloudName'
 
     urls = dict(images = ImagesController,
                 instances = InstancesController,
                 users = UsersController,
                 instanceTypes = InstanceTypesController)
 
-    def __init__(self, parent, path, driver, cfg, mintClient):
-        BaseModelHandler.__init__(self, parent, path, driver, cfg, mintClient)
+    def splitId(self, url):
+        cloudName, rest = BaseCloudController.splitId(self, url)
+        cloudName = urllib.unquote(cloudName)
+        # note - may want to do further validation at the time of
+        # passing the cloud name into the function...
+        if not self.driver.isValidCloudName(cloudName):
+            raise UnsupportedCloudId(cloudName)
+        return cloudName, rest
 
-    def index(self, response, request, paramaters, url):
+    def index(self, request):
         'iterate available clouds'
-        response.to_xml(self.driver.listClouds())
+        return XmlResponse(self.driver(request).listClouds())
 
 SUPPORTED_MODULES = ['ec2', 'vws']
 
-class AllCloudModelController(BaseHandler):
+class AllCloudController(BaseController):
 
-    paramName = 'cloudType'
-
-    def index(self, response, request, parameters, url):
+    def index(self, request):
         cloudNodes = clouds.BaseClouds()
         for cloudType, cloudController in sorted(self.urls.items()):
-            cloudNodes.extend(cloudController.driver.listClouds())
-        response.to_xml(cloudNodes)
+            cloudNodes.extend(cloudController.driver(request).listClouds())
+        return XmlResponse(cloudNodes)
 
-    def loadCloudTypes(self, auth, cfg):
+    def loadCloudTypes(self):
         drivers = []
         self.urls = {}
         moduleDir =  __name__.rsplit('.', 1)[0] + '.drivers'
         for driverName in SUPPORTED_MODULES:
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['drivers']).driver
-            nodeFact = self._createNodeFactory(driverClass)
-            driver = driverClass(self.mintClient, cfg, nodeFact)
+            driver = driverClass(self.cfg, driverName)
             controller =  CloudTypeModelController(self, driverName,
-                                                   driver, self.cfg,
-                                                   self.mintClient)
+                                                   driver, self.cfg)
             self.urls[driverName] = controller
-
-    @classmethod
-    def _createNodeFactory(cls, driverClass):
-        nodeFact = nodeFactory.NodeFactory(
-            cloudFactory = getattr(driverClass, 'Cloud',
-                clouds.BaseCloud),
-            imageFactory = getattr(driverClass, 'Image',
-                images.BaseImage),
-            instanceFactory = getattr(driverClass, 'Instance',
-                instances.BaseInstance),
-            instanceTypeFactory = getattr(driverClass, 'InstanceType',
-                instances.InstanceType),
-            environmentFactory = getattr(driverClass, 'Environment',
-                environment.BaseEnvironment),
-            environmentCloudFactory = getattr(driverClass, 'EnvironmentCloud',
-                environment.BaseCloud),
-            keyPairFactory = getattr(driverClass, 'KeyPair',
-                keypairs.BaseKeyPair),
-            securityGroupFactory = getattr(driverClass, 'SecurityGroup',
-                securityGroups.BaseSecurityGroup),
-        )
-        return nodeFact
-
-    def _updateController(self, controller, paramName, response, request):
-        if isinstance(controller, CloudTypeModelController):
-            controller.driver.urlParams = request.urlParams

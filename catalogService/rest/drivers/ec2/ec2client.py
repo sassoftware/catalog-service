@@ -146,11 +146,11 @@ class EC2Client(baseDriver.BaseDriver):
         ret.append(self._nodeFactory.newCloud())
         return ret
 
-    def updateCloud(self, cloudName, parameters):
+    def updateCloud(self, parameters):
         parameters = CloudParameters(parameters)
         pass
 
-    def launchInstance(self, cloudName, xmlString, requestIPAddress):
+    def launchInstance(self, xmlString, requestIPAddress):
         parameters = LaunchInstanceParameters(xmlString,
             requestIPAddress = requestIPAddress)
         if (parameters.remoteIPAddress
@@ -168,27 +168,27 @@ class EC2Client(baseDriver.BaseDriver):
                 instance_type=parameters.instanceType)
         return self._getInstancesFromReservation(reservation)
 
-    def terminateInstances(self, cloudName, instanceIds):
+    def terminateInstances(self, instanceIds):
         resultSet = self.client.terminate_instances(instance_ids=instanceIds)
         return self._getInstancesFromResult(resultSet)
 
-    def terminateInstance(self, cloudName, instanceId):
-        return self.terminateInstances(cloudName, [instanceId])[0]
+    def terminateInstance(self, instanceId):
+        return self.terminateInstances([instanceId])[0]
 
-    def getAllInstances(self, cloudName):
-        return self.getInstances(cloudName, None)
+    def getAllInstances(self):
+        return self.getInstances(None)
 
-    def getInstances(self, cloudName, instanceIds):
+    def getInstances(self, instanceIds):
         resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
         return insts
 
-    def getAllImages(self, cloudName):
-        return self.getImages(cloudName, None)
+    def getAllImages(self):
+        return self.getImages(None)
 
-    def getImages(self, cloudName, imageIds):
+    def getImages(self, imageIds):
         rs = self.client.get_all_images(image_ids = imageIds)
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]

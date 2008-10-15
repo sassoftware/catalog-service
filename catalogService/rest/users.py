@@ -1,12 +1,16 @@
 from catalogService import userData
-from base import BaseModelHandler
 from catalogService import storage
-from restlib.handler import RestModelHandler
+from catalogService.rest.base import BaseController
+from catalogService.rest.response import XmlStringResponse, XmlResponse
 
-class UserMixin(object):
-    storageConfig = storage.StorageConfig(storagePath = "storage")
+
+
+class UsersController(BaseController):
+    modelName = 'userId'
+    processSuburls = True
+
     def _getUserDataStore(self):
-        path = self.storageConfig.storagePath + '/userData'
+        path = self.cfg.storagePath + '/userData'
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
@@ -14,23 +18,11 @@ class UserMixin(object):
     def _sanitizeKey(cls, key):
         return '/'.join(x for x in key.split('/') if x not in ('.', '..'))
 
-
-
-class UsersController(RestModelHandler, UserMixin):
-    paramName = 'userId'
-    processSuburls = True
-
-    def __init__(self, parent, path, cfg, mintClient):
-        self.mintClient = mintClient
-        self.cfg = cfg
-        RestModelHandler.__init__(self, parent, path, [cfg, mintClient])
-
-
-    def index(self, response, request, parameters, url):
+    def index(self, request):
         "enumerate the users"
         raise NotImplementedError
 
-    def update(self, userId, response, request, parameters, keyId):
+    def update(self, request, userId):
         "update a key"
         if userId != request.auth[0]:
             raise Exception("XXX 1", userId, request.auth[0])
@@ -38,16 +30,18 @@ class UsersController(RestModelHandler, UserMixin):
         dataLen = request.getContentLength()
         data = request.read(dataLen)
 
+        keyId = request.unparsedPath
         key = self._sanitizeKey(keyId)
 
         store = self._getUserDataStore()
         store.set(key, data)
         data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (self.url(request, '%s/%s' % (userId, key)))
-        return response.write(data)
+        return XmlStringResponse(data)
 
-    def get(self, userId, response, request, parameters, keyPath):
+    def get(self, request, userId):
         if userId != request.auth[0]:
             raise Exception("XXX 1", userId, request.auth[0])
+        keyPath = request.unparsedPath
         key = self._sanitizeKey(keyPath)
 
         prefix = self.url(request, '%s/' % (userId))
@@ -59,8 +53,7 @@ class UsersController(RestModelHandler, UserMixin):
             # A trailing / means retrieving the contents from a collection
             if not store.isCollection(key):
                 data = xmlHeader + '<list></list>'
-                response.write(data)
-                return
+                return XmlStringResponse(data)
                 #raise Exception("XXX 2", prefix, keyPath)
 
         if store.isCollection(key):
@@ -72,36 +65,36 @@ class UsersController(RestModelHandler, UserMixin):
                 snodes = [ userData.IdNode().characters("%s%s" % (prefix, x))
                          for x in snodes ]
                 node.extend(snodes)
-                response.to_xml(node)
-                return
+                return XmlResponse(node)
             # Grab contents and wrap them in some XML
             data = [ store.get(x) for x in snodes ]
             data = xmlHeader + '<list>%s</list>' % ''.join(data)
-            response.write(data)
-            return
+            return XmlStringResponse(data)
+        else:
+            data = store.get(key)
+            if data is None:
+                raise NotImplementedError
+            return XmlStringResponse(data)
 
-        data = store.get(key)
-        if data is None:
-            raise NotImplementedError
-        response.write(data)
 
-
-    def destroy(self, userId, response, request, parameters, key):
+    def destroy(self, request, userId):
         if userId != request.auth[0]:
             raise Exception("XXX 1", userId, request.getUser())
 
         store = self._getUserDataStore()
+        key = request.unparsedPath
 
         key = self._sanitizeKey(key)
         store.delete(key)
         url = self.url(request, '%s/%s' % (userId, key))
         data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (url)
-        response.write(data)
+        return XmlStringResponse(data)
 
-    def process(self, userId, response, request, parameters, key):
+    def process(self, request, userId):
         "create a new key entry in the store"
         if userId != request.auth[0]:
             raise Exception("XXX 1", userId, request.auth[0])
+        key = request.unparsedPath
 
         dataLen = request.getContentLength()
         data = request.read(dataLen)
@@ -114,6 +107,4 @@ class UsersController(RestModelHandler, UserMixin):
         newId = store.store(data, keyPrefix = keyPrefix)
         url = self.url(request, '%s/%s' % (userId, newId) )
         txt = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (url)
-        return response.write(txt)
-
-
+        return XmlStringResponse(txt)

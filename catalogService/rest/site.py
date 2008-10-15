@@ -1,69 +1,29 @@
-
 import mint.client
 import mint.config
 import mint.shimclient
 
-from restlib.handler import RestHandler
+from restlib.controller import RestController
 
-from base import BaseHandler
-import users
-import clouds
-from catalogService import nodeFactory
+from catalogService.rest.response import XmlStringResponse
+from catalogService.rest import users
+from catalogService.rest import clouds
 
-class CatalogServiceController(RestHandler):
-    urls = {'clouds' : clouds.AllCloudModelController,
+class CatalogServiceController(RestController):
+    urls = {'clouds' : clouds.AllCloudController,
             'users' : users.UsersController,
             'userinfo' : 'userinfo'}
 
-    def __init__(self, parent, path, cfg, mintClient):
-        RestHandler.__init__(self, parent, path, [cfg, mintClient])
+    def __init__(self, cfg):
+        RestController.__init__(self, None, None, [cfg])
+        self.loadCloudTypes()
+
+    def loadCloudTypes(self):
+        self._getController('clouds').loadCloudTypes()
+
 
     def _getController(self, url):
         return self.urls[url]
 
-    def userinfo(self, response, request, parameters, url):
-        data = "<userinfo><username>%s</username></userinfo>" % \
-                parameters['mintAuth'].username
-        response.write(data)
-
-
-class SiteHandler(object):
-    def __init__(self, auth, cfg):
-        self.mintCfg = None
-        self.mintClient = self._getMintClient(auth, cfg)
-        self.restController = CatalogServiceController(None, None,
-                                                       cfg, self.mintClient)
-        self.restController._getController('clouds').loadCloudTypes(auth, cfg)
-
-
-    def _getMintClient(self, authToken, cfg):
-        if cfg.rBuilderUrl:
-            mintClient = mint.client.MintClient(
-                                        cfg.rBuilderUrl % tuple(authToken[:2]))
-        else:
-            mintCfg = mint.config.getConfig()
-            mintClient = mint.shimclient.ShimMintClient(self.mintCfg,
-                                                        authToken)
-        return mintClient
-
-    def handle(self, response, request, parameters, url):
-        try:
-            mintAuth = self.mintClient.checkAuth()
-            if not mintAuth.authorized:
-                response.status = 403
-                return
-            else:
-                parameters['mintAuth'] = mintAuth
-                # Pass baseUrl into the factory, we will need it everywhere
-                # so we can generate URLs properly
-                nodeFactory.NodeFactory.baseUrl = request.baseUrl
-            return self.restController.handle(response, request,
-                                              parameters, url)
-        except NotImplementedError:
-            raise
-        except Exception, e:
-            raise
-            import epdb
-            import sys
-            epdb.post_mortem(sys.exc_info()[2])
-
+    def userinfo(self, request):
+        data = "<userinfo><username>%s</username></userinfo>" % request.mintAuth.username
+        return XmlStringResponse(data)

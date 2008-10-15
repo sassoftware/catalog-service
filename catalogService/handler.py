@@ -55,15 +55,17 @@ C{/<TOPLEVEL>/users/<user>/<key>}
     - (PUT): Update a key (if not a collection).
     - (POST): Create a new entry in a collection.
 """
-
-import base64
 import BaseHTTPServer
 import logging
 
+from restlib.http import simplehttp
 from catalogService import logger as rlogging
 
 from catalogService import config
+from catalogService import errors
 from catalogService import storage
+from catalogService.rest import auth
+from catalogService.rest import site
 
 # Monkeypatch BaseHTTPServer for older Python (e.g. the one that
 # rLS1 has) to include a function that we rely on. Yes, this is gross.
@@ -74,36 +76,31 @@ if not hasattr(BaseHTTPServer, '_quote_html'):
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     BaseHTTPServer._quote_html = _quote_html
 
+def getHandler(storageConfig):
+    handler = simplehttp.SimpleHttpHandler(
+                        site.CatalogServiceController(storageConfig))
+    handler.addCallback(auth.AuthenticationCallback(storageConfig))
+    handler.addCallback(errors.ErrorMessageCallback())
+    return handler
+
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    storageConfig = storage.StorageConfig(storagePath = "storage")
+    pathPrefix = '/TOPLEVEL'
     logLevel = 1
-    error_message_format = '\n'.join(('<?xml version="1.0" encoding="UTF-8"?>',
-            '<fault>',
-            '  <code>%(code)s</code>',
-            '  <message>%(message)s</message>',
-            '</fault>'))
     _logFile = None
+    storageConfig = None
+    handler = None
+
+    @classmethod
+    def updateHandler(class_, storageConfig):
+        # Note: this is needed for testing
+        class_.storageConfig = storageConfig
+        class_.handler = getHandler(storageConfig)
 
     def do(self):
-        authData = self.headers.get('Authorization', None)
-        if authData and authData[:6] == 'Basic ':
-            authData = authData[6:]
-            authData = base64.decodestring(authData)
-            authData = authData.split(':', 1)
-        from catalogService.rest import response, site
-        from restlib.http import simplehttp
-
-        # XXX don't assume always /TOPLEVEL
-        baseUrl = self.path[:9]
-        self.path = self.path[9:]
         self._logger = self._getLogger(self.address_string())
-        self.handler = simplehttp.SimpleHttpHandler(
-                                        site.SiteHandler(authData,
-                                                         self.storageConfig),
-                                        responseClass=response.CatalogResponse,
-                                        logger = self._logger)
-        self.handler.handle(self, baseUrl, authData)
+        self.handler.setLogger(self._logger)
+        self.handler.handle(self, self.path[len(self.pathPrefix):])
     do_GET = do_POST = do_PUT = do_DELETE = do
 
     @classmethod
@@ -123,3 +120,6 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_error(self, format, *args):
         return self._log(logging.ERROR, format, *args)
+
+
+BaseRESTHandler.updateHandler(storage.StorageConfig(storagePath = 'storage'))
