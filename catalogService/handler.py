@@ -60,6 +60,8 @@ import base64
 import BaseHTTPServer
 import logging
 
+from catalogService import logger as rlogging
+
 from catalogService import config
 from catalogService import storage
 
@@ -106,19 +108,8 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     @classmethod
     def _getLogger(cls, address):
-        if cls._logFile is None:
-            handler = logging.StreamHandler()
-        else:
-            handler = logging.FileHandler(cls._logFile)
-
-        formatter = Formatter()
-        handler.setFormatter(formatter)
-        logger = Logger('catalog-service')
-        logger.setLevel(logging.DEBUG)
-        logger.addHandler(handler)
-
+        logger = rlogging.getLogger('catalog-service', cls._logFile)
         logger.setAddress(address)
-
         return logger
 
     def _log(self, level, msg, *args, **kwargs):
@@ -132,33 +123,3 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_error(self, format, *args):
         return self._log(logging.ERROR, format, *args)
-
-class LogRecord(logging.LogRecord):
-    def __init__(self, address, *args, **kwargs):
-        logging.LogRecord.__init__(self, *args, **kwargs)
-        self.address = address
-
-class Logger(logging.Logger):
-    def setAddress(self, address):
-        self.address = address
-
-    def makeRecord(self, *args, **kwargs):
-        address = getattr(self, 'address', '')
-        return LogRecord(address, *args, **kwargs)
-
-class Formatter(logging.Formatter):
-    _fmt = "%(address)s %(asctime)s %(pathname)s(%(lineno)s) %(levelname)s - %(message)s"
-
-    def __init__(self):
-        logging.Formatter.__init__(self, self.__class__._fmt)
-
-    def formatException(self, ei):
-        from conary.lib import util
-        import StringIO
-        excType, excValue, tb = ei
-        sio = StringIO.StringIO()
-        util.formatTrace(excType, excValue, tb, stream = sio,
-            withLocals = False)
-        util.formatTrace(excType, excValue, tb, stream = sio,
-            withLocals = True)
-        return sio.getvalue().rstrip()
