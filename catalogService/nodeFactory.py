@@ -5,8 +5,10 @@
 import urllib
 
 class NodeFactory(object):
-    __slots__ = [ 'cloudFactory', 'environmentCloudFactory',
-        'environmentFactory', 'imageFactory', 'instanceFactory',
+    __slots__ = [ 'cloudFactory', 'credentialsFactory',
+        'credentialsFieldFactory', 'credentialsFieldsFactory',
+        'environmentCloudFactory', 'environmentFactory',
+        'imageFactory', 'instanceFactory',
         'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName']
 
@@ -19,6 +21,17 @@ class NodeFactory(object):
         node = self.cloudFactory(*args, **kwargs)
         node.setId(self.getCloudUrl(node))
         return node
+
+    def newCredentials(self, valid, fields = None):
+        if fields is None:
+            fields = []
+        fieldsNode = self.credentialsFieldsFactory()
+        for credName, credVal in fields:
+            fieldsNode.append(self.credentialsFieldFactory(
+                credentialName = credName, value = credVal))
+        credsNode = self.credentialsFactory(fields = fieldsNode,
+                                            valid = valid)
+        return credsNode
 
     def newImage(self, *args, **kwargs):
         node = self.imageFactory(*args, **kwargs)

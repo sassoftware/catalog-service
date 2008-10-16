@@ -61,28 +61,30 @@ class VWSClient(baseDriver.BaseDriver):
     Image = VWS_Image
     Instance = VWS_Instance
 
+    _credNameMap = [
+        ('userCert', 'userCert'),
+        ('userKey', 'userKey'),
+        ('sshPubKey', 'sshPubKey'),
+    ]
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
-        self.client = {}
         self._instanceStore = None
 
-    def _getCloudClient(self):
-        cloudName = self.cloudName
-        cloudCred = self._getCredentialsForCloudName(cloudName)
-        if cloudName in self.client:
-            return self.client[cloudName]
+    def _getCloudCredentialsForUser(self):
+        return self._getCredentialsForCloudName(self.cloudName)
 
+    def drvCreateCloudClient(self, credentials):
         props = globuslib.WorkspaceCloudProperties()
-        props.set('vws.factory', cloudCred['factory'])
-        props.set('vws.repository', cloudCred['repository'])
-        props.set('vws.factory.identity', cloudCred['factoryIdentity'])
-        props.set('vws.repository.identity', cloudCred['repositoryIdentity'])
-        cli = globuslib.WorkspaceCloudClient(props, cloudCred['caCert'],
-            cloudCred['userCert'], cloudCred['userKey'],
-            cloudCred['sshPubKey'], cloudCred['alias'])
-        self.client[cloudName] = cli
-
-        keyPrefix = "%s/%s" % (cloudName.replace('/', '_'), cli.userCertHash)
+        props.set('vws.factory', credentials['factory'])
+        props.set('vws.repository', credentials['repository'])
+        props.set('vws.factory.identity', credentials['factoryIdentity'])
+        props.set('vws.repository.identity', credentials['repositoryIdentity'])
+        cli = globuslib.WorkspaceCloudClient(props, credentials['caCert'],
+            credentials['userCert'], credentials['userKey'],
+            credentials['sshPubKey'], credentials['alias'])
+        keyPrefix = "%s/%s" % (self.cloudName.replace('/', '_'),
+                               cli.userCertHash)
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
 
@@ -92,6 +94,13 @@ class VWSClient(baseDriver.BaseDriver):
         except HttpNotFound:
             return False
         return True
+
+    def setUserCredentials(self, fields):
+        # We will not implement this yet, we need to differentiate between
+        # config data and credentials
+        valid = True
+        node = self._nodeFactory.newCredentials(valid)
+        return node
 
     def listClouds(self):
         ret = clouds.BaseClouds()
@@ -103,22 +112,8 @@ class VWSClient(baseDriver.BaseDriver):
             ret.append(cld)
         return ret
 
-    def cloudParameters(self):
-        return CloudParameters()
-
-    def createCloud(self, parameters):
-        parameters = CloudParameters(parameters)
-
-    def updateCloud(self, cloudId, parameters):
-        parameters = CloudParameters(parameters)
-        pass
-
-    def publishImage(self, cloudId, image):
-        self.cloudClient.transferInstance(fileName)
-        pass
-
     def launchInstance(self, xmlString, requestIPAddress):
-        client = self._getCloudClient()
+        client = self.client
         parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
 
@@ -142,7 +137,7 @@ class VWSClient(baseDriver.BaseDriver):
         return instanceList
 
     def terminateInstances(self, instanceIds):
-        client = self._getCloudClient()
+        client = self.client
 
         instIdSet = set(os.path.basename(x) for x in instanceIds)
         runningInsts = self.getInstances(instanceIds)
@@ -213,9 +208,8 @@ class VWSClient(baseDriver.BaseDriver):
         return self.getInstances(None)
 
     def getInstances(self, instanceIds):
-        client = self._getCloudClient()
-        cloudAlias = client.getCloudAlias()
-        globusInsts  = client.listInstances()
+        cloudAlias = self.client.getCloudAlias()
+        globusInsts  = self.client.listInstances()
         globusInstsDict = dict((x.getId(), x) for x in globusInsts)
         storeInstanceKeys = self._instanceStore.enumerate()
         reservIdHash = {}
@@ -361,9 +355,7 @@ class VWSClient(baseDriver.BaseDriver):
                 self._setState(instanceId, None)
             self._setState(instanceId, 'Launching')
 
-            client = self._getCloudClient()
-
-            realId = client.launchInstances([imageId],
+            realId = self.client.launchInstances([imageId],
                 duration = duration, callback = callback)
 
         finally:
@@ -387,20 +379,17 @@ class VWSClient(baseDriver.BaseDriver):
         return downloadFilePath
 
     def _prepareImage(self, downloadFilePath):
-        client = self._getCloudClient()
-        retfile = client._repackageImage(downloadFilePath)
+        retfile = self.client._repackageImage(downloadFilePath)
         os.unlink(downloadFilePath)
         return retfile
 
     def _publishImage(self, fileName):
-        client = self._getCloudClient()
-        client.transferInstance(fileName)
+        self.client.transferInstance(fileName)
 
     def _getImagesFromGrid(self):
-        client = self._getCloudClient()
-        cloudAlias = client.getCloudAlias()
+        cloudAlias = self.client.getCloudAlias()
 
-        imageIds = client.listImages()
+        imageIds = self.client.listImages()
         imageList = images.BaseImages()
 
         for imageId in imageIds:
@@ -416,8 +405,7 @@ class VWSClient(baseDriver.BaseDriver):
         return imageList
 
     def _addMintDataToImageList(self, imageList):
-        client = self._getCloudClient()
-        cloudAlias = client.getCloudAlias()
+        cloudAlias = self.client.getCloudAlias()
 
         imageDataLookup = self._mintClient.getAllVwsBuilds()
         # Convert the images coming from rbuilder to .gz, to match what we're
@@ -490,7 +478,6 @@ class VWSClient(baseDriver.BaseDriver):
         return storage.DiskStorage(cfg)
 
     def _getInstanceStore(self, keyPrefix):
-        client = self._getCloudClient()
         path = self._cfg.storagePath + '/instances'
         cfg = storage.StorageConfig(storagePath = path)
 
