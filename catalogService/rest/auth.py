@@ -11,25 +11,34 @@ class AuthenticationCallback(object):
     def __init__(self, cfg):
         self.cfg = cfg
 
-    def processRequest(self, request):
+    def getAuth(self, request):
         if not 'Authorization' in request.headers:
-            # require authentication
-            return response.Response(status=403)
+            return None
         type, user_pass = request.headers['Authorization'].split(' ', 1)
         user_name, password = base64.decodestring(user_pass).split(':', 1)
-        request.auth = (user_name, password)
+        return (user_name, password)
+
+    def processRequest(self, request):
+        auth = self.getAuthToken(request):
+        if not auth:
+            # require authentication
+            return response.Response(status=403)
+        request.auth = auth
         response = self.setMintClient(request)
         # will be None if successful
         return response
 
-    def setMintClient(self, request):
+    def getMintConfig(self):
+        return mint.config.getConfig()
+
+    def setMintClient(self, request, auth):
         if self.cfg.rBuilderUrl:
             mintClient = mint.client.MintClient(
-                            self.cfg.rBuilderUrl % tuple(request.auth[:2]))
+                            self.cfg.rBuilderUrl % tuple(auth[:2]))
         else:
-            mintCfg = mint.config.getConfig()
+            mintCfg = self.getMintConfig()
             mintClient = mint.shimclient.ShimMintClient(mintCfg,
-                                                        request.auth)
+                                                        auth)
         mintAuth = mintClient.checkAuth()
         if not mintAuth.authorized:
             return response.Response(status=403)
