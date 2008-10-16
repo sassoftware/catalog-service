@@ -13,6 +13,10 @@ class ResponseError(Exception):
         self.reason = reason
         self.headers = headers
         self.response = response
+        self.contents = response.read()
+
+    def __str__(self):
+        return '%s: %s\n%s' % (self.status, self.reason, self.contents)
 
 class Client(object):
     def __init__(self, url):

@@ -23,6 +23,7 @@ class ApacheRESTHandler(object):
         self.handler = modpython.ModPythonHttpHandler(
                             site.CatalogServiceController(self.storageConfig))
         self.handler.addCallback(errors.ErrorMessageCallback())
+        self.addAuthCallback()
 
 
     def addAuthCallback(self):
