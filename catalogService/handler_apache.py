@@ -36,7 +36,12 @@ class ApacheRESTHandler(object):
         return logger
 
 def handler(req):
-    """Test handler"""
+    """
+    The presence of this function in the module allows it to be added directly
+    into apache as a mod_python handler.
+
+    The function is for testing purposes only.
+    """
     coveragehook.install()
     storageDir = os.path.abspath(os.path.join(req.document_root(),
         '..', '..', 'storage'))
