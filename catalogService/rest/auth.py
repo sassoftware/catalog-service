@@ -19,12 +19,12 @@ class AuthenticationCallback(object):
         return (user_name, password)
 
     def processRequest(self, request):
-        auth = self.getAuthToken(request):
+        auth = self.getAuth(request)
         if not auth:
             # require authentication
             return response.Response(status=403)
         request.auth = auth
-        response = self.setMintClient(request)
+        response = self.setMintClient(request, auth)
         # will be None if successful
         return response
 
