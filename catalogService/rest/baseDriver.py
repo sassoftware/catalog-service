@@ -1,9 +1,13 @@
 from catalogService import nodeFactory
-from catalogService import clouds, images, instances
+from catalogService import clouds, credentials, images, instances
 from catalogService import environment, keypairs, securityGroups
 
 class BaseDriver(object):
+    # Enumerate the factories we support.
     Cloud            = clouds.BaseCloud
+    Credentials      = credentials.BaseCredentials
+    CredentialsField = credentials.BaseField
+    CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
     InstanceType     = instances.InstanceType
@@ -12,12 +16,15 @@ class BaseDriver(object):
     KeyPair          = keypairs.BaseKeyPair
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
+    _credNameMap = []
+
     def __init__(self, cfg, cloudType, cloudName=None,
                  nodeFactory=None, mintClient=None):
         self.cloudType = cloudType
         self.cloudName = cloudName
         self._cfg = cfg
-        self._client = None
+        self._cloudClient = None
+        self._cloudCredentials = None
         if nodeFactory is None:
             nodeFactory = self._createNodeFactory()
         self._nodeFactory = nodeFactory
@@ -40,6 +47,9 @@ class BaseDriver(object):
         factory = nodeFactory.NodeFactory(
             cloudType = self.cloudType,
             cloudFactory = self.Cloud,
+            credentialsFactory = self.Credentials,
+            credentialsFieldFactory = self.CredentialsField,
+            credentialsFieldsFactory = self.CredentialsFields,
             imageFactory = self.Image,
             instanceFactory = self.Instance,
             instanceTypeFactory = self.InstanceType,
@@ -49,3 +59,38 @@ class BaseDriver(object):
             securityGroupFactory = self.SecurityGroup,
         )
         return factory
+
+    def drvGetCloudCredentialsForUser(self):
+        """
+        Authenticate the user and cache the cloud credentials
+        """
+        if self._cloudCredentials is None:
+            self._checkAuth()
+            self._cloudCredentials = self._getCloudCredentialsForUser()
+        return self._cloudCredentials
+
+    credentials = property(drvGetCloudCredentialsForUser)
+
+    def drvGetCloudClient(self):
+        """
+        Authenticate the user, cache the cloud credentials and the client
+        """
+        if not self._cloudClient:
+            cred = self.drvGetCloudCredentialsForUser()
+            self._cloudClient = self.drvCreateCloudClient(cred)
+        return self._cloudClient
+
+    client = property(drvGetCloudClient)
+
+    def _checkAuth(self):
+        """rBuilder authentication"""
+        self._mintAuth = self._mintClient.checkAuth()
+        if not self._mintAuth.authorized:
+            raise PermissionDenied
+
+    def getUserCredentials(self):
+        cred = self.credentials
+        # Map rbuilder credentials to a different name structure
+        fields = [ (x, cred[y]) for (x, y) in self._credNameMap ]
+        # XXX We should validate the credentials too
+        return self._nodeFactory.newCredentials(valid = True, fields = fields)

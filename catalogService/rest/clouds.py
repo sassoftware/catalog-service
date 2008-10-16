@@ -5,6 +5,7 @@ from restlib import controller
 from base import BaseController
 
 from catalogService import clouds
+from catalogService import credentials
 from catalogService import environment
 from catalogService import images
 from catalogService import instances
@@ -54,11 +55,28 @@ class UserEnvironmentController(BaseCloudController):
     def index(self, request, cloudName, userName):
         return XmlResponse(self.driver(request, cloudName).getEnvironment())
 
+class CredentialsController(BaseCloudController):
+    def index(self, request, cloudName, userName):
+        return XmlResponse(self.driver(request, cloudName).getUserCredentials())
+
+    def update(self, request, cloudName, userName):
+        dataLen = request.getContentLength()
+        data = request.read(dataLen)
+
+        hdlr = credentials.Handler()
+        node = hdlr.parseString(data)
+        credFields = dict((x.getCredentialName(), x.getValue())
+            for x in node.getFields())
+
+        response = self.driver(request, cloudName).setUserCredentials(
+            credFields)
+        return XmlResponse(response)
 
 class UsersController(BaseCloudController):
     modelName = 'userName'
 
-    urls = dict(environment = UserEnvironmentController)
+    urls = dict(environment = UserEnvironmentController,
+                credentials = CredentialsController)
 
 class CloudTypeModelController(BaseCloudController):
 

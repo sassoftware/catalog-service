@@ -125,21 +125,32 @@ class EC2Client(baseDriver.BaseDriver):
                 state = 'state',
     )
 
-    def _getClient(self):
-        if not self._client:
-            self._mintAuth = self._mintClient.checkAuth()
-            if not self._mintAuth.authorized:
-                raise PermissionDenied
-            cred = self._mintClient.getEC2CredentialsForUser(
-                                                 self._mintAuth.userId)
-            self._client = EC2Connection(cred['awsPublicAccessKeyId'],
-                                         cred['awsSecretAccessKey'])
-        return self._client
+    _credNameMap = [
+        ('awsAccountNumber', 'awsAccountNumber'),
+        ('awsAccessKeyId', 'awsPublicAccessKeyId'),
+        ('awsSecretAccessKey', 'awsSecretAccessKey') ]
 
-    client = property(_getClient)
+    def drvCreateCloudClient(self, credentials):
+        return EC2Connection(credentials['awsPublicAccessKeyId'],
+                             credentials['awsSecretAccessKey'])
+
+    def _getCloudCredentialsForUser(self):
+        return self._mintClient.getEC2CredentialsForUser(self._mintAuth.userId)
 
     def isValidCloudName(self, cloudName):
         return cloudName == 'aws'
+
+    def setUserCredentials(self, fields):
+        _ = self.credentials
+        awsAccountNumber = fields.get('awsAccountNumber')
+        awsAccessKeyId = fields.get('awsAccessKeyId')
+        awsSecretAccessKey = fields.get('awsSecretAccessKey')
+
+        valid = self._mintClient.setEC2CredentialsForUser(
+            self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
+            awsSecretAccessKey)
+
+        return self._nodeFactory.newCredentials(valid = valid)
 
     def listClouds(self):
         ret = clouds.BaseClouds()

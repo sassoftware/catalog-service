@@ -13,7 +13,8 @@ class BaseImage(xmlNode.BaseNode):
             'state', 'isPublic', 'buildDescription', 'productName',
             'role', 'publisher', 'awsAccountNumber', 'buildName',
             'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
-            'cloudName', 'cloudType', 'cloudAlias' ]
+            'cloudName', 'cloudType', 'cloudAlias',
+            '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
                         is_rBuilderImage = bool)
 

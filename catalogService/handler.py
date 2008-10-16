@@ -43,6 +43,10 @@ C{/<TOPLEVEL>/clouds/<cloudName>/instances/<instanceId>}
 C{/<TOPLEVEL>/clouds/<cloudName>/users/<user>/environment}
     - (GET): retrieve the launch environment
 
+C{/<TOPLEVEL>/clouds/<cloudName>/users/<user>/credentials}
+    - (GET): Retrieve the user's credentials (and validate them)
+    - (POST): Store new credentials
+
 C{/<TOPLEVEL>/users/<user>}
     - (GET): Enumerate the keys defined in the store.
         - Return an enumeration of URIs in the format::
