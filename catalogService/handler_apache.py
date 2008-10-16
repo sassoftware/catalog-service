@@ -22,9 +22,11 @@ class ApacheRESTHandler(object):
         self.storageConfig = storage.StorageConfig(storagePath=storagePath)
         self.handler = modpython.ModPythonHttpHandler(
                             site.CatalogServiceController(self.storageConfig))
-
-        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
         self.handler.addCallback(errors.ErrorMessageCallback())
+
+
+    def addAuthCallback(self):
+        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
 
     def handle(self, req):
         self.handler.setLogger(self.getLogger(req))
