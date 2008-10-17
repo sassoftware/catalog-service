@@ -31,7 +31,7 @@ class ApacheRESTHandler(object):
 
     def handle(self, req):
         self.handler.setLogger(self.getLogger(req))
-        return self.handler.handle(req, req.uri[len(self.pathPrefix):])
+        return self.handler.handle(req, req.unparsed_uri[len(self.pathPrefix):])
 
     def getLogger(self, req):
         logger = rlogging.getLogger('catalog-service', None)
