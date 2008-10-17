@@ -5,6 +5,7 @@ from boto.exception import EC2ResponseError
 
 from catalogService import clouds
 from catalogService import environment
+from catalogService import errors
 from catalogService import instances
 from catalogService import images
 from catalogService import keypairs
@@ -131,11 +132,18 @@ class EC2Client(baseDriver.BaseDriver):
         ('awsSecretAccessKey', 'awsSecretAccessKey') ]
 
     def drvCreateCloudClient(self, credentials):
+        for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
+            if key not in credentials or not credentials[key]:
+                raise errors.MissingCredentials()
         return EC2Connection(credentials['awsPublicAccessKeyId'],
                              credentials['awsSecretAccessKey'])
 
     def _getCloudCredentialsForUser(self):
-        return self._mintClient.getEC2CredentialsForUser(self._mintAuth.userId)
+        try:
+            return self._mintClient.getEC2CredentialsForUser(
+                                                    self._mintAuth.userId)
+        except mint.mint_error.PermissionDenied:
+            raise errors.PermissionDenied
 
     def isValidCloudName(self, cloudName):
         return cloudName == 'aws'
