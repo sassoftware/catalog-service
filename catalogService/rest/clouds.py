@@ -115,8 +115,10 @@ class AllCloudController(BaseController):
         self.urls = {}
         moduleDir =  __name__.rsplit('.', 1)[0] + '.drivers'
         for driverName in SUPPORTED_MODULES:
+            # FIXME: I'm not sure why putting driver here instead of drivers
+            # allows it this to work.
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
-                                      {}, {}, ['drivers']).driver
+                                      {}, {}, ['driver']).driver
             driver = driverClass(self.cfg, driverName)
             controller =  CloudTypeModelController(self, driverName,
                                                    driver, self.cfg)
