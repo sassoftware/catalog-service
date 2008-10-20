@@ -104,6 +104,8 @@ class LaunchInstanceParameters(object):
 
 
 class EC2Client(baseDriver.BaseDriver):
+    _cloudType = 'ec2'
+
     Cloud = EC2_Cloud
     EnvironmentCloud = EC2_EnvironmentCloud
     Image = EC2_Image

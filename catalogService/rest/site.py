@@ -20,7 +20,6 @@ class CatalogServiceController(RestController):
     def loadCloudTypes(self):
         self._getController('clouds').loadCloudTypes()
 
-
     def _getController(self, url):
         return self.urls[url]
 

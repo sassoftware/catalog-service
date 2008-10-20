@@ -4,6 +4,7 @@ from restlib import controller
 
 from base import BaseController
 
+from catalogService import cloud_types
 from catalogService import clouds
 from catalogService import credentials
 from catalogService import environment
@@ -100,15 +101,23 @@ class CloudTypeModelController(BaseCloudController):
         'iterate available clouds'
         return XmlResponse(self.driver(request).listClouds())
 
+class CloudTypeController(BaseCloudController):
+    urls = {
+        'instances' : CloudTypeModelController,
+    }
+    def _initializeUrls(self, urls, subhandlerParams):
+        subhandlerParams = (self.driver, self.cfg)
+        return BaseCloudController._initializeUrls(self, urls, subhandlerParams)
+
 SUPPORTED_MODULES = ['ec2', 'vws']
 
 class AllCloudController(BaseController):
 
     def index(self, request):
-        cloudNodes = clouds.BaseClouds()
+        cloudTypeNodes = cloud_types.CloudTypes()
         for cloudType, cloudController in sorted(self.urls.items()):
-            cloudNodes.extend(cloudController.driver(request).listClouds())
-        return XmlResponse(cloudNodes)
+            cloudTypeNodes.append(cloudController.driver(request).getCloudType())
+        return XmlResponse(cloudTypeNodes)
 
     def loadCloudTypes(self):
         drivers = []
@@ -120,6 +129,6 @@ class AllCloudController(BaseController):
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['driver']).driver
             driver = driverClass(self.cfg, driverName)
-            controller =  CloudTypeModelController(self, driverName,
-                                                   driver, self.cfg)
+            controller =  CloudTypeController(self, driverName,
+                                              driver, self.cfg)
             self.urls[driverName] = controller

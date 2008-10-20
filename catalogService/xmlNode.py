@@ -1,4 +1,4 @@
-#
+
 # Copyright (c) 2008 rPath, Inc.
 #
 
@@ -12,6 +12,8 @@ class BaseNode(xmllib.BaseNode):
     tag = None
     # Hint for a slot's type
     _slotTypeMap = {}
+    # Hint for attribute vs. sub-element
+    _slotAttributes = set()
 
     # Overrides for whatever was provided in the constructor
     # This is useful, for instance, for providing some quasi-immutable
@@ -30,7 +32,12 @@ class BaseNode(xmllib.BaseNode):
                 # Private variable, do not set
                 continue
             method = getattr(self, "set%s%s" % (k[0].upper(), k[1:]))
-            method(kwargs.get(k))
+            val = kwargs.get(k)
+            # If the slot is an attribute, look it up in the attribute list
+            # too
+            if k in self._slotAttributes and attrs is not None:
+                val = attrs.get(k, val)
+            method(val)
 
     def setName(self, name):
         pass
@@ -47,12 +54,19 @@ class BaseNode(xmllib.BaseNode):
         for fName in self.__slots__:
             if fName.startswith('_'):
                 continue
+            if fName in self._slotAttributes:
+                continue
             fVal = getattr(self, fName)
             if hasattr(fVal, "getElementTree"):
                 yield fVal
 
     def _iterAttributes(self):
-        return {}
+        ret = {}
+        for fName in self._slotAttributes:
+            fVal = getattr(self, fName)
+            if fVal is not None:
+                ret[fName] = str(fVal)
+        return ret.iteritems()
 
     def addChild(self, node):
         nodeName = node.getName()
@@ -85,6 +99,10 @@ class BaseNode(xmllib.BaseNode):
     def _set(self, key, value):
         setattr(self, key, None)
         if value is None:
+            return self
+        if key in self._slotAttributes:
+            # Attributes are strings
+            setattr(self, key, str(value))
             return self
         if hasattr(value, 'getElementTree') and value._getName() == key:
             # This catches the case where we have a list defined as one of the
@@ -126,7 +144,6 @@ class BaseNode(xmllib.BaseNode):
     def __repr__(self):
          return "<%s:id=%s at %#x>" % (self.__class__.__name__, self.getId(),
             id(self))
-
 
 class BaseNodeCollection(xmllib.SerializableList):
     "Base class for node collections"

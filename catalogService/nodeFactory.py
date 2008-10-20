@@ -4,8 +4,10 @@
 
 import urllib
 
+from catalogService import cloud_types
+
 class NodeFactory(object):
-    __slots__ = [ 'cloudFactory', 'credentialsFactory',
+    __slots__ = [ 'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'environmentCloudFactory', 'environmentFactory',
         'imageFactory', 'instanceFactory',
@@ -16,6 +18,19 @@ class NodeFactory(object):
         for slot in self.__slots__:
             if not slot.startswith('_'):
                 setattr(self, slot, kwargs.get(slot, None))
+
+    def newCloudType(self, *args, **kwargs):
+        node = self.cloudTypeFactory(*args, **kwargs)
+        cloudTypeId = self._getCloudTypeUrl(self.cloudType)
+        node.setId(cloudTypeId)
+        node.setCloudInstances(cloud_types.CloudInstances(
+            href = self.join(cloudTypeId, 'instances')))
+        node.setDescriptorCredentials(cloud_types.DescriptorCredentials(
+            href = self.join(cloudTypeId, 'descriptor', 'credentials')))
+        node.setDescriptorInstanceConfiguration(
+            cloud_types.DescriptorInstanceConfiguration(
+                href = self.join(cloudTypeId, 'descriptor', 'configuration')))
+        return node
 
     def newCloud(self, *args, **kwargs):
         node = self.cloudFactory(*args, **kwargs)
@@ -96,8 +111,12 @@ class NodeFactory(object):
         return self.join(cloudUrl, 'securityGroups',
                          self._quote(node.getId()))
 
+    def _getCloudTypeUrl(self, cloudType):
+        return self.join(self.baseUrl, 'clouds', cloudType)
+
     def _getCloudUrl(self, cloudType, cloudName):
-        return self.join(self.baseUrl, 'clouds', cloudType, cloudName)
+        return self.join(self._getCloudTypeUrl(cloudType), 'instances',
+            cloudName)
 
     def _getCloudUrlFromParams(self):
         return self._getCloudUrl(self.cloudType,

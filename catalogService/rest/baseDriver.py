@@ -1,10 +1,11 @@
 from catalogService import nodeFactory
-from catalogService import clouds, credentials, images, instances
+from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import environment, keypairs, securityGroups
 
 class BaseDriver(object):
     # Enumerate the factories we support.
     Cloud            = clouds.BaseCloud
+    CloudType        = cloud_types.CloudType
     Credentials      = credentials.BaseCredentials
     CredentialsField = credentials.BaseField
     CredentialsFields = credentials.BaseFields
@@ -17,6 +18,7 @@ class BaseDriver(object):
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
     _credNameMap = []
+    _cloudType = None
 
     def __init__(self, cfg, cloudType, cloudName=None,
                  nodeFactory=None, mintClient=None):
@@ -46,6 +48,7 @@ class BaseDriver(object):
     def _createNodeFactory(self):
         factory = nodeFactory.NodeFactory(
             cloudType = self.cloudType,
+            cloudTypeFactory = self.CloudType,
             cloudFactory = self.Cloud,
             credentialsFactory = self.Credentials,
             credentialsFieldFactory = self.CredentialsField,
@@ -94,3 +97,13 @@ class BaseDriver(object):
         fields = [ (x, cred[y]) for (x, y) in self._credNameMap ]
         # XXX We should validate the credentials too
         return self._nodeFactory.newCredentials(valid = True, fields = fields)
+
+    def getCloudType(self):
+        node = self._createCloudTypeNode(self._cloudType)
+        return node
+
+    def _createCloudTypeNode(self, cloudTypeName):
+        node = self._nodeFactory.newCloudType(
+            id = cloudTypeName,
+            cloudTypeName = cloudTypeName)
+        return node

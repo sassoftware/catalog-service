@@ -61,6 +61,8 @@ class VWSClient(baseDriver.BaseDriver):
     Image = VWS_Image
     Instance = VWS_Instance
 
+    _cloudType = 'vws'
+
     _credNameMap = [
         ('userCert', 'userCert'),
         ('userKey', 'userKey'),
