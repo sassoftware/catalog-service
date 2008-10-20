@@ -1,3 +1,6 @@
+
+import os
+
 from catalogService import userData
 from catalogService import storage
 from catalogService.rest.base import BaseController
@@ -9,8 +12,9 @@ class UsersController(BaseController):
     modelName = 'userId'
     processSuburls = True
 
-    def _getUserDataStore(self):
-        path = self.cfg.storagePath + '/userData'
+    def _getUserDataStore(self, request):
+        path = os.sep.join([self.cfg.storagePath, 'userData',
+            self._sanitizeKey(request.auth[0])])
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
@@ -33,7 +37,7 @@ class UsersController(BaseController):
         keyId = request.unparsedPath
         key = self._sanitizeKey(keyId)
 
-        store = self._getUserDataStore()
+        store = self._getUserDataStore(request)
         store.set(key, data)
         data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (self.url(request, '%s/%s' % (userId, key)))
         return XmlStringResponse(data)
@@ -45,7 +49,7 @@ class UsersController(BaseController):
         key = self._sanitizeKey(keyPath)
 
         prefix = self.url(request, '%s/' % (userId))
-        store = self._getUserDataStore()
+        store = self._getUserDataStore(request)
 
         xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>'
         key = key.rstrip('/')
@@ -81,7 +85,7 @@ class UsersController(BaseController):
         if userId != request.auth[0]:
             raise Exception("XXX 1", userId, request.getUser())
 
-        store = self._getUserDataStore()
+        store = self._getUserDataStore(request)
         key = request.unparsedPath
 
         key = self._sanitizeKey(key)
@@ -98,7 +102,7 @@ class UsersController(BaseController):
 
         dataLen = request.getContentLength()
         data = request.read(dataLen)
-        store = self._getUserDataStore()
+        store = self._getUserDataStore(request)
 
         # Sanitize key
         key = key.rstrip('/')
