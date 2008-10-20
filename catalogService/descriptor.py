@@ -329,9 +329,6 @@ class _Descriptions(_ExtendEnabledMixin, _NoCharDataNode):
     def getDescriptions(self):
         return dict((x.getAttribute('lang'), x.getText()) for x in self)
 
-class _SupportedFile(xmllib.StringNode):
-    name = 'file'
-
 class _MetadataNode(_NoCharDataNode):
     name = 'metadata'
 
@@ -591,22 +588,6 @@ def _toStr(val):
 class _DescriptorData(xmllib.BaseNode):
     name = 'descriptorData'
 
-class _FactoryDataFieldName(xmllib.StringNode):
-    name = 'name'
-
-class _FactoryDataFieldValue(xmllib.BaseNode):
-    name = 'value'
-
-class _FactoryDataFieldValues(_ExtendEnabledMixin, _NoCharDataNode):
-    name = 'values'
-
-    _nodeDescription = [
-        (_FactoryDataFieldValue, None),
-    ]
-
-class _FactoryDataFieldModified(xmllib.BooleanNode):
-    name = 'modified'
-
 class _DescriptorDataField(object):
     __slots__ = [ '_node', '_nodeDescriptor' ]
     def __init__(self, node, nodeDescriptor, checkConstraints = True):
@@ -646,47 +627,6 @@ class _DescriptorDataField(object):
 
     def getElementTree(self, parent = None):
         return self._node.getElementTree(parent = parent)
-
-class _FactoryDataField(_NoCharDataNode):
-    name = 'field'
-
-    _nodeDescription = [
-        (_FactoryDataFieldName, None),
-        (_FactoryDataFieldValues, None),
-        (_FactoryDataFieldValue, None),
-        (_FactoryDataFieldModified, None)
-    ]
-
-class _FactoryData(_ExtendEnabledMixin, _NoCharDataNode):
-    name = 'factoryData'
-
-    _nodeDescription = [
-        (_FactoryDataField, None),
-    ]
-
-class PresentationDataField(object):
-    __slots__ = [ 'name', 'type', 'values', 'value']
-    def __init__(self, node, fieldDefinition):
-        self.name = node.name
-        if fieldDefinition is None:
-            # No field definition available; trust what the XML data says
-            self.type = node.type
-            multi = None
-        else:
-            self.type = fieldDefinition.type
-            multi = fieldDefinition.multiple
-
-        if multi or node.values is not None:
-            self.value = None
-            self.values = [ _cast(x.getText(), self.type) for x in node.values ]
-        else:
-            self.value = _cast(node.value.getText(), self.type)
-            self.values = None
-
-    def getValue(self):
-        if self.values is None:
-            return self.value
-        return self.values
 
 def _cast(val, typeStr):
     if typeStr == 'int':
@@ -763,63 +703,3 @@ def _validateSingleValue(value, valueType, description, constraints):
             continue
 
     return errorList
-
-# The following code is here for completeness, it is not used in the package
-# creator code, except for being in the base factory class.
-from xml.dom import minidom
-
-def xmlToDict(stream):
-    dct = xmlToDictWithModified(stream)
-    return dict((x[0], x[1][0]) for x in dct.iteritems())
-
-def xmlToDictWithModified(stream):
-    dom = minidom.parse(stream)
-    ret = {}
-
-    children = dom.getElementsByTagName('factoryData')
-    if not children:
-        return ret
-
-    children = children[0].getElementsByTagName('field')
-    for child in children:
-        nodeName = getFirstNodeValue(child.getElementsByTagName('name'))
-        nodeType = getFirstNodeValue(child.getElementsByTagName('type'), 'str')
-
-        nodeValues = child.getElementsByTagName('values')
-        nodeModified = getFirstNodeValue( \
-                child.getElementsByTagName('modified'), 'false')
-        if nodeValues:
-            values = getChildValuesByName(nodeValues[0], 'value')
-        else:
-            values = getChildValuesByName(child, 'value')
-            if not values:
-                continue
-        values = [ castValue(x, nodeType) for x in values ]
-        if not nodeValues:
-            values = values[0]
-        modified = nodeModified.upper() in ('TRUE', '1')
-        ret[nodeName] = (values, modified)
-    return ret
-
-def getChildValuesByName(node, childName):
-    values = [ getFirstNodeValue([c])
-               for c in node.getElementsByTagName(childName) ]
-    return [ x for x in values if x is not None ]
-
-def getFirstNodeValue(nodes, default = None):
-    if not nodes:
-        return default
-    node = nodes[0]
-    for child in [x for x in node.childNodes if x.nodeType == x.TEXT_NODE]:
-        return child.data
-    return None
-
-def castValue(value, valueType):
-    if valueType == "int":
-        return int(value)
-    if valueType == "bool":
-        return value.upper() in ['TRUE', '1']
-    if valueType == "str":
-        return value.encode('utf-8')
-    return value
-
