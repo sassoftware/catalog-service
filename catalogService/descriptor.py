@@ -68,8 +68,7 @@ class _BaseClass(xmllib.SerializableObject):
         yield ("{%s}schemaLocation" % self.xmlSchemaNamespace,
                self.xmlSchemaLocation)
 
-class ConfigurationDescriptor(_BaseClass):
-    "Class for representing the factory definition"
+class BaseDescriptor(_BaseClass):
 
     xmlSchemaLocation = 'http://www.rpath.org/permanent/descriptor-1.0.xsd' \
                         ' descriptor-1.0.xsd'
@@ -168,11 +167,17 @@ class ConfigurationDescriptor(_BaseClass):
 
     @staticmethod
     def _getName():
-        return 'factory'
+        return _DescriptorNode.name
 
     def _iterChildren(self):
         yield self._metadata
         yield self._dataFields
+
+class ConfigurationDescriptor(BaseDescriptor):
+    "Class for representing the configuration descriptor definition"
+
+class CredentialsDescriptor(BaseDescriptor):
+    "Class for representing the credentials descriptor definition"
 
 class Description(object):
     __slots__ = [ 'description', 'lang' ]
@@ -484,7 +489,7 @@ class _DescriptorNode(_NoCharDataNode):
     ]
 
 class DescriptorData(_BaseClass):
-    "Class for representing the factory data"
+    "Class for representing the descriptor data"
     __slots__ = ['_fields', '_descriptor', '_fieldsMap']
 
     def __init__(self, fromStream = None, validate = False, descriptor = None):
@@ -566,10 +571,17 @@ class DescriptorData(_BaseClass):
 
     @staticmethod
     def _getName():
-        return 'factoryData'
+        return _DescriptorData.name
 
     def _iterChildren(self):
         return iter(self._fields)
+
+    def _getLocalNamespaces(self):
+        # We have no schema for descriptor data
+        return {}
+
+    def _iterAttributes(self):
+        return []
 
 def _toStr(val):
     if isinstance(val, (str, unicode)):
