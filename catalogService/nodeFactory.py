@@ -7,7 +7,9 @@ import urllib
 from catalogService import cloud_types
 
 class NodeFactory(object):
-    __slots__ = [ 'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
+    __slots__ = [ 'cloudConfigurationDescriptorFactory',
+        'credentialsDescriptorFactory',
+        'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'environmentCloudFactory', 'environmentFactory',
         'imageFactory', 'instanceFactory',
@@ -37,7 +39,16 @@ class NodeFactory(object):
         node.setId(self.getCloudUrl(node))
         return node
 
+    def newCloudConfigurationDescriptor(self, *args, **kwargs):
+        node = self.cloudConfigurationDescriptorFactory(*args, **kwargs)
+        return node
+
+    def newCredentialsDescriptor(self, *args, **kwargs):
+        node = self.credentialsDescriptorFactory(*args, **kwargs)
+        return node
+
     def newCredentials(self, valid, fields = None):
+        # XXX deprecated
         if fields is None:
             fields = []
         fieldsNode = self.credentialsFieldsFactory()

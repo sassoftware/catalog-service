@@ -1,9 +1,12 @@
 from catalogService import nodeFactory
+from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import environment, keypairs, securityGroups
 
 class BaseDriver(object):
     # Enumerate the factories we support.
+    CloudConfigurationDescriptor = descriptor.ConfigurationDescriptor
+    CredentialsDescriptor = descriptor.CredentialsDescriptor
     Cloud            = clouds.BaseCloud
     CloudType        = cloud_types.CloudType
     Credentials      = credentials.BaseCredentials
@@ -48,6 +51,8 @@ class BaseDriver(object):
     def _createNodeFactory(self):
         factory = nodeFactory.NodeFactory(
             cloudType = self.cloudType,
+            cloudConfigurationDescriptorFactory = self.CloudConfigurationDescriptor,
+            credentialsDescriptorFactory = self.CredentialsDescriptor,
             cloudTypeFactory = self.CloudType,
             cloudFactory = self.Cloud,
             credentialsFactory = self.Credentials,
@@ -106,4 +111,22 @@ class BaseDriver(object):
         node = self._nodeFactory.newCloudType(
             id = cloudTypeName,
             cloudTypeName = cloudTypeName)
+        return node
+
+    def getCredentialsDescriptor(self):
+        node = self._nodeFactory.newCredentialsDescriptor()
+        return node
+
+    def getCloudConfigurationDescriptor(self):
+        desc = self._configDescriptor
+        node = self._nodeFactory.newCloudConfigurationDescriptor()
+        node.setDisplayName(desc['displayName'])
+        for lang, description in desc['descriptions']:
+            node.addDescription(description, lang = lang)
+        for dataField in desc['fields']:
+            node.addDataField(dataField['name'], type = dataField['type'],
+                required = dataField.get('required'),
+                descriptions = [ descriptor.Description(*x)
+                    for x in dataField.get('descriptions', [])],
+                constraints = dataField.get('constraints', []))
         return node
