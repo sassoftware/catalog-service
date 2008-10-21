@@ -45,6 +45,7 @@ class BaseDriver(object):
         # get an instance that is specific to this particular request.
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
+        self._nodeFactory.userId = request.auth[0]
         return self.__class__(self._cfg, self.cloudType, cloudName,
                               self._nodeFactory, request.mintClient)
 

@@ -4,6 +4,7 @@
 
 import urllib
 
+from catalogService import clouds
 from catalogService import cloud_types
 
 class NodeFactory(object):
@@ -14,7 +15,7 @@ class NodeFactory(object):
         'environmentCloudFactory', 'environmentFactory',
         'imageFactory', 'instanceFactory',
         'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
-        'baseUrl', 'cloudType', 'cloudName']
+        'baseUrl', 'cloudType', 'cloudName', 'userId']
 
     def __init__(self, **kwargs):
         for slot in self.__slots__:
@@ -36,7 +37,15 @@ class NodeFactory(object):
 
     def newCloud(self, *args, **kwargs):
         node = self.cloudFactory(*args, **kwargs)
-        node.setId(self.getCloudUrl(node))
+        cloudId = self.getCloudUrl(node)
+        node.setId(cloudId)
+        cloudType = clouds.Type(href = self._getCloudTypeUrl(self.cloudType)).characters(self.cloudType)
+        node.setType(cloudType)
+        node.setImages(clouds.Images(href = self.join(cloudId, 'images')))
+        node.setInstances(clouds.Instances(href = self.join(cloudId, 'instances')))
+        node.setUserCredentials(clouds.UserCredentials(href = self.join(cloudId, 'users', self.userId, 'credentials')))
+        node.setConfiguration(clouds.Configuration(href = self.join(cloudId,
+            'configuration')))
         return node
 
     def newCloudConfigurationDescriptor(self, *args, **kwargs):
@@ -62,11 +71,13 @@ class NodeFactory(object):
     def newImage(self, *args, **kwargs):
         node = self.imageFactory(*args, **kwargs)
         node.setId(self.getImageUrl(node))
+        node.setCloudType(self.cloudType)
         return node
 
     def newInstance(self, *args, **kwargs):
         node = self.instanceFactory(*args, **kwargs)
         node.setId(self.getInstanceUrl(node))
+        node.setCloudType(self.cloudType)
         return node
 
     def newEnvironment(self, *args, **kwargs):
@@ -76,6 +87,7 @@ class NodeFactory(object):
     def newEnvironmentCloud(self, *args, **kwargs):
         node = self.environmentCloudFactory(*args, **kwargs)
         node.setId(self.getCloudUrl(node))
+        node.setCloudType(self.cloudType)
         return node
 
     def newInstanceType(self, *args, **kwargs):
@@ -99,7 +111,7 @@ class NodeFactory(object):
         return '/'.join(args)
 
     def getCloudUrl(self, node):
-        return self._getCloudUrl(node.getCloudType(), node.getCloudName())
+        return self._getCloudUrl(self.cloudType, node.getCloudName())
 
     def getImageUrl(self, node):
         return self.join(self.getCloudUrl(node), 'images',
