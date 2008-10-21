@@ -51,6 +51,7 @@ class BaseNode(xmllib.BaseNode):
         return self.tag
 
     def _iterChildren(self):
+        sublementsFound = False
         for fName in self.__slots__:
             if fName.startswith('_'):
                 continue
@@ -58,7 +59,13 @@ class BaseNode(xmllib.BaseNode):
                 continue
             fVal = getattr(self, fName)
             if hasattr(fVal, "getElementTree"):
+                subelementsFound = True
                 yield fVal
+        # We don't allow for mixed content
+        if not sublementsFound:
+            text = self.getText()
+            if text:
+                yield text
 
     def _iterAttributes(self):
         ret = {}
