@@ -141,7 +141,7 @@ class EC2Client(baseDriver.BaseDriver):
                  required = True),
             dict(name = 'cloudAlias', type = 'str',
                 descriptions = [(None, 'Cloud Alias')], required = True),
-            dict(name = 'fullDescription', type = str,
+            dict(name = 'fullDescription', type = 'str',
                 descriptions = [(None, 'Full Description')], required = True),
         ]
     )
