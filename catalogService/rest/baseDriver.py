@@ -129,5 +129,7 @@ class BaseDriver(object):
                 required = dataField.get('required'),
                 descriptions = [ descriptor.Description(x[1], x[0])
                     for x in dataField.get('descriptions', [])],
-                constraints = dataField.get('constraints', []))
+                constraints = dataField.get('constraints', []),
+                constraintsDescriptions = [ descriptor.Description(x[1], x[0])
+                    for x in dataField.get('constraintsDescriptions', [])])
         return node

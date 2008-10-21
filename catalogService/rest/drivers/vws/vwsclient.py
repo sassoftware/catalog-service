@@ -68,6 +68,31 @@ class VWSClient(baseDriver.BaseDriver):
         ('sshPubKey', 'sshPubKey'),
     ]
 
+    _configDescriptor = dict(
+        displayName = 'Globus Workspaces Cloud Configuration',
+        descriptions = [ (None, 'Configure Globus Workspaces Cloud') ],
+        fields = [
+            dict(name = 'cloudAlias', type = 'str',
+                descriptions = [(None, 'Cloud Alias')], required = True),
+            dict(name = 'fullDescription', type = 'str',
+                descriptions = [(None, 'Full Description')], required = True),
+            dict(name = 'factoryName', type = 'str',
+                descriptions = [(None, 'Factory Name')], required = True),
+            dict(name = 'factoryIdentity', type = 'str',
+                descriptions = [(None, 'Factory Identity (x509 subject)')], required = True),
+            dict(name = 'repositoryName', type = 'str',
+                descriptions = [(None, 'GridFTP Repository Name')], required = True),
+            dict(name = 'repositoryIdentity', type = 'str',
+                descriptions = [(None, 'GridFTP Repository Identity (x509 subject)')], required = True),
+            dict(name = 'caCert', type = 'str',
+                descriptions = [(None, 'Certificate Authority (x509) Public Key')],
+                required = True,
+                constraints = [ dict(constraintName = 'length', value = 1024)],
+                constraintsDescriptions = [(None, "Maximum Length")]),
+        ]
+    )
+
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._instanceStore = None
