@@ -126,7 +126,7 @@ class BaseDescriptor(_BaseClass):
             [ dnodes.DescriptionNode.fromData(x.description, x.lang)
                 for x in descriptions ])
         df.constraints = dnodes._ConstraintsNode.fromData(constraints)
-        if df.constraints:
+        if df.constraints and constraintsDescriptions:
             df.constraints.descriptions = dnodes._Descriptions()
             # descriptions come first per XML schema. _ConstraintsNode.fromData
             # already defined the _children attribute, so we'll insert this
@@ -166,39 +166,6 @@ class BaseDescriptor(_BaseClass):
     def _iterChildren(self):
         yield self._metadata
         yield self._dataFields
-
-class ConfigurationDescriptor(BaseDescriptor):
-    "Class for representing the configuration descriptor definition"
-
-class CredentialsDescriptor(BaseDescriptor):
-    "Class for representing the credentials descriptor definition"
-
-class Description(object):
-    __slots__ = [ 'description', 'lang' ]
-    def __init__(self, description = None, lang = None, node = None):
-        if node is None:
-            self.description = description
-            self.lang = lang
-        else:
-            self.description = node.getText()
-            self.lang = node.getAttribute('lang')
-
-class PresentationField(object):
-    __slots__ = [ 'name', 'descriptions', 'type', 'multiple', 'default',
-                  'constraints', 'constraintsDescriptions', 'required' ]
-    def __init__(self, node):
-        self.name = node.name
-        self.descriptions = node.descriptions.getDescriptions()
-        self.type = node.type
-        self.multiple = node.multiple
-        self.default = node.default
-        self.required = node.required
-        self.constraintsDescriptions = {}
-        if node.constraints:
-            self.constraints = node.constraints.presentation()
-            self.constraintsDescriptions = node.constraints.getDescriptions()
-        else:
-            self.constraints = []
 
 class DescriptorData(_BaseClass):
     "Class for representing the descriptor data"
