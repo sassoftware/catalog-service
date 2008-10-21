@@ -25,8 +25,7 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
 class EC2_Image(images.BaseImage):
     "EC2 Image"
 
-    _constructorOverrides = dict(cloudName = 'aws', cloudType = 'ec2',
-        cloudAlias = 'ec2')
+    _constructorOverrides = dict(cloudName = 'aws', cloudAlias = 'ec2')
 
 class EC2_Instance(instances.BaseInstance):
     "EC2 Instance"

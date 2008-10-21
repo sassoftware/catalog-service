@@ -22,7 +22,6 @@ class HttpNotFound(Exception):
 
 class VWS_Cloud(clouds.BaseCloud):
     "Clobus Virtual Workspaces Cloud"
-    _constructorOverrides = dict(cloudType = 'vws')
 
 class VWS_Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
