@@ -245,8 +245,10 @@ class VWSClient(baseDriver.BaseDriver):
         return bool(cloudConfig)
 
     def drvSetUserCredentials(self, fields):
-        # We will not implement this yet, we need to differentiate between
-        # config data and credentials
+        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
+        store = self._getCredentialsDataStore()
+        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
+        # XXX validate
         valid = True
         node = self._nodeFactory.newCredentials(valid)
         return node
