@@ -137,6 +137,75 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
   </dataFields>
 </descriptor>"""
 
+_credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>EC2 User Credentials</displayName>
+    <descriptions>
+      <desc>User Credentials for Amazon EC2</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>accountId</name>
+      <descriptions>
+        <desc>Amazon Account Number</desc>
+      </descriptions>
+      <type>int</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>12</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>publicAccessKeyId</name>
+      <descriptions>
+        <desc>Access Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>100</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>secretAccessKey</name>
+      <descriptions>
+        <desc>Secret Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>256</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>sshPrivKey</name>
+      <descriptions>
+        <desc>SSH Private Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>
+"""
+
 class EC2Client(baseDriver.BaseDriver):
     _cloudType = 'ec2'
 
@@ -168,6 +237,7 @@ class EC2Client(baseDriver.BaseDriver):
         ('awsSecretAccessKey', 'awsSecretAccessKey') ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
+    credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
     def drvCreateCloudClient(self, credentials):
         for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):

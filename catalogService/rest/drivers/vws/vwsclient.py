@@ -124,6 +124,61 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
   </dataFields>
 </descriptor>"""
 
+_credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>Globus Workspaces User Credentials</displayName>
+    <descriptions>
+      <desc>User Credentials for Globus Workspaces</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>userCert</name>
+      <descriptions>
+        <desc>X509 User Certificate</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>userKey</name>
+      <descriptions>
+        <desc>X509 User Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>sshPubKey</name>
+      <descriptions>
+        <desc>SSH Public Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>
+"""
+
 class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     EnvironmentCloud = VWS_EnvironmentCloud
@@ -139,6 +194,7 @@ class VWSClient(baseDriver.BaseDriver):
     ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
+    credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)

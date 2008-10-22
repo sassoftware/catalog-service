@@ -117,8 +117,9 @@ class BaseDriver(object):
         return node
 
     def getCredentialsDescriptor(self):
-        node = self._nodeFactory.newCredentialsDescriptor()
-        return node
+        descr = descriptor.ConfigurationDescriptor(
+            fromStream = self.credentialsDescriptorXmlData)
+        return descr
 
     def getCloudConfigurationDescriptor(self):
         descr = descriptor.ConfigurationDescriptor(
