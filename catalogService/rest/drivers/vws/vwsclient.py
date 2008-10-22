@@ -16,10 +16,6 @@ from catalogService.rest import baseDriver
 
 import globuslib
 
-# XXX should be pushed to errors
-class HttpNotFound(Exception):
-    pass
-
 class VWS_Cloud(clouds.BaseCloud):
     "Clobus Virtual Workspaces Cloud"
 
@@ -54,6 +50,80 @@ class VWS_InstanceTypes(instances.InstanceTypes):
 class VWS_ImageHandler(images.Handler):
     imageClass = VWS_Image
 
+_configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>Globus Workspaces Cloud Configuration</displayName>
+    <descriptions>
+      <desc>Configure Globus Workspaces Cloud</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>alias</name>
+      <descriptions>
+        <desc>Cloud Alias</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>description</name>
+      <descriptions>
+        <desc>Full Description</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>factory</name>
+      <descriptions>
+        <desc>Factory Name</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>factoryIdentity</name>
+      <descriptions>
+        <desc>Factory Identity (x509 subject)</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>repository</name>
+      <descriptions>
+        <desc>GridFTP Repository Name</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>repositoryIdentity</name>
+      <descriptions>
+        <desc>GridFTP Repository Identity (x509 subject)</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>caCert</name>
+      <descriptions>
+        <desc>Certificate Authority (x509) Public Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Length</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>"""
+
 class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     EnvironmentCloud = VWS_EnvironmentCloud
@@ -68,58 +138,55 @@ class VWSClient(baseDriver.BaseDriver):
         ('sshPubKey', 'sshPubKey'),
     ]
 
-    _configDescriptor = dict(
-        displayName = 'Globus Workspaces Cloud Configuration',
-        descriptions = [ (None, 'Configure Globus Workspaces Cloud') ],
-        fields = [
-            dict(name = 'cloudAlias', type = 'str',
-                descriptions = [(None, 'Cloud Alias')], required = True),
-            dict(name = 'fullDescription', type = 'str',
-                descriptions = [(None, 'Full Description')], required = True),
-            dict(name = 'factoryName', type = 'str',
-                descriptions = [(None, 'Factory Name')], required = True),
-            dict(name = 'factoryIdentity', type = 'str',
-                descriptions = [(None, 'Factory Identity (x509 subject)')], required = True),
-            dict(name = 'repositoryName', type = 'str',
-                descriptions = [(None, 'GridFTP Repository Name')], required = True),
-            dict(name = 'repositoryIdentity', type = 'str',
-                descriptions = [(None, 'GridFTP Repository Identity (x509 subject)')], required = True),
-            dict(name = 'caCert', type = 'str',
-                descriptions = [(None, 'Certificate Authority (x509) Public Key')],
-                required = True,
-                constraints = [ dict(constraintName = 'length', value = 1024)],
-                constraintsDescriptions = [(None, "Maximum Length")]),
-        ]
-    )
-
+    configurationDescriptorXmlData = _configurationDescriptorXmlData
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._instanceStore = None
 
-    def _getCloudCredentialsForUser(self):
-        return self._getCredentialsForCloudName(self.cloudName)
+    @classmethod
+    def isDriverFunctional(cls):
+        return globuslib.WorkspaceCloudClient.isFunctional()
 
     def drvCreateCloudClient(self, credentials):
+        cloudConfig = self._getCloudConfiguration(self.cloudName)
         props = globuslib.WorkspaceCloudProperties()
-        props.set('vws.factory', credentials['factory'])
-        props.set('vws.repository', credentials['repository'])
-        props.set('vws.factory.identity', credentials['factoryIdentity'])
-        props.set('vws.repository.identity', credentials['repositoryIdentity'])
-        cli = globuslib.WorkspaceCloudClient(props, credentials['caCert'],
-            credentials['userCert'], credentials['userKey'],
-            credentials['sshPubKey'], credentials['alias'])
-        keyPrefix = "%s/%s" % (self.cloudName.replace('/', '_'),
+        userCredentials = credentials
+        props.set('vws.factory', cloudConfig['factory'])
+        props.set('vws.repository', cloudConfig['repository'])
+        props.set('vws.factory.identity', cloudConfig['factoryIdentity'])
+        props.set('vws.repository.identity', cloudConfig['repositoryIdentity'])
+        cli = globuslib.WorkspaceCloudClient(props, cloudConfig['caCert'],
+            userCredentials['userCert'], userCredentials['userKey'],
+            userCredentials['sshPubKey'], cloudConfig['alias'])
+        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
                                cli.userCertHash)
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
 
+    def _enumerateConfiguredClouds(self):
+        if not self.isDriverFunctional():
+            return []
+        store = self._getConfigurationDataStore()
+        ret = []
+        for cloudName in sorted(store.enumerate()):
+            ret.append(self._getCloudConfiguration(cloudName))
+        return ret
+
+    def drvCreateCloud(self, descriptorData):
+        cloudName = descriptorData.getField('factory')
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        store = self._getConfigurationDataStore()
+        self.configureCloud(store, config)
+        return self._createCloudNode(config)
+
+    def _getCloudCredentialsForUser(self):
+        return self._getCredentialsForCloudName(self.cloudName)[1]
+
     def isValidCloudName(self, cloudName):
-        try:
-            creds = self._getCredentialsForCloudName(cloudName)
-        except HttpNotFound:
-            return False
-        return True
+        cloudConfig = self._getCloudConfiguration(cloudName)
+        return bool(cloudConfig)
 
     def setUserCredentials(self, fields):
         # We will not implement this yet, we need to differentiate between
@@ -130,13 +197,15 @@ class VWSClient(baseDriver.BaseDriver):
 
     def listClouds(self):
         ret = clouds.BaseClouds()
-        for cloudCred in self._getCredentials():
-            cName = cloudCred['factory']
-            cld = self._nodeFactory.newCloud(cloudName = cName,
-                             description = cloudCred['description'],
-                             cloudAlias = cloudCred['alias'])
-            ret.append(cld)
+        for cloudConfig in self._enumerateConfiguredClouds():
+            ret.append(self._createCloudNode(cloudConfig))
         return ret
+
+    def _createCloudNode(self, cloudConfig):
+        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['factory'],
+                         description = cloudConfig['description'],
+                         cloudAlias = cloudConfig['alias'])
+        return cld
 
     def launchInstance(self, xmlString, requestIPAddress):
         client = self.client
@@ -472,34 +541,52 @@ class VWSClient(baseDriver.BaseDriver):
         for key, methodName in images.buildToNodeFieldMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
 
-    def _getCredentials(self):
-        if not globuslib.WorkspaceCloudClient.isFunctional():
-            return []
+    @classmethod
+    def _readCredentialsFromStore(cls, store, userId, cloudName):
+        userId = userId.replace('/', '_')
+        return dict(
+            (os.path.basename(k), store.get(k))
+                for k in store.enumerate("%s/%s" % (userId, cloudName)))
 
-        store = self._getCredentialsDataStore()
+    @classmethod
+    def _writeCredentialsToStore(cls, store, userId, cloudName, credentials):
+        userId = userId.replace('/', '_')
+        for k, v in credentials.iteritems():
+            key = "%s/%s/%s" % (userId, cloudName, k)
+            store.set(key, v)
 
-        # XXX in the future we'll have the credentials split by user
-        user = "demo"
-        clouds = store.enumerate(user)
-        keys = ['alias', 'factory', 'repository', 'factoryIdentity',
-            'repositoryIdentity', 'caCert', 'userCert', 'userKey',
-            'sshPubKey', 'description', ]
-        ret = []
-        for cloud in clouds:
-            d = dict((k, store.get("%s/%s" % (cloud, k)))
-                for k in keys)
-            ret.append(d)
-        return ret
+    @classmethod
+    def _sanitizeKey(cls, key):
+        return key.replace('/', '_')
+
+    @classmethod
+    def configureCloud(cls, store, config):
+        cloudName = cls._sanitizeKey(config['factory'])
+        for k, v in config.iteritems():
+            store.set("%s/%s" % (cloudName, k), v)
+
+    def _getCloudConfiguration(self, cloudName):
+        store = self._getConfigurationDataStore(cloudName)
+        return dict((k, store.get(k)) for k in store.enumerate())
 
     def _getCredentialsForCloudName(self, cloudName):
-        creds = [ x for x in self._getCredentials()
-            if x['factory'] == cloudName ]
-        if creds:
-            return creds[0]
-        raise errors.HttpNotFound
+        cloudConfig = self._getCloudConfiguration(cloudName)
+        if not cloudConfig:
+            return {}, {}
+
+        store = self._getCredentialsDataStore()
+        creds = self._readCredentialsFromStore(store, self.userId, cloudName)
+        return cloudConfig, creds
 
     def _getCredentialsDataStore(self):
-        path = self._cfg.storagePath + '/credentials'
+        path = os.path.join(self._cfg.storagePath, 'credentials')
+        cfg = storage.StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
+
+    def _getConfigurationDataStore(self, cloudName = None):
+        path = os.path.join(self._cfg.storagePath, 'configuration')
+        if cloudName is not None:
+            path += '/' + self._sanitizeKey(cloudName)
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 

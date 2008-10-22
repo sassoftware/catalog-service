@@ -101,6 +101,41 @@ class LaunchInstanceParameters(object):
             return None
         return urllib.unquote(os.path.basename(value))
 
+_configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>EC2 Cloud Configuration</displayName>
+    <descriptions>
+      <desc>Configure AWS EC2 Cloud</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>name</name>
+      <descriptions>
+        <desc>Name</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>cloudAlias</name>
+      <descriptions>
+        <desc>Cloud Alias</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+    <field>
+      <name>fullDescription</name>
+      <descriptions>
+        <desc>Full Description</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>"""
 
 class EC2Client(baseDriver.BaseDriver):
     _cloudType = 'ec2'
@@ -132,18 +167,7 @@ class EC2Client(baseDriver.BaseDriver):
         ('awsAccessKeyId', 'awsPublicAccessKeyId'),
         ('awsSecretAccessKey', 'awsSecretAccessKey') ]
 
-    _configDescriptor = dict(
-        displayName = 'EC2 Cloud Configuration',
-        descriptions = [ (None, 'Configure AWS EC2 Cloud') ],
-        fields = [
-            dict(name = 'name', type = 'str', descriptions = [(None, 'Name')],
-                 required = True),
-            dict(name = 'cloudAlias', type = 'str',
-                descriptions = [(None, 'Cloud Alias')], required = True),
-            dict(name = 'fullDescription', type = 'str',
-                descriptions = [(None, 'Full Description')], required = True),
-        ]
-    )
+    configurationDescriptorXmlData = _configurationDescriptorXmlData
 
     def drvCreateCloudClient(self, credentials):
         for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
@@ -354,3 +378,4 @@ class EC2Client(baseDriver.BaseDriver):
                 description = CATALOG_DEF_SECURITY_GROUP_DESC)
         ret.insert(0, defSecurityGroup)
         return ret
+

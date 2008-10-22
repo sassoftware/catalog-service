@@ -89,9 +89,10 @@ class BaseStorage(object):
             return default
         return self.__getitem__(key)
 
-    def enumerate(self, keyPrefix):
+    def enumerate(self, keyPrefix = None):
         """Enumerate keys"""
-        keyPrefix = self._sanitizeKey(keyPrefix)
+        if keyPrefix is not None:
+            keyPrefix = self._sanitizeKey(keyPrefix)
         return self._real_enumerate(keyPrefix)
 
     def exists(self, key):
@@ -234,13 +235,18 @@ class DiskStorage(BaseStorage):
         fpath = self._getFileForKey(key)
         util.rmtree(fpath, ignore_errors = True)
 
-    def _real_enumerate(self, keyPrefix):
-        # Get rid of trailing /
-        keyPrefix = keyPrefix.rstrip(self.separator)
-        collection = self.separator.join([self.cfg.storagePath, keyPrefix])
+    def _real_enumerate(self, keyPrefix = None):
+        if keyPrefix is None:
+            collection = self.cfg.storagePath
+        else:
+            # Get rid of trailing /
+            keyPrefix = keyPrefix.rstrip(self.separator)
+            collection = self.separator.join([self.cfg.storagePath, keyPrefix])
         if not os.path.isdir(collection):
             return []
         dirContents = sorted(os.listdir(collection))
+        if keyPrefix is None:
+            return dirContents
         return [ self.separator.join([keyPrefix, x]) for x in dirContents ]
 
     def _real_is_collection(self, key):

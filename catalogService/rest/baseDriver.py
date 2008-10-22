@@ -24,7 +24,8 @@ class BaseDriver(object):
     _cloudType = None
 
     def __init__(self, cfg, cloudType, cloudName=None,
-                 nodeFactory=None, mintClient=None):
+                 nodeFactory=None, mintClient=None, userId = None):
+        self.userId = userId
         self.cloudType = cloudType
         self.cloudName = cloudName
         self._cfg = cfg
@@ -34,6 +35,7 @@ class BaseDriver(object):
             nodeFactory = self._createNodeFactory()
         self._nodeFactory = nodeFactory
         self._mintClient = mintClient
+        self._nodeFactory.userId = userId
 
     def isValidCloudName(self, cloudName):
         raise NotImplementedError
@@ -45,9 +47,9 @@ class BaseDriver(object):
         # get an instance that is specific to this particular request.
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
-        self._nodeFactory.userId = request.auth[0]
         return self.__class__(self._cfg, self.cloudType, cloudName,
-                              self._nodeFactory, request.mintClient)
+                              self._nodeFactory, request.mintClient,
+                              userId = request.auth[0])
 
     def _createNodeFactory(self):
         factory = nodeFactory.NodeFactory(
@@ -119,17 +121,19 @@ class BaseDriver(object):
         return node
 
     def getCloudConfigurationDescriptor(self):
-        desc = self._configDescriptor
-        node = self._nodeFactory.newCloudConfigurationDescriptor()
-        node.setDisplayName(desc['displayName'])
-        for lang, description in desc['descriptions']:
-            node.addDescription(description, lang = lang)
-        for dataField in desc['fields']:
-            node.addDataField(dataField['name'], type = dataField['type'],
-                required = dataField.get('required'),
-                descriptions = [ descriptor.Description(x[1], x[0])
-                    for x in dataField.get('descriptions', [])],
-                constraints = dataField.get('constraints', []),
-                constraintsDescriptions = [ descriptor.Description(x[1], x[0])
-                    for x in dataField.get('constraintsDescriptions', [])])
-        return node
+        descr = descriptor.ConfigurationDescriptor(
+            fromStream = self.configurationDescriptorXmlData)
+        return descr
+
+    def createCloud(self, cloudConfigurationData):
+        # Grab the configuration descriptor
+        descr = self.getCloudConfigurationDescriptor()
+        # Instantiate the descriptor data
+        try:
+            descrData = descriptor.DescriptorData(
+                fromStream = cloudConfigurationData,
+                descriptor = descr)
+        except descriptor.InvalidXML:
+            # XXX
+            raise
+        return self.drvCreateCloud(descrData)

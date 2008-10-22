@@ -84,3 +84,7 @@ class CloudTypeModelController(BaseCloudController):
     def index(self, request):
         'iterate available clouds'
         return XmlResponse(self.driver(request).listClouds())
+
+    def create(self, request):
+        return XmlResponse(self.driver(request).createCloud(request.read()))
+
