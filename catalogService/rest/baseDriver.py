@@ -101,10 +101,13 @@ class BaseDriver(object):
 
     def getUserCredentials(self):
         cred = self.credentials
-        # Map rbuilder credentials to a different name structure
-        fields = [ (x, cred[y]) for (x, y) in self._credNameMap ]
         # XXX We should validate the credentials too
-        return self._nodeFactory.newCredentials(valid = True, fields = fields)
+        descr = self.getCredentialsDescriptor()
+        descrData = descriptor.DescriptorData(descriptor = descr)
+        for descrName, localName in self._credNameMap:
+            descrData.addField(descrName, value = cred[localName])
+        descrData.checkConstraints()
+        return descrData
 
     def getCloudType(self):
         node = self._createCloudTypeNode(self._cloudType)

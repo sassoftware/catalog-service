@@ -117,7 +117,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Length</desc>
         </descriptions>
-        <length>1024</length>
+        <length>4096</length>
       </constraints>
       <required>true</required>
     </field>
@@ -143,7 +143,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <length>1024</length>
+        <length>4096</length>
       </constraints>
       <required>true</required>
     </field>
@@ -157,7 +157,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <length>1024</length>
+        <length>4096</length>
       </constraints>
       <required>true</required>
     </field>
@@ -171,7 +171,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <length>1024</length>
+        <length>4096</length>
       </constraints>
       <required>true</required>
     </field>
@@ -244,7 +244,7 @@ class VWSClient(baseDriver.BaseDriver):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
 
-    def setUserCredentials(self, fields):
+    def drvSetUserCredentials(self, fields):
         # We will not implement this yet, we need to differentiate between
         # config data and credentials
         valid = True
