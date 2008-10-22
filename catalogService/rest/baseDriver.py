@@ -138,3 +138,19 @@ class BaseDriver(object):
             # XXX
             raise
         return self.drvCreateCloud(descrData)
+
+    def setUserCredentials(self, credentialsData):
+        # Authenticate
+        _ = self.credentials
+
+        # Grab the configuration descriptor
+        descr = self.getCredentialsDescriptor()
+        # Instantiate the descriptor data
+        try:
+            descrData = descriptor.DescriptorData(
+                fromStream = credentialsData,
+                descriptor = descr)
+        except descriptor.InvalidXML:
+            # XXX
+            raise
+        return self.drvSetUserCredentials(descrData)

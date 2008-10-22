@@ -256,11 +256,10 @@ class EC2Client(baseDriver.BaseDriver):
     def isValidCloudName(self, cloudName):
         return cloudName == 'aws'
 
-    def setUserCredentials(self, fields):
-        _ = self.credentials
-        awsAccountNumber = fields.get('awsAccountNumber')
-        awsAccessKeyId = fields.get('awsAccessKeyId')
-        awsSecretAccessKey = fields.get('awsSecretAccessKey')
+    def drvSetUserCredentials(self, fields):
+        awsAccountNumber = fields.getField('accountId')
+        awsAccessKeyId = fields.getField('publicAccessKeyId')
+        awsSecretAccessKey = fields.getField('secretAccessKey')
 
         valid = self._mintClient.setEC2CredentialsForUser(
             self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,

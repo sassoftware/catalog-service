@@ -47,14 +47,8 @@ class CredentialsController(BaseCloudController):
         dataLen = request.getContentLength()
         data = request.read(dataLen)
 
-        hdlr = credentials.Handler()
-        node = hdlr.parseString(data)
-        credFields = dict((x.getCredentialName(), x.getValue())
-            for x in node.getFields())
-
-        response = self.driver(request, cloudName).setUserCredentials(
-            credFields)
-        return XmlResponse(response)
+        return XmlResponse(self.driver(request, cloudName).setUserCredentials(
+            data))
 
 class UsersController(BaseCloudController):
     modelName = 'userName'
