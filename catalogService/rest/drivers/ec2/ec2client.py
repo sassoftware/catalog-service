@@ -22,6 +22,8 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
         ('tcp',  8003 ,      8003),
 )
 
+EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
+
 class EC2_Image(images.BaseImage):
     "EC2 Image"
 
@@ -36,7 +38,7 @@ class EC2_Cloud(clouds.BaseCloud):
     "EC2 Cloud"
 
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
-    _constructorOverrides['description'] = 'Amazon Elastic Compute Cloud'
+    _constructorOverrides['description'] = EC2_DESCRIPTION
 
 class EC2_EnvironmentCloud(environment.BaseCloud):
     "EC2 Environment Cloud"
@@ -232,6 +234,10 @@ class EC2Client(baseDriver.BaseDriver):
                 raise errors.MissingCredentials()
         return EC2Connection(credentials['awsPublicAccessKeyId'],
                              credentials['awsSecretAccessKey'])
+
+    @classmethod
+    def drvGetCloudConfiguration(cls):
+        return dict(name = 'aws', cloudAlias = 'ec2', fullDescription = EC2_DESCRIPTION)
 
     def _getCloudCredentialsForUser(self):
         try:

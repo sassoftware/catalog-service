@@ -205,7 +205,7 @@ class VWSClient(baseDriver.BaseDriver):
         return globuslib.WorkspaceCloudClient.isFunctional()
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self._getCloudConfiguration(self.cloudName)
+        cloudConfig = self.drvGetCloudConfiguration()
         props = globuslib.WorkspaceCloudProperties()
         userCredentials = credentials
         props.set('vws.factory', cloudConfig['factory'])
@@ -228,6 +228,9 @@ class VWSClient(baseDriver.BaseDriver):
         for cloudName in sorted(store.enumerate()):
             ret.append(self._getCloudConfiguration(cloudName))
         return ret
+
+    def drvGetCloudConfiguration(self):
+        return self._getCloudConfiguration(self.cloudName)
 
     def drvCreateCloud(self, descriptorData):
         cloudName = descriptorData.getField('factory')

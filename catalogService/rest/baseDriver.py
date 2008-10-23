@@ -157,3 +157,17 @@ class BaseDriver(object):
             # XXX
             raise
         return self.drvSetUserCredentials(descrData)
+
+    def getConfiguration(self):
+        # Authenticate
+        _ = self.credentials
+
+        # Grab the configuration descriptor
+        descr = self.getCloudConfigurationDescriptor()
+        descrData = descriptor.DescriptorData(descriptor = descr)
+
+        cloudConfig = self.drvGetCloudConfiguration()
+        for k, v in cloudConfig.iteritems():
+            descrData.addField(k, value = v)
+        descrData.checkConstraints()
+        return descrData

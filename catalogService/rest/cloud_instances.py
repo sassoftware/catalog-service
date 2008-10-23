@@ -50,6 +50,10 @@ class CredentialsController(BaseCloudController):
         return XmlResponse(self.driver(request, cloudName).setUserCredentials(
             data))
 
+class ConfigurationController(BaseCloudController):
+    def index(self, request, cloudName):
+        return XmlResponse(self.driver(request, cloudName).getConfiguration())
+
 class UsersController(BaseCloudController):
     modelName = 'userName'
 
@@ -61,7 +65,8 @@ class CloudTypeModelController(BaseCloudController):
 
     modelName = 'cloudName'
 
-    urls = dict(images = ImagesController,
+    urls = dict(configuration = ConfigurationController,
+                images = ImagesController,
                 instances = InstancesController,
                 users = UsersController,
                 instanceTypes = InstanceTypesController)
