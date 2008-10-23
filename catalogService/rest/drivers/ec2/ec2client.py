@@ -153,7 +153,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <descriptions>
         <desc>Amazon Account Number</desc>
       </descriptions>
-      <type>int</type>
+      <type>str</type>
       <constraints>
         <descriptions>
           <desc>Maximum Characters</desc>
