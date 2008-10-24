@@ -256,7 +256,7 @@ class EC2Client(baseDriver.BaseDriver):
 
         valid = self._mintClient.setEC2CredentialsForUser(
             self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
-            awsSecretAccessKey)
+            awsSecretAccessKey, False)
 
         return self._nodeFactory.newCredentials(valid = valid)
 
