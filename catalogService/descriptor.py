@@ -48,6 +48,12 @@ class _BaseClass(xmllib.SerializableObject):
             raise errors.SchemaValidationError(str(e))
         self._postprocess(xmlObj)
 
+    def setId(self, nodeId):
+        self._id = nodeId
+
+    def getId(self):
+        return self._id
+
     def serialize(self, stream):
         binder = xmllib.DataBinder()
         stream.write(binder.toXml(self))
@@ -58,6 +64,8 @@ class _BaseClass(xmllib.SerializableObject):
     def _iterAttributes(self):
         yield ("{%s}schemaLocation" % self.xmlSchemaNamespace,
                self.xmlSchemaLocation)
+        if self._id is not None:
+            yield ("id", self._id)
 
     @classmethod
     def _createBinder(cls):
@@ -78,6 +86,9 @@ class _BaseClass(xmllib.SerializableObject):
     def _postprocess(self, xmlObj):
         if not isinstance(xmlObj, self._rootNodeClass):
             raise Exception("No data found")
+        nodeId = xmlObj.getAttribute('id')
+        if nodeId:
+            self.setId(nodeId)
 
 class BaseDescriptor(_BaseClass):
     _rootNodeClass = dnodes.DescriptorNode
@@ -159,6 +170,7 @@ class BaseDescriptor(_BaseClass):
         self._metadata.descriptions.extend([dn])
 
     def _initFields(self):
+        self._id = None
         self._metadata = dnodes.MetadataNode()
         self._dataFields = dnodes._DataFieldsNode()
         self._dataFieldsHash = {}
@@ -194,6 +206,7 @@ class DescriptorData(_BaseClass):
         self.checkConstraints()
 
     def _initFields(self):
+        self._id = None
         self._fields = []
         self._fieldsMap = {}
 
@@ -252,7 +265,8 @@ class DescriptorData(_BaseClass):
         return {}
 
     def _iterAttributes(self):
-        return {}
+        if self._id is not None:
+            yield ("id", self._id)
 
 class ConfigurationDescriptor(BaseDescriptor):
     "Class for representing the configuration descriptor definition"
