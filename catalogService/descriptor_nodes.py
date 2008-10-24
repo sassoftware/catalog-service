@@ -313,7 +313,7 @@ class _DescriptorDataField(object):
             value = self._node.getText()
             errorList.extend(_validateSingleValue(value,
                              self._nodeDescriptor.type,
-                             self._nodeDescriptor.descriptions[None],
+                             self._nodeDescriptor.descriptions.get(None),
                              self._nodeDescriptor.constraints))
         if errorList:
             raise errors.ConstraintsValidationError(errorList)

@@ -198,6 +198,9 @@ class DescriptorData(_BaseClass):
             nodeName = child.getName()
             # Grab the descriptor for this field
             fieldDesc = self._descriptor.getDataField(nodeName)
+            if fieldDesc is None:
+                # Unsupported field
+                continue
             # Disable constraint checking, we will do it at the end
             field = dnodes._DescriptorDataField(child, fieldDesc,
                 checkConstraints = False)
