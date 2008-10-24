@@ -261,7 +261,7 @@ class EC2Client(baseDriver.BaseDriver):
                 self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
                 awsSecretAccessKey, False)
         except MintEC2Exception:
-            valid = false
+            valid = False
 
         return self._nodeFactory.newCredentials(valid = valid)
 
