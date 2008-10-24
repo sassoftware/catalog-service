@@ -15,7 +15,7 @@ class CloudTypeController(BaseCloudController):
         'descriptor' : descriptor_controllers.DescriptorController,
     }
 
-SUPPORTED_MODULES = ['ec2', 'vws']
+SUPPORTED_MODULES = ['ec2', 'vws', 'xenent' ]
 
 class AllCloudController(BaseController):
 
@@ -34,7 +34,7 @@ class AllCloudController(BaseController):
             # allows it this to work.
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['driver']).driver
-            driver = driverClass(self.cfg, driverName)
+            driver = driverClass(self.cfg, driverClass._cloudType)
             controller =  CloudTypeController(self, driverName,
                                               driver, self.cfg)
             self.urls[driverName] = controller
