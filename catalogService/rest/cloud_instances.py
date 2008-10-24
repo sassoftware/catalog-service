@@ -4,7 +4,7 @@ import urllib
 from catalogService import credentials
 
 from catalogService.rest.base_cloud import BaseCloudController
-from catalogService.rest.response import XmlResponse
+from catalogService.rest.response import XmlResponse, XmlStringResponse
 
 class ImagesController(BaseCloudController):
     modelName = 'imageId'
@@ -37,13 +37,19 @@ class InstanceTypesController(BaseCloudController):
 
 class UserEnvironmentController(BaseCloudController):
     def index(self, request, cloudName, userName):
+        if userName != request.auth[0]:
+            return XmlStringResponse("", status = 403)
         return XmlResponse(self.driver(request, cloudName).getEnvironment())
 
 class CredentialsController(BaseCloudController):
     def index(self, request, cloudName, userName):
+        if userName != request.auth[0]:
+            return XmlStringResponse("", status = 403)
         return XmlResponse(self.driver(request, cloudName).getUserCredentials())
 
     def update(self, request, cloudName, userName):
+        if userName != request.auth[0]:
+            return XmlStringResponse("", status = 403)
         dataLen = request.getContentLength()
         data = request.read(dataLen)
 
