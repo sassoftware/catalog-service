@@ -107,7 +107,7 @@ class BaseDriver(object):
         for descrName, localName in self._credNameMap:
             descrData.addField(descrName, value = cred[localName])
         descrData.checkConstraints()
-        return descrData
+        return self._nodeFactory.newCredentialsDescriptorData(descrData)
 
     def getCloudType(self):
         node = self._createCloudTypeNode(self._cloudType)
@@ -170,4 +170,4 @@ class BaseDriver(object):
         for k, v in cloudConfig.iteritems():
             descrData.addField(k, value = v)
         descrData.checkConstraints()
-        return descrData
+        return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)

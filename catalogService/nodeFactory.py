@@ -56,6 +56,15 @@ class NodeFactory(object):
         node = self.credentialsDescriptorFactory(*args, **kwargs)
         return node
 
+    def newCloudConfigurationDescriptorData(self, node):
+        node.setId(self.join(self._getCloudUrlFromParams(), 'configuration'))
+        return node
+
+    def newCredentialsDescriptorData(self, node):
+        node.setId(self.join(self._getCloudUrlFromParams(), 'users', self.userId,
+            'credentials'))
+        return node
+
     def newCredentials(self, valid, fields = None):
         # XXX deprecated
         if fields is None:
