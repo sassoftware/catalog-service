@@ -11,7 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = ec2 vws
+SUBDIRS = ec2 vws xenent
 
 python_files =	$(wildcard *.py)
 
