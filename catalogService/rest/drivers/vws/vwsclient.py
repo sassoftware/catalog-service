@@ -10,9 +10,9 @@ from catalogService import clouds
 from catalogService import environment
 from catalogService import images
 from catalogService import instances
-from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
+from catalogService.rest.mixins import storage_mixin
 
 import globuslib
 
@@ -179,7 +179,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-class VWSClient(baseDriver.BaseDriver):
+class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Cloud = VWS_Cloud
     EnvironmentCloud = VWS_EnvironmentCloud
     Image = VWS_Image
@@ -638,25 +638,6 @@ class VWSClient(baseDriver.BaseDriver):
         store = self._getCredentialsDataStore()
         creds = self._readCredentialsFromStore(store, self.userId, cloudName)
         return cloudConfig, creds
-
-    def _getCredentialsDataStore(self):
-        path = os.path.join(self._cfg.storagePath, 'credentials')
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
-
-    def _getConfigurationDataStore(self, cloudName = None):
-        path = os.path.join(self._cfg.storagePath, 'configuration')
-        if cloudName is not None:
-            path += '/' + self._sanitizeKey(cloudName)
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
-
-    def _getInstanceStore(self, keyPrefix):
-        path = self._cfg.storagePath + '/instances'
-        cfg = storage.StorageConfig(storagePath = path)
-
-        dstore = storage.DiskStorage(cfg)
-        return instanceStore.InstanceStore(dstore, keyPrefix)
 
     def _getInstanceTypes(self):
         ret = VWS_InstanceTypes()
