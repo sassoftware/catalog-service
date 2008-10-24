@@ -190,6 +190,8 @@ class XenEntClient(baseDriver.BaseDriver):
     def _enumerateConfiguredClouds(self):
         if not self.isDriverFunctional():
             return []
+        return []
+        # XXX Fix cloud enumeration
         store = self._getConfigurationDataStore()
         ret = []
         for cloudName in sorted(store.enumerate()):

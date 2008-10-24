@@ -34,7 +34,9 @@ class AllCloudController(BaseController):
             # allows it this to work.
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['driver']).driver
-            driver = driverClass(self.cfg, driverClass._cloudType)
+            # XXX we should make this a class method
+            driverName = driverClass._cloudType
+            driver = driverClass(self.cfg, driverName)
             controller =  CloudTypeController(self, driverName,
                                               driver, self.cfg)
             self.urls[driverName] = controller
