@@ -3,6 +3,8 @@ import urllib
 from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
+from mint.mint_error import EC2Exception as MintEC2Exception
+
 from catalogService import clouds
 from catalogService import environment
 from catalogService import errors
@@ -254,9 +256,12 @@ class EC2Client(baseDriver.BaseDriver):
         awsAccessKeyId = fields.getField('publicAccessKeyId')
         awsSecretAccessKey = fields.getField('secretAccessKey')
 
-        valid = self._mintClient.setEC2CredentialsForUser(
-            self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
-            awsSecretAccessKey, False)
+        try:
+            valid = self._mintClient.setEC2CredentialsForUser(
+                self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
+                awsSecretAccessKey, False)
+        except MintEC2Exception:
+            valid = false
 
         return self._nodeFactory.newCredentials(valid = valid)
 
