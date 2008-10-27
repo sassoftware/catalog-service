@@ -15,6 +15,9 @@ from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
 
+import XenAPI
+from XenAPI import provision as xenprov
+
 class XenEnt_Image(images.BaseImage):
     "Xen Enterprise Image"
 
@@ -177,6 +180,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
+    XenSessionClass = XenAPI.Session
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._instanceStore = None
@@ -186,7 +191,15 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return True
 
     def drvCreateCloudClient(self, credentials):
-        return None
+        cloudConfig = self.drvGetCloudConfiguration()
+        sess = self.XenSessionClass("https://%s" %
+                                    self._getCloudNameFromConfig(cloudConfig))
+        try:
+            sess.login_with_password(self.userId,
+                                     credentials['password'])
+        except XenAPI.Failure, e:
+            raise AuthenticationFailure(e.details[1], e.details[2])
+        return sess
 
     @classmethod
     def _getCloudNameFromConfig(cls, config):
@@ -323,101 +336,27 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return self.getInstances(None)
 
     def getInstances(self, instanceIds):
-        cloudAlias = self.client.getCloudAlias()
-        globusInsts  = self.client.listInstances()
-        globusInstsDict = dict((x.getId(), x) for x in globusInsts)
-        storeInstanceKeys = self._instanceStore.enumerate()
-        reservIdHash = {}
-        tmpInstanceKeys = {}
-        for storeKey in storeInstanceKeys:
-            instanceId = os.path.basename(storeKey)
-            reservationId = self._instanceStore.getId(storeKey)
-            expiration = self._instanceStore.getExpiration(storeKey)
-            if reservationId is None and (expiration is None
-                                     or time.time() > float(expiration)):
-                # This instance exists only in the store, and expired
-                self._instanceStore.delete(storeKey)
-                continue
-            imageId = self._instanceStore.getImageId(storeKey)
-
-            # Did we find this instance in our store already?
-            if reservationId in reservIdHash:
-                # If the previously found instance already has an image ID,
-                # prefer it. Also, if neither this instance nor the other one
-                # have an image ID, prefer the first (i.e. not this one)
-                otherInstKey, otherInstImageId = reservIdHash[reservationId]
-                if otherInstImageId is not None or imageId is None:
-                    self._instanceStore.delete(storeKey)
-                    continue
-
-                # We prefer this instance over the one we previously found
-                del reservIdHash[reservationId]
-                del tmpInstanceKeys[(otherInstKey, reservationId)]
-
-            if reservationId is not None:
-                reservIdHash[reservationId] = (storeKey, imageId)
-            tmpInstanceKeys[(storeKey, reservationId)] = imageId
-
-        # Done with the preference selection
-        del reservIdHash
-
-        gInsts = []
-
-        # Walk through the list again
-        for (storeKey, reservationId), imageId in tmpInstanceKeys.iteritems():
-            if reservationId is None:
-                # The child process hasn't updated the reservation id yet (or
-                # it died but the instance hasn't expired yet).
-                # Synthesize a globuslib.Instance with not much info in it
-                state = self._instanceStore.getState(storeKey)
-                inst = globuslib.Instance(_id = reservationId, _state = state)
-                gInsts.append((storeKey, imageId, inst))
-                continue
-
-            reservationId = int(reservationId)
-            if reservationId not in globusInstsDict:
-                # We no longer have this instance, get rid of it
-                self._instanceStore.delete(storeKey)
-                continue
-            # Instance exists both in the store and in globus
-            inst = globusInstsDict.pop(reservationId)
-            gInsts.append((storeKey, imageId, inst))
-            # If a state file exists, get rid of it, we are getting the state
-            # from globus
-            self._instanceStore.setState(storeKey, None)
-
-        # For everything else, create an instance ID
-        for reservationId, inst in globusInstsDict.iteritems():
-            nkey = self._instanceStore.newKey(realId = reservationId)
-            gInsts.append((nkey, None, inst))
-
-        gInsts.sort(key = lambda x: x[1])
-
-        # Set up the filter for instances the client requested
-        if instanceIds is not None:
-            instanceIds = set(os.path.basename(x) for x in instanceIds)
+        cloudConfig = self.drvGetCloudConfiguration()
+        cloudAlias = cloudConfig['alias']
+        instMap  = self.client.xenapi.VM.get_all_records()
 
         instanceList = instances.BaseInstances()
-
-        for storeKey, imageId, instObj in gInsts:
-            instId = str(os.path.basename(storeKey))
-            if instanceIds and instId not in instanceIds:
+        for opaqueId, vm in instMap.items():
+            if vm['is_a_template']:
                 continue
-
-            reservationId = instObj.getId()
-            if reservationId is not None:
-                reservationId = str(reservationId)
-            inst = self._nodeFactory.newInstance(id = instId,
-                imageId = imageId,
-                instanceId = instId,
-                reservationId = reservationId,
-                dnsName = instObj.getName(),
-                publicDnsName = instObj.getIp(), state = instObj.getState(),
-                launchTime = instObj.getStartTime(),
+            inst = self._nodeFactory.newInstance(id = vm['uuid'],
+                imageId = 'AAA',
+                instanceId = vm['uuid'],
+                reservationId = vm['uuid'],
+                dnsName = 'AAA',
+                publicDnsName = 'AAA',
+                state = vm['power_state'],
+                launchTime = 1,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
 
     def _daemonize(self, function, *args, **kw):

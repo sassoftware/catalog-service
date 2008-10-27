@@ -86,7 +86,7 @@ class BaseDriver(object):
         """
         Authenticate the user, cache the cloud credentials and the client
         """
-        if not self._cloudClient:
+        if self._cloudClient is None:
             cred = self.drvGetCloudCredentialsForUser()
             self._cloudClient = self.drvCreateCloudClient(cred)
         return self._cloudClient
