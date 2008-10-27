@@ -335,11 +335,13 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getAllInstances(self):
         return self.getInstances(None)
 
-    def getInstances(self, instanceIds):
+    def getCloudAlias(self):
         cloudConfig = self.drvGetCloudConfiguration()
-        cloudAlias = cloudConfig['alias']
-        instMap  = self.client.xenapi.VM.get_all_records()
+        return cloudConfig['alias']
 
+    def getInstances(self, instanceIds):
+        instMap  = self.client.xenapi.VM.get_all_records()
+        cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
@@ -441,25 +443,29 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self.client.transferInstance(fileName)
 
     def _getImagesFromGrid(self):
-        cloudAlias = self.client.getCloudAlias()
+        cloudAlias = self.getCloudAlias()
+        instMap  = self.client.xenapi.VM.get_all_records()
 
-        imageIds = self.client.listImages()
         imageList = images.BaseImages()
+        for opaqueId, vm in instMap.items():
+            if not vm['is_a_template']:
+                continue
 
-        for imageId in imageIds:
-            imageName = imageId
+            imageId = vm['uuid']
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
                     is_rBuilderImage = False,
-                    shortName = os.path.basename(imageName),
-                    longName = imageName,
+                    shortName = vm['name_label'],
+                    longName = vm['name_description'],
                     cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
 
     def _addMintDataToImageList(self, imageList):
-        cloudAlias = self.client.getCloudAlias()
+        # XXX
+        return imageList
+        cloudAlias = self.getCloudAlias()
 
         imageDataLookup = self._mintClient.getAllVwsBuilds()
         # Convert the images coming from rbuilder to .gz, to match what we're
