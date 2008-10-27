@@ -229,38 +229,12 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             ret.append(self._getCloudConfiguration(cloudName))
         return ret
 
-    def drvGetCloudConfiguration(self):
-        return self._getCloudConfiguration(self.cloudName)
-
-    def drvCreateCloud(self, descriptorData):
-        cloudName = descriptorData.getField('factory')
-        config = dict((k.getName(), k.getValue())
-            for k in descriptorData.getFields())
-        store = self._getConfigurationDataStore()
-        self.configureCloud(store, config)
-        return self._createCloudNode(config)
-
     def _getCloudCredentialsForUser(self):
         return self._getCredentialsForCloudName(self.cloudName)[1]
 
     def isValidCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
-
-    def drvSetUserCredentials(self, fields):
-        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
-        store = self._getCredentialsDataStore()
-        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
-        # XXX validate
-        valid = True
-        node = self._nodeFactory.newCredentials(valid)
-        return node
-
-    def listClouds(self):
-        ret = clouds.BaseClouds()
-        for cloudConfig in self._enumerateConfiguredClouds():
-            ret.append(self._createCloudNode(cloudConfig))
-        return ret
 
     def _createCloudNode(self, cloudConfig):
         cld = self._nodeFactory.newCloud(cloudName = cloudConfig['factory'],
@@ -621,14 +595,12 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return key.replace('/', '_')
 
     @classmethod
-    def configureCloud(cls, store, config):
-        cloudName = cls._sanitizeKey(config['factory'])
-        for k, v in config.iteritems():
-            store.set("%s/%s" % (cloudName, k), v)
+    def _getCloudNameFromConfig(cls, config):
+        return config['factory']
 
-    def _getCloudConfiguration(self, cloudName):
-        store = self._getConfigurationDataStore(cloudName)
-        return dict((k, store.get(k)) for k in store.enumerate())
+    @classmethod
+    def _getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('factory')
 
     def _getCredentialsForCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)

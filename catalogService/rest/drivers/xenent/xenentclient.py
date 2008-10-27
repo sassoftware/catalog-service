@@ -13,6 +13,7 @@ from catalogService import instances
 from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
+from catalogService.rest.mixins import storage_mixin
 
 class XenEnt_Image(images.BaseImage):
     "Xen Enterprise Image"
@@ -162,7 +163,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-class XenEntClient(baseDriver.BaseDriver):
+class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = XenEnt_Image
 
     _cloudType = 'xen-enterprise'
@@ -187,27 +188,22 @@ class XenEntClient(baseDriver.BaseDriver):
     def drvCreateCloudClient(self, credentials):
         return None
 
+    @classmethod
+    def _getCloudNameFromConfig(cls, config):
+        return config['name']
+
+    @classmethod
+    def _getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('name')
+
     def _enumerateConfiguredClouds(self):
         if not self.isDriverFunctional():
             return []
-        return []
-        # XXX Fix cloud enumeration
         store = self._getConfigurationDataStore()
         ret = []
         for cloudName in sorted(store.enumerate()):
             ret.append(self._getCloudConfiguration(cloudName))
         return ret
-
-    def drvGetCloudConfiguration(self):
-        return self._getCloudConfiguration(self.cloudName)
-
-    def drvCreateCloud(self, descriptorData):
-        cloudName = descriptorData.getField('factory')
-        config = dict((k.getName(), k.getValue())
-            for k in descriptorData.getFields())
-        store = self._getConfigurationDataStore()
-        self.configureCloud(store, config)
-        return self._createCloudNode(config)
 
     def _getCloudCredentialsForUser(self):
         return self._getCredentialsForCloudName(self.cloudName)[1]
@@ -225,14 +221,8 @@ class XenEntClient(baseDriver.BaseDriver):
         node = self._nodeFactory.newCredentials(valid)
         return node
 
-    def listClouds(self):
-        ret = clouds.BaseClouds()
-        for cloudConfig in self._enumerateConfiguredClouds():
-            ret.append(self._createCloudNode(cloudConfig))
-        return ret
-
     def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['factory'],
+        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
                          description = cloudConfig['description'],
                          cloudAlias = cloudConfig['alias'])
         return cld
@@ -571,34 +561,6 @@ class XenEntClient(baseDriver.BaseDriver):
         for key, methodName in images.buildToNodeFieldMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
 
-    @classmethod
-    def _readCredentialsFromStore(cls, store, userId, cloudName):
-        userId = userId.replace('/', '_')
-        return dict(
-            (os.path.basename(k), store.get(k))
-                for k in store.enumerate("%s/%s" % (userId, cloudName)))
-
-    @classmethod
-    def _writeCredentialsToStore(cls, store, userId, cloudName, credentials):
-        userId = userId.replace('/', '_')
-        for k, v in credentials.iteritems():
-            key = "%s/%s/%s" % (userId, cloudName, k)
-            store.set(key, v)
-
-    @classmethod
-    def _sanitizeKey(cls, key):
-        return key.replace('/', '_')
-
-    @classmethod
-    def configureCloud(cls, store, config):
-        cloudName = cls._sanitizeKey(config['factory'])
-        for k, v in config.iteritems():
-            store.set("%s/%s" % (cloudName, k), v)
-
-    def _getCloudConfiguration(self, cloudName):
-        store = self._getConfigurationDataStore(cloudName)
-        return dict((k, store.get(k)) for k in store.enumerate())
-
     def _getCredentialsForCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
         if not cloudConfig:
@@ -607,25 +569,6 @@ class XenEntClient(baseDriver.BaseDriver):
         store = self._getCredentialsDataStore()
         creds = self._readCredentialsFromStore(store, self.userId, cloudName)
         return cloudConfig, creds
-
-    def _getCredentialsDataStore(self):
-        path = os.path.join(self._cfg.storagePath, 'credentials')
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
-
-    def _getConfigurationDataStore(self, cloudName = None):
-        path = os.path.join(self._cfg.storagePath, 'configuration')
-        if cloudName is not None:
-            path += '/' + self._sanitizeKey(cloudName)
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
-
-    def _getInstanceStore(self, keyPrefix):
-        path = self._cfg.storagePath + '/instances'
-        cfg = storage.StorageConfig(storagePath = path)
-
-        dstore = storage.DiskStorage(cfg)
-        return instanceStore.InstanceStore(dstore, keyPrefix)
 
     def _getInstanceTypes(self):
         ret = VWS_InstanceTypes()
