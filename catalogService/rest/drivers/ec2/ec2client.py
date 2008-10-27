@@ -260,8 +260,8 @@ class EC2Client(baseDriver.BaseDriver):
             valid = self._mintClient.setEC2CredentialsForUser(
                 self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
                 awsSecretAccessKey, False)
-        except MintEC2Exception:
-            valid = False
+        except MintEC2Exception, e:
+            raise errors.PermissionDenied(message = str(e))
 
         return self._nodeFactory.newCredentials(valid = valid)
 
