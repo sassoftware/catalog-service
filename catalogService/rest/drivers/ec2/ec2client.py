@@ -252,9 +252,9 @@ class EC2Client(baseDriver.BaseDriver):
         return cloudName == 'aws'
 
     def drvSetUserCredentials(self, fields):
-        awsAccountNumber = fields.getField('accountId')
-        awsAccessKeyId = fields.getField('publicAccessKeyId')
-        awsSecretAccessKey = fields.getField('secretAccessKey')
+        awsAccountNumber = str(fields.getField('accountId'))
+        awsAccessKeyId = str(fields.getField('publicAccessKeyId'))
+        awsSecretAccessKey = str(fields.getField('secretAccessKey'))
 
         try:
             valid = self._mintClient.setEC2CredentialsForUser(
