@@ -120,9 +120,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     _cloudType = 'xen-enterprise'
 
     _credNameMap = [
-        ('userCert', 'userCert'),
-        ('userKey', 'userKey'),
-        ('sshPubKey', 'sshPubKey'),
+        ('username', 'username'),
+        ('password', 'password'),
     ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
