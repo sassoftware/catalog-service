@@ -268,11 +268,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return self.getImages([imageId])[0]
 
     def getEnvironment(self):
-        instTypeNodes = self._getInstanceTypes()
-
         cloud = self._nodeFactory.newEnvironmentCloud(
-            instanceTypes = instTypeNodes, cloudName = self.cloudName)
-
+            cloudName = self.cloudName, cloudAlias = self.getCloudAlias())
         env = self._nodeFactory.newEnvironment()
         env.append(cloud)
         return env
