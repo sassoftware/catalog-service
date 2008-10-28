@@ -40,12 +40,20 @@ class XenEnt_InstanceTypes(instances.InstanceTypes):
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
   <metadata>
-    <displayName>Globus Workspaces Cloud Configuration</displayName>
+    <displayName>Xen Enterprise Cloud Configuration</displayName>
     <descriptions>
-      <desc>Configure Globus Workspaces Cloud</desc>
+      <desc>Configure Xen Enterprise Cloud</desc>
     </descriptions>
   </metadata>
   <dataFields>
+    <field>
+      <name>name</name>
+      <descriptions>
+        <desc>Server Name</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+    </field>
     <field>
       <name>alias</name>
       <descriptions>
@@ -60,52 +68,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Full Description</desc>
       </descriptions>
       <type>str</type>
-      <required>true</required>
-    </field>
-    <field>
-      <name>factory</name>
-      <descriptions>
-        <desc>Factory Name</desc>
-      </descriptions>
-      <type>str</type>
-      <required>true</required>
-    </field>
-    <field>
-      <name>factoryIdentity</name>
-      <descriptions>
-        <desc>Factory Identity (x509 subject)</desc>
-      </descriptions>
-      <type>str</type>
-      <required>true</required>
-    </field>
-    <field>
-      <name>repository</name>
-      <descriptions>
-        <desc>GridFTP Repository Name</desc>
-      </descriptions>
-      <type>str</type>
-      <required>true</required>
-    </field>
-    <field>
-      <name>repositoryIdentity</name>
-      <descriptions>
-        <desc>GridFTP Repository Identity (x509 subject)</desc>
-      </descriptions>
-      <type>str</type>
-      <required>true</required>
-    </field>
-    <field>
-      <name>caCert</name>
-      <descriptions>
-        <desc>Certificate Authority (x509) Public Key</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Length</desc>
-        </descriptions>
-        <length>4096</length>
-      </constraints>
       <required>true</required>
     </field>
   </dataFields>
