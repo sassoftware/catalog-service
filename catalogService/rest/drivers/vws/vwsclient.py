@@ -296,10 +296,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
 
-    def getAllImages(self):
-        return self.getImages(None)
-
-    def getImages(self, imageIds):
+    def drvGetImages(self, imageIds):
         imageList = self._getImagesFromGrid()
         imageList = self._addMintDataToImageList(imageList)
 
@@ -334,10 +331,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getInstanceTypes(self):
         return self._getInstanceTypes()
 
-    def getAllInstances(self):
-        return self.getInstances(None)
-
-    def getInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds):
         cloudAlias = self.client.getCloudAlias()
         globusInsts  = self.client.listInstances()
         globusInstsDict = dict((x.getId(), x) for x in globusInsts)

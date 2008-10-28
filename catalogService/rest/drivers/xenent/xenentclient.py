@@ -242,10 +242,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
 
-    def getAllImages(self):
-        return self.getImages(None)
-
-    def getImages(self, imageIds):
+    def drvGetImages(self, imageIds):
         imageList = self._getImagesFromGrid()
         imageList = self._addMintDataToImageList(imageList)
 
@@ -264,9 +261,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             imageList = newImageList
         return imageList
 
-    def getImage(self, imageId):
-        return self.getImages([imageId])[0]
-
     def getEnvironment(self):
         cloud = self._nodeFactory.newEnvironmentCloud(
             cloudName = self.cloudName, cloudAlias = self.getCloudAlias())
@@ -277,14 +271,11 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getInstanceTypes(self):
         return self._getInstanceTypes()
 
-    def getAllInstances(self):
-        return self.getInstances(None)
-
     def getCloudAlias(self):
         cloudConfig = self.drvGetCloudConfiguration()
         return cloudConfig['alias']
 
-    def getInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds):
         instMap  = self.client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
@@ -458,6 +449,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         store = self._getCredentialsDataStore()
         creds = self._readCredentialsFromStore(store, self.userId, cloudName)
+        if not creds:
+            return cloudConfig, creds
         # Protect the password
         creds['password'] = util.ProtectedString(creds['password'])
         return cloudConfig, creds

@@ -299,20 +299,14 @@ class EC2Client(baseDriver.BaseDriver):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])[0]
 
-    def getAllInstances(self):
-        return self.getInstances(None)
-
-    def getInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds):
         resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
         return insts
 
-    def getAllImages(self):
-        return self.getImages(None)
-
-    def getImages(self, imageIds):
+    def drvGetImages(self, imageIds):
         rs = self.client.get_all_images(image_ids = imageIds)
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]

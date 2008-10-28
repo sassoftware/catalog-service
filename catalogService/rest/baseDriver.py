@@ -71,6 +71,24 @@ class BaseDriver(object):
         )
         return factory
 
+    def getAllImages(self):
+        return self.getImages(None)
+
+    def getImages(self, imageIds):
+        if self.client is None:
+            # XXX We may have to raise an exception here (MissingCredentials?)
+            return images.BaseImages()
+        return self.drvGetImages(imageIds)
+
+    def getAllInstances(self):
+        return self.getInstances(None)
+
+    def getInstances(self, instanceIds):
+        if self.client is None:
+            # XXX We may have to raise an exception here (MissingCredentials?)
+            return instances.BaseInstances()
+        return self.drvGetInstances(instanceIds)
+
     def drvGetCloudCredentialsForUser(self):
         """
         Authenticate the user and cache the cloud credentials
@@ -88,6 +106,8 @@ class BaseDriver(object):
         """
         if self._cloudClient is None:
             cred = self.drvGetCloudCredentialsForUser()
+            if not cred:
+                return None
             self._cloudClient = self.drvCreateCloudClient(cred)
         return self._cloudClient
 
