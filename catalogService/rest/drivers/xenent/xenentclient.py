@@ -142,8 +142,9 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         sess = self.XenSessionClass("https://%s" %
                                     self._getCloudNameFromConfig(cloudConfig))
         try:
-            sess.login_with_password(self.userId,
-                                     credentials['password'])
+            # password is a ProtectedString, we have to convert to string
+            sess.login_with_password(credentials['username'],
+                                     str(credentials['password']))
         except XenAPI.Failure, e:
             raise AuthenticationFailure(e.details[1], e.details[2])
         return sess
@@ -460,6 +461,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         store = self._getCredentialsDataStore()
         creds = self._readCredentialsFromStore(store, self.userId, cloudName)
+        # Protect the password
+        creds['password'] = util.ProtectedString(creds['password'])
         return cloudConfig, creds
 
     def _getInstanceTypes(self):
