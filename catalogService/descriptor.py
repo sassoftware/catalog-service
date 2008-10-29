@@ -228,9 +228,11 @@ class DescriptorData(_BaseClass):
             raise errors.UndefinedFactoryDataField(name)
 
         node = xmllib.BaseNode(name = name)
-        if isinstance(value, list):
+        if fdesc.multiple:
+            if not isinstance(value, list):
+                raise errors.DataValidationError("Expected multi-value")
             for val in value:
-                val = xmllib.StringNode(name = attrName).characters(str(val))
+                val = xmllib.BaseNode(name = dnodes._ItemNode.name).characters(str(val))
                 node.addChild(val)
         else:
             node.characters(str(value))

@@ -323,10 +323,16 @@ class _DescriptorDataField(object):
         if self._nodeDescriptor.multiple:
             # Get the node's children as values
             values = [ x.getText() for x in self._node.iterChildren() ]
-            for value in values:
-                errorList.extend(_validateSingleValue(value,
+            if isinstance(self._nodeDescriptor.type, list):
+                errorList.extend(_validateEnumeratedValue(values,
                                  self._nodeDescriptor.type,
-                                 self._nodeDescriptor.descriptions[None],
+                                 self._nodeDescriptor.descriptions[None]))
+            else:
+                # It is conceivable that one has a multi-valued field with a
+                # simple type
+                errorList.extend(_validateMultiValue(values,
+                                 self._nodeDescriptor.type,
+                                 self._nodeDescriptor.descriptions.get(None),
                                  self._nodeDescriptor.constraints))
         else:
             value = self._node.getText()
@@ -377,7 +383,28 @@ def _cast(val, typeStr):
                 % str(e_value))
     return val
 
+def _validateEnumeratedValue(values, valueType, description):
+    assert(isinstance(valueType, list))
+    valuesHash = dict((x.key, None) for x in valueType)
+    errorList = []
+    for value in values:
+        if value in valuesHash:
+            continue
+        errorList.append("'%s': invalid value '%s'" % (
+            description, value))
+    return errorList
+
+def _validateMultiValue(values, valueType, description, constraints):
+    errorList = []
+    for value in values:
+        errorList.extend(_validateSingleValue(value, valueType, description,
+                         constraints))
+    return errorList
+
 def _validateSingleValue(value, valueType, description, constraints):
+    if isinstance(valueType, list):
+        return _validateEnumeratedValue([value], valueType, description)
+
     errorList = []
     try:
         cvalue = _cast(value, valueType)
