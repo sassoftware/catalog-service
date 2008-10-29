@@ -124,6 +124,8 @@ class BaseDriver(object):
         # XXX We should validate the credentials too
         descr = self.getCredentialsDescriptor()
         descrData = descriptor.DescriptorData(descriptor = descr)
+        if not cred:
+            return descrData
         for descrName, localName in self._credNameMap:
             descrData.addField(descrName, value = cred[localName])
         descrData.checkConstraints()
