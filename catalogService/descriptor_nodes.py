@@ -117,6 +117,10 @@ class DescriptionNode(xmllib.BaseNode):
 
     @classmethod
     def fromData(cls, description, lang = None):
+        if isinstance(description, tuple):
+            description, lang = description
+        elif hasattr(description, 'description'):
+            description, lang = description.description, description.lang
         attrs = {}
         if lang is not None:
             attrs['lang'] = lang
@@ -272,6 +276,9 @@ class _ConstraintsNode(_ExtendEnabledMixin, _NoCharDataNode):
         # Reverse the mapping
         rev = dict((y, x) for (x, y) in cls._mapping.items())
         node = cls()
+        if isinstance(constraints, dict):
+            # Only one constraint
+            constraints = [ constraints ]
         for cdict in constraints:
             constraintName = cdict.get('constraintName')
             if constraintName not in rev:

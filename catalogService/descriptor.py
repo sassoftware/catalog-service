@@ -124,6 +124,8 @@ class BaseDescriptor(_BaseClass):
         nodeType = kwargs.get('type')
         constraints = kwargs.get('constraints', [])
         descriptions = kwargs.get('descriptions', [])
+        if not isinstance(descriptions, list):
+            descriptions = [ descriptions ]
         constraintsDescriptions = kwargs.get('constraintsDescriptions', [])
         default = None
         if 'default' in kwargs:
@@ -139,8 +141,7 @@ class BaseDescriptor(_BaseClass):
         df.multiple = kwargs.get('multiple', None)
         df.descriptions = dnodes._Descriptions()
         df.descriptions.extend(
-            [ dnodes.DescriptionNode.fromData(x.description, x.lang)
-                for x in descriptions ])
+            [ dnodes.DescriptionNode.fromData(x) for x in descriptions ])
         df.constraints = dnodes._ConstraintsNode.fromData(constraints)
         if df.constraints and constraintsDescriptions:
             df.constraints.descriptions = dnodes._Descriptions()
@@ -149,7 +150,7 @@ class BaseDescriptor(_BaseClass):
             # value in the front
             df.constraints._children.insert(0, df.constraints.descriptions)
             df.constraints.descriptions.extend([
-                dnodes.DescriptionNode.fromData(x.description, x.lang) \
+                dnodes.DescriptionNode.fromData(x)
                     for x in constraintsDescriptions])
         df.default = default
         df.required = kwargs.get('required')
@@ -284,6 +285,9 @@ class ConfigurationDescriptor(BaseDescriptor):
 class CredentialsDescriptor(BaseDescriptor):
     "Class for representing the credentials descriptor definition"
 
+class LaunchDescriptor(BaseDescriptor):
+    "Class for representing the launch descriptor definition"
+
 class Description(object):
     __slots__ = [ 'description', 'lang' ]
     def __init__(self, description = None, lang = None, node = None):
@@ -298,6 +302,9 @@ class ValueWithDescription(object):
     __slots__ = [ 'key', 'descriptions' ]
     def __init__(self, key, descriptions):
         self.key = key
+        if isinstance(descriptions, (str, unicode)):
+            # Shortcut to simplify the setting of descriptions
+            descriptions = [ (descriptions, None) ]
         self.descriptions = descriptions
 
     @classmethod
@@ -308,7 +315,7 @@ class ValueWithDescription(object):
 
     def toNode(self):
         desc = dnodes._Descriptions()
-        desc.extend(dnodes.DescriptionNode.fromData(x.description, x.lang)
+        desc.extend(dnodes.DescriptionNode.fromData(x)
                     for x in self.descriptions)
         vwdNode = dnodes._ValueWithDescriptionNode()
         vwdNode.key = str(self.key)

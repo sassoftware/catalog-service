@@ -151,6 +151,11 @@ class BaseDriver(object):
             fromStream = self.configurationDescriptorXmlData)
         return descr
 
+    def getLaunchDescriptor(self):
+        descr = descriptor.LaunchDescriptor()
+        self.drvPopulateLaunchDescriptor(descr)
+        return descr
+
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
         descr = self.getCloudConfigurationDescriptor()

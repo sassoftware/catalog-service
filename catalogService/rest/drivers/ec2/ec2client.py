@@ -6,6 +6,7 @@ from boto.exception import EC2ResponseError
 from mint.mint_error import EC2Exception as MintEC2Exception
 
 from catalogService import clouds
+from catalogService import descriptor
 from catalogService import environment
 from catalogService import errors
 from catalogService import instances
@@ -81,6 +82,9 @@ class LaunchInstanceParameters(object):
         self.securityGroups = []
         clientSuppliedRemoteIP = None
         for sg in (node.getSecurityGroups() or []):
+            # Ignore nodes we don't expect
+            if sg.getName() != securityGroups.BaseSecurityGroup.tag:
+                continue
             sgId = sg.getId()
             sgId = self._extractId(sgId)
             self.securityGroups.append(sgId)
@@ -312,6 +316,45 @@ class EC2Client(baseDriver.BaseDriver):
         rs = [ x for x in rs if x.id.startswith('ami-') ]
         return self._getImagesFromResult(rs)
 
+    def drvPopulateLaunchDescriptor(self, descr):
+        descr.setDisplayName("Amazon EC2 Launch Parameters")
+        descr.addDescription("Amazon EC2 Launch Parameters")
+        descr.addDataField("instanceType",
+            descriptions = "Instance Size",
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x,
+                    descriptions = y)
+                  for (x, y) in EC2_InstanceTypes.idMap)
+            )
+        descr.addDataField("minCount",
+            descriptions = "Minimum Number of Instances",
+            type = "int",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 100))
+        descr.addDataField("maxCount",
+            descriptions = "Maximum Number of Instances",
+            type = "int",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 100))
+        descr.addDataField("keyPair",
+            descriptions = "Key Pair",
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x[0], descriptions = x[0])
+                for x in self._cliGetKeyPairs()
+            ))
+        descr.addDataField("securityGroup",
+            descriptions = "Security Group",
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x[0], descriptions = x[1])
+                for x in self._cliGetSecurityGroups()
+            ))
+        descr.addDataField("userData",
+            descriptions = "User Data",
+            type = "str",
+            constraints = dict(constraintName = 'maxLength',
+                               value = 256))
+        return descr
+
     def getEnvironment(self):
         instTypeNodes = self._getInstanceTypes()
         keyPairNodes = self._getKeyPairs()
@@ -408,35 +451,44 @@ class EC2Client(baseDriver.BaseDriver):
 
     def _getKeyPairs(self, keynames = None):
         ret = keypairs.BaseKeyPairs()
+        ret.extend(self._nodeFactory.newKeyPair(id = x[0], keyName = x[0],
+            keyFingerprint = x[1])
+            for x in self._cliGetKeyPairs(keynames))
+        return ret
+
+    def _cliGetKeyPairs(self, keynames = None):
         try:
             rs = self.client.get_all_key_pairs(keynames = keynames)
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.reason, e.body)
-        ret.extend(self._nodeFactory.newKeyPair(id = x.name, keyName = x.name,
-            keyFingerprint = x.fingerprint) for x in rs)
-        return ret
+        return [ (x.name, x.fingerprint) for x in rs ]
 
     def _getSecurityGroups(self, groupNames = None):
         ret = securityGroups.BaseSecurityGroups()
+        for sg in self._cliGetSecurityGroups(groupNames):
+            sgObj = self._nodeFactory.newSecurityGroup(
+                id = sg[0], groupName = sg[0], ownerId = sg[2],
+                description = sg[1])
+            ret.append(sgObj)
+        return ret
+
+    def _cliGetSecurityGroups(self, groupNames = None):
         try:
             rs = self.client.get_all_security_groups(groupnames = groupNames)
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.reason, e.body)
+        ret = []
         defSecurityGroup = None
         for sg in rs:
-            sgObj = self._nodeFactory.newSecurityGroup(
-                id = sg.name, groupName = sg.name, ownerId = sg.owner_id,
-                description = sg.description)
+            entry =(sg.name, sg.description, sg.owner_id)
             if sg.name == CATALOG_DEF_SECURITY_GROUP:
                 # We will add this group as the first one
-                defSecurityGroup = sgObj
+                defSecurityGroup = entry
                 continue
-            ret.append(sgObj)
+            ret.append(entry)
         if defSecurityGroup is None:
-            defSecurityGroup = self._nodeFactory.newSecurityGroup(
-                id = CATALOG_DEF_SECURITY_GROUP,
-                groupName = CATALOG_DEF_SECURITY_GROUP,
-                description = CATALOG_DEF_SECURITY_GROUP_DESC)
+            defSecurityGroup = (CATALOG_DEF_SECURITY_GROUP,
+                                CATALOG_DEF_SECURITY_GROUP_DESC,
+                                None)
         ret.insert(0, defSecurityGroup)
         return ret
-

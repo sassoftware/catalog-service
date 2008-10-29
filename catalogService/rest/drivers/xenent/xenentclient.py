@@ -31,10 +31,8 @@ class XenEnt_InstanceTypes(instances.InstanceTypes):
     "Xen Enterprise Instance Types"
 
     idMap = [
-        ('vws.small', "Small"),
-        ('vws.medium', "Medium"),
-        ('vws.large', "Large"),
-        ('vws.xlarge', "Extra Large"),
+        ('xenent.small', "Small"),
+        ('xenent.medium', "Medium"),
     ]
 
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
@@ -260,6 +258,10 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 newImageList.append(imagesById[imageId])
             imageList = newImageList
         return imageList
+
+    def drvPopulateLaunchDescriptor(self, descr):
+
+        return descr
 
     def getEnvironment(self):
         cloud = self._nodeFactory.newEnvironmentCloud(
