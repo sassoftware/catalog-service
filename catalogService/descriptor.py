@@ -130,7 +130,12 @@ class BaseDescriptor(_BaseClass):
             default = str(kwargs['default'])
         df = dnodes.DataFieldNode()
         df.name = name
-        df.type = nodeType
+        if isinstance(nodeType, EnumeratedType):
+            df.type = None
+            df.enumeratedType = nodeType.toNode()
+        else:
+            df.type = nodeType
+            df.enumeratedType = None
         df.multiple = kwargs.get('multiple', None)
         df.descriptions = dnodes._Descriptions()
         df.descriptions.extend(
@@ -287,13 +292,51 @@ class Description(object):
             self.description = node.getText()
             self.lang = node.getAttribute('lang')
 
+class ValueWithDescription(object):
+    __slots__ = [ 'key', 'descriptions' ]
+    def __init__(self, key, descriptions):
+        self.key = key
+        self.descriptions = descriptions
+
+    @classmethod
+    def fromNode(cls, node):
+        key = node.key
+        descriptions = node.descriptions.getDescriptions()
+        return cls(key, descriptions)
+
+    def toNode(self):
+        desc = dnodes._Descriptions()
+        desc.extend(dnodes.DescriptionNode.fromData(x.description, x.lang)
+                    for x in self.descriptions)
+        vwdNode = dnodes._ValueWithDescriptionNode()
+        vwdNode.key = str(self.key)
+        vwdNode.descriptions = desc
+        return vwdNode
+
+class EnumeratedType(list):
+    @classmethod
+    def fromNode(cls, node):
+        inst = cls()
+        for x in node.iterChildren():
+            inst.append(ValueWithDescription.fromNode(x))
+        return inst
+
+    def toNode(self):
+        enumer = dnodes._EnumeratedTypeNode()
+        for vwd in self:
+            enumer.addChild(vwd.toNode())
+        return enumer
+
 class PresentationField(object):
     __slots__ = [ 'name', 'descriptions', 'type', 'multiple', 'default',
                   'constraints', 'constraintsDescriptions', 'required' ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
-        self.type = node.type
+        if node.enumeratedType is None:
+            self.type = node.type
+        else:
+            self.type = EnumeratedType.fromNode(node.enumeratedType)
         self.multiple = node.multiple
         self.default = node.default
         self.required = node.required

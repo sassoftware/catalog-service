@@ -146,6 +146,24 @@ class _NameNode(xmllib.StringNode):
 class _TypeNode(xmllib.StringNode):
     name = 'type'
 
+class _KeyNode(xmllib.StringNode):
+    name = 'key'
+
+class _ValueWithDescriptionNode(_NoCharDataNode):
+    name = 'describedValue'
+
+    _nodeDescription = [
+        (_Descriptions, None),
+        (_KeyNode, None),
+    ]
+
+class _EnumeratedTypeNode(_ExtendEnabledMixin, _NoCharDataNode):
+    name = 'enumeratedType'
+
+    _nodeDescription = [
+        (_ValueWithDescriptionNode, None),
+    ]
+
 class _MultipleNode(xmllib.BooleanNode):
     name = 'multiple'
 
@@ -269,6 +287,7 @@ class DataFieldNode(_NoCharDataNode):
         (_NameNode, None),
         (_Descriptions, None),
         (_TypeNode, None),
+        (_EnumeratedTypeNode, None),
         (_MultipleNode, None),
         (_DefaultNode, None),
         (_ConstraintsNode, None),
