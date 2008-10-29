@@ -46,6 +46,8 @@ class NodeFactory(object):
         node.setUserCredentials(clouds.UserCredentials(href = self.join(cloudId, 'users', self.userId, 'credentials')))
         node.setConfiguration(clouds.Configuration(href = self.join(cloudId,
             'configuration')))
+        node.setDescriptorLaunch(clouds.DescriptorLaunch(href =
+                                 self.join(cloudId, 'descriptor', 'launch')))
         return node
 
     def newCloudConfigurationDescriptor(self, *args, **kwargs):

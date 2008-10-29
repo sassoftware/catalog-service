@@ -10,7 +10,8 @@ from catalogService import xmlNode
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'
     __slots__ = [ 'id', 'cloudName', 'description', 'cloudAlias',
-        'type', 'images', 'instances', 'userCredentials', 'configuration' ]
+        'type', 'images', 'instances', 'userCredentials', 'configuration',
+        'descriptorLaunch' ]
     _slotAttributes = set(['id'])
 
 class BaseClouds(xmlNode.BaseNodeCollection):
@@ -39,6 +40,9 @@ class UserCredentials(BaseHrefNode):
 class Configuration(BaseHrefNode):
     tag = 'configuration'
 
+class DescriptorLaunch(BaseHrefNode):
+    tag = 'descriptorLaunch'
+
 class Handler(xmllib.DataBinder):
     cloudClass = BaseCloud
     cloudsClass = BaseClouds
@@ -47,9 +51,11 @@ class Handler(xmllib.DataBinder):
     instancesClass = Instances
     userCredentialsClass = UserCredentials
     configurationClass = Configuration
+    descriptorLaunchClass = DescriptorLaunch
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         for cls in [ self.cloudClass, self.cloudsClass, self.typeClass,
                      self.imagesClass, self.instancesClass,
-                     self.userCredentialsClass, self.configurationClass]:
+                     self.userCredentialsClass, self.configurationClass,
+                     self.descriptorLaunchClass]:
             self.registerType(cls, cls.tag)
