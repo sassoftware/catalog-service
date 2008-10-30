@@ -16,6 +16,13 @@ class StorageMixin(object):
         for k, v in config.iteritems():
             store.set("%s/%s" % (cloudName, k), v)
 
+    def _enumerateConfiguredClouds(self):
+        store = self._getConfigurationDataStore()
+        ret = []
+        for cloudName in sorted(store.enumerate()):
+            ret.append(self._getCloudConfiguration(cloudName))
+        return ret
+
     def _getCredentialsDataStore(self):
         path = os.path.join(self._cfg.storagePath, 'credentials',
             self._cloudType)
@@ -59,12 +66,6 @@ class StorageMixin(object):
     def _getCloudConfiguration(self, cloudName):
         store = self._getConfigurationDataStore(cloudName)
         return dict((k, store.get(k)) for k in store.enumerate())
-
-    def listClouds(self):
-        ret = clouds.BaseClouds()
-        for cloudConfig in self._enumerateConfiguredClouds():
-            ret.append(self._createCloudNode(cloudConfig))
-        return ret
 
     def drvGetCloudConfiguration(self):
         return self._getCloudConfiguration(self.cloudName)

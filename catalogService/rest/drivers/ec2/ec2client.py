@@ -252,6 +252,9 @@ class EC2Client(baseDriver.BaseDriver):
         except mint.mint_error.PermissionDenied:
             raise errors.PermissionDenied
 
+    def isDriverFunctional(self):
+        return True
+
     def isValidCloudName(self, cloudName):
         return cloudName == 'aws'
 
@@ -269,10 +272,11 @@ class EC2Client(baseDriver.BaseDriver):
 
         return self._nodeFactory.newCredentials(valid = valid)
 
-    def listClouds(self):
-        ret = clouds.BaseClouds()
-        ret.append(self._nodeFactory.newCloud())
-        return ret
+    def _enumerateConfiguredClouds(self):
+        return [ None ]
+
+    def _createCloudNode(self, cloudConfig):
+        return self._nodeFactory.newCloud()
 
     def updateCloud(self, parameters):
         parameters = CloudParameters(parameters)

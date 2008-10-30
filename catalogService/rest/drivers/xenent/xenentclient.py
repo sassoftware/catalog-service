@@ -156,15 +156,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('name')
 
-    def _enumerateConfiguredClouds(self):
-        if not self.isDriverFunctional():
-            return []
-        store = self._getConfigurationDataStore()
-        ret = []
-        for cloudName in sorted(store.enumerate()):
-            ret.append(self._getCloudConfiguration(cloudName))
-        return ret
-
     def _getCloudCredentialsForUser(self):
         return self._getCredentialsForCloudName(self.cloudName)[1]
 

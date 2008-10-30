@@ -71,6 +71,24 @@ class BaseDriver(object):
         )
         return factory
 
+    def listClouds(self):
+        ret = clouds.BaseClouds()
+        if not self.isDriverFunctional():
+            return ret
+        for cloudConfig in self._enumerateConfiguredClouds():
+            ret.append(self._createCloudNode(cloudConfig))
+        return ret
+
+    def getCloud(self, cloudName):
+        ret = clouds.BaseClouds()
+        if not self.isDriverFunctional():
+            return ret
+        for cloud in self.listClouds():
+            if cloud.getCloudName() == cloudName:
+                ret.append(cloud)
+                return ret
+        return ret
+
     def getAllImages(self):
         return self.getImages(None)
 

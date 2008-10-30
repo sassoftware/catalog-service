@@ -221,15 +221,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
 
-    def _enumerateConfiguredClouds(self):
-        if not self.isDriverFunctional():
-            return []
-        store = self._getConfigurationDataStore()
-        ret = []
-        for cloudName in sorted(store.enumerate()):
-            ret.append(self._getCloudConfiguration(cloudName))
-        return ret
-
     def _getCloudCredentialsForUser(self):
         return self._getCredentialsForCloudName(self.cloudName)[1]
 
