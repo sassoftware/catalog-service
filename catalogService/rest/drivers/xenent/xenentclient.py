@@ -7,6 +7,7 @@ import urllib
 from conary.lib import util
 
 from catalogService import clouds
+from catalogService import descriptor
 from catalogService import environment
 from catalogService import images
 from catalogService import instances
@@ -260,6 +261,25 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return imageList
 
     def drvPopulateLaunchDescriptor(self, descr):
+        descr.setDisplayName("Xen Enterprise Launch Parameters")
+        descr.addDescription("Xen Enterprise Launch Parameters")
+        descr.addDataField("instanceType",
+            descriptions = "Instance Size",
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x,
+                    descriptions = y)
+                  for (x, y) in XenEnt_InstanceTypes.idMap)
+            )
+        descr.addDataField("minCount",
+            descriptions = "Minimum Number of Instances",
+            type = "int",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 100))
+        descr.addDataField("maxCount",
+            descriptions = "Maximum Number of Instances",
+            type = "int",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 100))
 
         return descr
 
