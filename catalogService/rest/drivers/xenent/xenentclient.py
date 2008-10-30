@@ -310,6 +310,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 reservationId = vm['uuid'],
                 dnsName = 'AAA',
                 publicDnsName = 'AAA',
+                privateDnsName = 'AAA',
                 state = vm['power_state'],
                 launchTime = 1,
                 cloudName = self.cloudName,
