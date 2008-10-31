@@ -1,7 +1,12 @@
+#!/usr/bin/python2.4
+#
+# Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
+#
 
 import urllib
 
 from catalogService import credentials
+from catalogService.errors import InvalidCloudName
 
 from catalogService.rest.base_cloud import BaseCloudController
 from catalogService.rest.response import XmlResponse, XmlStringResponse
@@ -91,7 +96,7 @@ class CloudTypeModelController(BaseCloudController):
         # note - may want to do further validation at the time of
         # passing the cloud name into the function...
         if not self.driver.isValidCloudName(cloudName):
-            raise UnsupportedCloudId(cloudName)
+            raise InvalidCloudName(cloudName)
         return cloudName, rest
 
     def index(self, request):

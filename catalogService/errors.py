@@ -31,6 +31,9 @@ class CatalogError(Exception):
     def __str__(self):
         return self.message
 
+class InvalidCloudName(CatalogError):
+    """Cloud name is not valid"""
+    status = http_codes.HTTP_NOT_FOUND
 
 class MissingCredentials(CatalogError):
     """Cloud credentials are not set in rBuilder"""
