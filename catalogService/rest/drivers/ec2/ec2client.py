@@ -324,7 +324,7 @@ class EC2Client(baseDriver.BaseDriver):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
         descr.addDescription("Amazon EC2 Launch Parameters")
         descr.addDataField("instanceType",
-            descriptions = "Instance Size",
+            descriptions = "Instance Size", required = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
@@ -332,12 +332,12 @@ class EC2Client(baseDriver.BaseDriver):
             )
         descr.addDataField("minCount",
             descriptions = "Minimum Number of Instances",
-            type = "int",
+            type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount",
             descriptions = "Maximum Number of Instances",
-            type = "int",
+            type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyPair",
@@ -348,6 +348,7 @@ class EC2Client(baseDriver.BaseDriver):
             ))
         descr.addDataField("securityGroup",
             descriptions = "Security Group",
+            required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
                 for x in self._cliGetSecurityGroups()

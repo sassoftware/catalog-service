@@ -254,19 +254,19 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Xen Enterprise Launch Parameters")
         descr.addDescription("Xen Enterprise Launch Parameters")
-        descr.addDataField("instanceType",
+        descr.addDataField("instanceType", required = True,
             descriptions = "Instance Size",
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in XenEnt_InstanceTypes.idMap)
             )
-        descr.addDataField("minCount",
+        descr.addDataField("minCount", required = True,
             descriptions = "Minimum Number of Instances",
             type = "int",
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
-        descr.addDataField("maxCount",
+        descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
             type = "int",
             constraints = dict(constraintName = 'range',

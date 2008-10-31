@@ -311,7 +311,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         descr.setDisplayName("Globus Workspaces Launch Parameters")
         descr.addDescription("Globus Workspaces Launch Parameters")
         descr.addDataField("instanceType",
-            descriptions = "Instance Size",
+            descriptions = "Instance Size", required = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
@@ -319,10 +319,10 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             )
         descr.addDataField("minCount",
             descriptions = "Minimum Number of Instances",
-            type = "int",
+            type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
-        descr.addDataField("maxCount",
+        descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
             type = "int",
             constraints = dict(constraintName = 'range',
