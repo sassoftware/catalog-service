@@ -73,6 +73,9 @@ class _BaseClass(xmllib.SerializableObject):
         stack = [ (cls._rootNodeClass, None) ]
         while stack:
             nodeClass, nodeClassName = stack.pop()
+            if nodeClass is None:
+                # A generic node. Ignore it
+                continue
             binder.registerType(nodeClass, nodeClassName)
             scList = getattr(nodeClass, '_nodeDescription', [])
             for subClass, subClassName in scList:
@@ -84,7 +87,7 @@ class _BaseClass(xmllib.SerializableObject):
         return cls._rootNodeClass.name
 
     def _postprocess(self, xmlObj):
-        if not isinstance(xmlObj, self._rootNodeClass):
+        if self._rootNodeClass and not isinstance(xmlObj, self._rootNodeClass):
             raise Exception("No data found")
         nodeId = xmlObj.getAttribute('id')
         if nodeId:
@@ -112,6 +115,12 @@ class BaseDescriptor(_BaseClass):
 
     def setDisplayName(self, displayName):
         self._metadata.displayName = displayName
+
+    def getRootElement(self):
+        return self._metadata.rootElement
+
+    def setRootElement(self, rootElement):
+        self._metadata.rootElement = rootElement
 
     def getDataFields(self):
         """
@@ -154,6 +163,8 @@ class BaseDescriptor(_BaseClass):
                     for x in constraintsDescriptions])
         df.default = default
         df.required = kwargs.get('required')
+        df.hidden = kwargs.get('hidden')
+        df.password = kwargs.get('password')
         self._dataFields.extend([ df ])
         self._dataFieldsHash[df.name] = df
 
@@ -189,17 +200,24 @@ class DescriptorData(_BaseClass):
     "Class for representing the descriptor data"
     __slots__ = ['_fields', '_descriptor', '_fieldsMap']
 
-    _rootNodeClass = dnodes.DescriptorDataNode
+    _rootNodeClass = None
 
     def __init__(self, fromStream = None, validate = False, descriptor = None):
         if descriptor is None:
             raise errors.FactoryDefinitionMissing()
 
         self._descriptor = descriptor
+        self._rootElement = descriptor.getRootElement()
+        if self._rootElement is None:
+            # Safe default if no default root element is supplied
+            self._rootElement = dnodes.DescriptorDataNode.name
         _BaseClass.__init__(self, fromStream = fromStream)
 
     def _postprocess(self, xmlObj):
         _BaseClass._postprocess(self, xmlObj)
+        if xmlObj.getName() != self._rootElement:
+            raise errors.DataValidationError("Expected node %s, got %s"
+                % (self._rootElement, xmlObj.getName()))
         for child in xmlObj.iterChildren():
             nodeName = child.getName()
             # Grab the descriptor for this field
@@ -233,10 +251,12 @@ class DescriptorData(_BaseClass):
             if not isinstance(value, list):
                 raise errors.DataValidationError("Expected multi-value")
             for val in value:
-                val = xmllib.BaseNode(name = dnodes._ItemNode.name).characters(str(val))
+                val = self._cleanseValue(fdesc, val)
+                val = xmllib.BaseNode(name = dnodes._ItemNode.name).characters(val)
                 node.addChild(val)
         else:
-            node.characters(str(value))
+            value = self._cleanseValue(fdesc, value)
+            node.characters(value)
 
         field = dnodes._DescriptorDataField(node, fdesc)
         self._fields.append(field)
@@ -268,6 +288,16 @@ class DescriptorData(_BaseClass):
         if errorList:
             raise errors.ConstraintsValidationError(errorList)
 
+    def _cleanseValue(self, fieldDescription, value):
+        if fieldDescription.password:
+            if fieldDescription.type == 'int':
+                value = 0
+            elif fieldDescription.type == 'str':
+                value = '*' * 8
+        value = str(value)
+        return value
+
+
     def _iterChildren(self):
         return iter(self._fields)
 
@@ -278,6 +308,9 @@ class DescriptorData(_BaseClass):
     def _iterAttributes(self):
         if self._id is not None:
             yield ("id", self._id)
+
+    def _getName(self):
+        return self._rootElement
 
 class ConfigurationDescriptor(BaseDescriptor):
     "Class for representing the configuration descriptor definition"
@@ -338,7 +371,8 @@ class EnumeratedType(list):
 
 class PresentationField(object):
     __slots__ = [ 'name', 'descriptions', 'type', 'multiple', 'default',
-                  'constraints', 'constraintsDescriptions', 'required' ]
+                  'constraints', 'constraintsDescriptions', 'required',
+                  'hidden', 'password', ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
@@ -349,6 +383,8 @@ class PresentationField(object):
         self.multiple = node.multiple
         self.default = node.default
         self.required = node.required
+        self.hidden = node.hidden
+        self.password = node.password
         self.constraintsDescriptions = {}
         if node.constraints:
             self.constraints = node.constraints.presentation()

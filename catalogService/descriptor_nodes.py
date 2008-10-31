@@ -136,11 +136,15 @@ class _Descriptions(_ExtendEnabledMixin, _NoCharDataNode):
     def getDescriptions(self):
         return dict((x.getAttribute('lang'), x.getText()) for x in self)
 
+class _RootElement(xmllib.StringNode):
+    name = "rootElement"
+
 class MetadataNode(_NoCharDataNode):
     name = 'metadata'
 
     _nodeDescription = [
         (_DisplayName, None),
+        (_RootElement, None),
         (_Descriptions, None),
     ]
 
@@ -182,6 +186,12 @@ class _MaxNode(xmllib.IntegerNode):
 
 class _RequiredNode(xmllib.BooleanNode):
     name = 'required'
+
+class _PasswordNode(xmllib.BooleanNode):
+    name = 'password'
+
+class _HiddenNode(xmllib.BooleanNode):
+    name = 'hidden'
 
 class _RangeNode(_NoCharDataNode):
     name = 'range'
@@ -299,6 +309,8 @@ class DataFieldNode(_NoCharDataNode):
         (_DefaultNode, None),
         (_ConstraintsNode, None),
         (_RequiredNode, None),
+        (_HiddenNode, None),
+        (_PasswordNode, None),
     ]
 
 class _DataFieldsNode(_ExtendEnabledMixin, _NoCharDataNode):
