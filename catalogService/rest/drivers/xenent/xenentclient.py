@@ -16,8 +16,13 @@ from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
 
-import XenAPI
-from XenAPI import provision as xenprov
+XenAPI = None
+xenprov = None
+try:
+    import XenAPI as XenAPI
+    from XenAPI import provision as xenprov
+except ImportError:
+    pass
 
 class XenEnt_Image(images.BaseImage):
     "Xen Enterprise Image"
@@ -126,7 +131,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
-    XenSessionClass = XenAPI.Session
+    XenSessionClass = None
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
@@ -134,12 +139,17 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     @classmethod
     def isDriverFunctional(cls):
+        if not XenAPI or not xenprov:
+            return False
         return True
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.drvGetCloudConfiguration()
-        sess = self.XenSessionClass("https://%s" %
-                                    self._getCloudNameFromConfig(cloudConfig))
+        if self.XenSessionClass:
+            klass = self.XenSessionClass
+        else:
+            klass = XenAPI.Session
+        sess = klass("https://%s" % self._getCloudNameFromConfig(cloudConfig))
         try:
             # password is a ProtectedString, we have to convert to string
             sess.login_with_password(credentials['username'],
