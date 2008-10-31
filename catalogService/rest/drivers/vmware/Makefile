@@ -11,15 +11,12 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = ec2 vws xenent vmware
 
 python_files =	$(wildcard *.py)
 
 dist_files = Makefile $(python_files)
 
-all: default-all subdirs
-
-subdirs: default-subdirs
+all: default-all
 
 install: all pyfiles-install default-install install-subdirs
 	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
@@ -30,5 +27,5 @@ dist: default-dist
 clean: default-clean
 	rm -f xmllib_constants.py
 
-include ../../../Make.rules
-include ../../../Make.defs
+include ../../../../Make.rules
+include ../../../../Make.defs

@@ -15,7 +15,7 @@ class CloudTypeController(BaseCloudController):
         'descriptor' : descriptor_controllers.DescriptorController,
     }
 
-SUPPORTED_MODULES = ['ec2', 'vws', 'xenent' ]
+SUPPORTED_MODULES = [ 'ec2', 'vmware', 'vws', 'xenent' ]
 
 class AllCloudController(BaseController):
 
