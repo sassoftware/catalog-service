@@ -1,21 +1,29 @@
 #
 # Copyright (c) 2008 rPath, Inc.
 #
+from lxml import etree
+
 from catalogService.rest.response import XmlStringResponse
 from catalogService import http_codes
 
 class CatalogErrorResponse(XmlStringResponse):
     def __init__(self, status, message, tracebackData='', *args, **kw):
+        faultNode = etree.Element("fault")
+        node = etree.Element("code")
+        node.text = str(status)
+        faultNode.append(node)
+
+        node = etree.Element("message")
+        node.text = message
+        faultNode.append(node)
+
         if tracebackData:
-            tracebackData = (
-                "\n  <traceback><![CDATA[%s]]>\n  </traceback>" %
-                    tracebackData.replace("]]>", "]] >"))
-        content = '''\
-<?xml version="1.0" encoding="UTF-8"?>
-<fault>
-  <code>%(code)s</code>
-  <message>%(message)s</message>%(tb)s
-</fault>''' % dict(code=status, message=message, tb=tracebackData)
+            node = etree.Element("traceback")
+            node.text = tracebackData
+            faultNode.append(node)
+
+        content = etree.tostring(faultNode, pretty_print = True,
+            xml_declaration = True, encoding = 'UTF-8')
         XmlStringResponse.__init__(self, content=content,
                                    status=status,
                                    message=message, *args, **kw)
