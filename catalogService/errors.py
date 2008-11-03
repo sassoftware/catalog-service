@@ -5,13 +5,17 @@ from catalogService.rest.response import XmlStringResponse
 from catalogService import http_codes
 
 class CatalogErrorResponse(XmlStringResponse):
-    def __init__(self, status, message, *args, **kw):
+    def __init__(self, status, message, tracebackData='', *args, **kw):
+        if tracebackData:
+            tracebackData = (
+                "\n  <traceback><![CDATA[%s]]>\n  </traceback>" %
+                    tracebackData.replace("]]>", "]] >"))
         content = '''\
 <?xml version="1.0" encoding="UTF-8"?>
 <fault>
   <code>%(code)s</code>
-  <message>%(message)s</message>
-</fault>''' % dict(code=status, message=message)
+  <message>%(message)s</message>%(tb)s
+</fault>''' % dict(code=status, message=message, tb=tracebackData)
         XmlStringResponse.__init__(self, content=content,
                                    status=status,
                                    message=message, *args, **kw)
@@ -78,3 +82,9 @@ class ErrorMessageCallback(object):
         if isinstance(exception, CatalogError):
             return CatalogErrorResponse(status=exception.status,
                                         message=exception.message)
+        from restlib.http import handler
+        response = handler.ExceptionCallback().processException(request,
+            excClass, exception, tb)
+        return CatalogErrorResponse(status = response.status,
+            message = response.message,
+            tracebackData = response.content)
