@@ -306,7 +306,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             if vm['is_a_template']:
                 continue
             inst = self._nodeFactory.newInstance(id = vm['uuid'],
-                imageId = 'AAA',
+                #imageId = 'AAA',
                 instanceId = vm['uuid'],
                 reservationId = vm['uuid'],
                 dnsName = 'AAA',
