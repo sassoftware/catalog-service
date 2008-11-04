@@ -262,6 +262,12 @@ class EC2Client(baseDriver.BaseDriver):
         store = self._getConfigurationDataStore()
         store.set('disabled', "1")
 
+    def drvCreateCloud(self, descriptorData):
+        # Nothing fancy, just remove the disabled flag
+        store = self._getConfigurationDataStore()
+        store.delete('disabled')
+        return self.listClouds()[0]
+
     def isDriverFunctional(self):
         return True
 
