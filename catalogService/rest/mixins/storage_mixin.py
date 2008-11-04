@@ -86,3 +86,7 @@ class StorageMixin(object):
         valid = True
         node = self._nodeFactory.newCredentials(valid)
         return node
+
+    def drvRemoveCloud(self):
+        store = self._getConfigurationDataStore()
+        store.delete(self.cloudName)

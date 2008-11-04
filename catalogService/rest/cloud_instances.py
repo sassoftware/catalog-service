@@ -109,3 +109,5 @@ class CloudTypeModelController(BaseCloudController):
     def create(self, request):
         return XmlResponse(self.driver(request).createCloud(request.read()))
 
+    def destroy(self, request, cloudName):
+        return XmlResponse(self.driver(request, cloudName).removeCloud())

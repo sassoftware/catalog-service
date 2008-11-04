@@ -13,6 +13,7 @@ from catalogService import instances
 from catalogService import images
 from catalogService import keypairs
 from catalogService import securityGroups
+from catalogService import storage
 from catalogService.rest import baseDriver
 
 CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
@@ -241,22 +242,31 @@ class EC2Client(baseDriver.BaseDriver):
         return EC2Connection(credentials['awsPublicAccessKeyId'],
                              credentials['awsSecretAccessKey'])
 
-    @classmethod
-    def drvGetCloudConfiguration(cls):
+    def drvGetCloudConfiguration(self):
+        store = self._getConfigurationDataStore()
+        if store.get('disabled'):
+            return {}
         return dict(name = 'aws', cloudAlias = 'ec2', fullDescription = EC2_DESCRIPTION)
 
     def _getCloudCredentialsForUser(self):
+        cloudConfig = self.drvGetCloudConfiguration()
+        if not cloudConfig:
+            return {}
         try:
             return self._mintClient.getEC2CredentialsForUser(
                                                     self._mintAuth.userId)
         except mint.mint_error.PermissionDenied:
             raise errors.PermissionDenied
 
+    def drvRemoveCloud(self):
+        store = self._getConfigurationDataStore()
+        store.set('disabled', "1")
+
     def isDriverFunctional(self):
         return True
 
     def isValidCloudName(self, cloudName):
-        return cloudName == 'aws'
+        return self.drvGetCloudConfiguration() and cloudName == 'aws'
 
     def drvSetUserCredentials(self, fields):
         awsAccountNumber = str(fields.getField('accountId'))
@@ -273,6 +283,9 @@ class EC2Client(baseDriver.BaseDriver):
         return self._nodeFactory.newCredentials(valid = valid)
 
     def _enumerateConfiguredClouds(self):
+        if not self.drvGetCloudConfiguration():
+            # Cloud is not configured
+            return []
         return [ None ]
 
     def _createCloudNode(self, cloudConfig):
@@ -497,3 +510,10 @@ class EC2Client(baseDriver.BaseDriver):
                                 None)
         ret.insert(0, defSecurityGroup)
         return ret
+
+    def _getConfigurationDataStore(self):
+        path = os.path.join(self._cfg.storagePath, 'configuration',
+            self._cloudType, 'aws')
+        cfg = storage.StorageConfig(storagePath = path)
+        return storage.DiskStorage(cfg)
+

@@ -1,3 +1,4 @@
+from catalogService import errors
 from catalogService import nodeFactory
 from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
@@ -186,6 +187,14 @@ class BaseDriver(object):
             # XXX
             raise
         return self.drvCreateCloud(descrData)
+
+    def removeCloud(self):
+        cloudConfig = self.drvGetCloudConfiguration()
+        if not cloudConfig:
+            # Cloud does not exist
+            raise errors.InvalidCloudName(self.cloudName)
+        self.drvRemoveCloud()
+        return clouds.BaseClouds()
 
     def setUserCredentials(self, credentialsData):
         # Authenticate
