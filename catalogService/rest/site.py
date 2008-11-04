@@ -4,7 +4,8 @@ import mint.shimclient
 
 from restlib.controller import RestController
 
-from catalogService.rest.response import XmlStringResponse
+from catalogService import userInfo
+from catalogService.rest.response import XmlResponse, XmlStringResponse
 from catalogService.rest import users
 from catalogService.rest import clouds
 
@@ -24,5 +25,8 @@ class CatalogServiceController(RestController):
         return self.urls[url]
 
     def userinfo(self, request):
-        data = "<userinfo><username>%s</username></userinfo>" % request.mintAuth.username
-        return XmlStringResponse(data)
+        responseId = "%s/userinfo" % request.baseUrl
+        response = userInfo.UserInfo(id = responseId,
+            username = request.mintAuth.username,
+            isAdmin = bool(request.mintAuth.admin))
+        return XmlResponse(response)
