@@ -58,9 +58,8 @@ class PermissionDenied(CatalogError):
 class ParameterError(CatalogError):
     """Errors were detected in input"""
     status = http_codes.HTTP_BAD_REQUEST
-    def __init__(self, msg = None):
-        if msg:
-            self.msg = msg
+    def __init__(self, message = None):
+        CatalogError.__init__(self, message = message)
 
 class ResponseError(CatalogError):
     """Response error from remote cloud service"""
