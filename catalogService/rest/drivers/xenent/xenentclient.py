@@ -188,9 +188,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                          cloudAlias = cloudConfig['alias'])
         return cld
 
-    def launchInstance(self, xmlString, requestIPAddress):
+    def drvLaunchInstance(self, descriptorData, requestIPAddress):
         client = self.client
-        parameters = LaunchInstanceParameters(xmlString)
         imageId = parameters.imageId
 
         image = self.getImage(imageId)

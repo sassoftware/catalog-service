@@ -341,7 +341,8 @@ class _DescriptorDataField(object):
         errorList = []
         if self._nodeDescriptor.multiple:
             # Get the node's children as values
-            values = [ x.getText() for x in self._node.iterChildren() ]
+            values = [ x.getText() for x in self._node.iterChildren()
+                if x.getName() == 'item' ]
             if isinstance(self._nodeDescriptor.type, list):
                 errorList.extend(_validateEnumeratedValue(values,
                                  self._nodeDescriptor.type,
@@ -369,7 +370,8 @@ class _DescriptorDataField(object):
         vtype = self._nodeDescriptor.type
         if self._nodeDescriptor.multiple:
             return [ _cast(x.getText(), vtype)
-                for x in self._node.iterChildren() ]
+                for x in self._node.iterChildren()
+                if x.getName() == 'item' ]
         return _cast(self._node.getText(), vtype)
 
     def getElementTree(self, parent = None):

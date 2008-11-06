@@ -301,22 +301,23 @@ class EC2Client(baseDriver.BaseDriver):
         parameters = CloudParameters(parameters)
         pass
 
-    def launchInstance(self, xmlString, requestIPAddress):
-        parameters = LaunchInstanceParameters(xmlString,
-            requestIPAddress = requestIPAddress)
-        if (parameters.remoteIPAddress
-            and CATALOG_DEF_SECURITY_GROUP in parameters.securityGroups):
+    def drvLaunchInstance(self, descriptorData, requestIPAddress):
+        getField = descriptorData.getField
+        remoteIp = getField('remoteIp')
+        if remoteIp:
+            requestIPAddress = remoteIp
+        if CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
             # Create/update the default security group that opens TCP
             # ports 80, 443, and 8003 for traffic from the requesting IP address
-            self._updateCatalogDefaultSecurityGroup(parameters.remoteIPAddress)
+            self._updateCatalogDefaultSecurityGroup(requestIPAddress)
 
-        reservation = self.client.run_instances(parameters.imageId,
-                min_count=parameters.minCount,
-                max_count=parameters.maxCount,
-                key_name=parameters.keyName,
-                security_groups=parameters.securityGroups,
-                user_data=parameters.userData,
-                instance_type=parameters.instanceType)
+        reservation = self.client.run_instances(getField('imageId'),
+                min_count=getField('minCount'),
+                max_count=getField('maxCount'),
+                key_name=getField('keyName'),
+                security_groups=getField('securityGroups'),
+                user_data=getField('userData'),
+                instance_type=getField('instanceType'))
         return self._getInstancesFromReservation(reservation)
 
     def terminateInstances(self, instanceIds):
@@ -365,18 +366,21 @@ class EC2Client(baseDriver.BaseDriver):
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
-        descr.addDataField("securityGroup",
-            descriptions = "Security Group",
+        descr.addDataField("securityGroups",
+            descriptions = "Security Groups",
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
                 for x in self._cliGetSecurityGroups()
             ))
+        descr.addDataField("remoteIp",
+            descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
+            type = "str",
+            constraints = dict(constraintName = 'length', value = 128))
         descr.addDataField("userData",
             descriptions = "User Data",
             type = "str",
-            constraints = dict(constraintName = 'maxLength',
-                               value = 256))
+            constraints = dict(constraintName = 'length', value = 256))
         return descr
 
     def getEnvironment(self):

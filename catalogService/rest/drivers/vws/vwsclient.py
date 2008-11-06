@@ -234,10 +234,11 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                          cloudAlias = cloudConfig['alias'])
         return cld
 
-    def launchInstance(self, xmlString, requestIPAddress):
+    def drvLaunchInstance(self, descriptorData, requestIPAddress):
         client = self.client
-        parameters = LaunchInstanceParameters(xmlString)
-        imageId = parameters.imageId
+        getField = descriptorData.getField
+
+        imageId = getField('imageId')
 
         image = self.getImage(imageId)
         if not image:
@@ -246,8 +247,8 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instanceId = self._instanceStore.newKey(imageId = imageId)
         self._daemonize(self._launchInstance,
                         instanceId, image,
-                        duration=parameters.duration,
-                        instanceType=parameters.instanceType)
+                        duration=getField('duration'),
+                        instanceType=getField('instanceType'))
         cloudAlias = client.getCloudAlias()
         instanceList = instances.BaseInstances()
         instance = self._nodeFactory.newInstance(id=instanceId,
@@ -327,6 +328,11 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             type = "int",
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
+        descr.addDataField("duration", required = True,
+            descriptions = "Duration (minutes)",
+            type = "int",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 1440))
         return descr
 
 

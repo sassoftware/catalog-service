@@ -172,8 +172,24 @@ class BaseDriver(object):
 
     def getLaunchDescriptor(self):
         descr = descriptor.LaunchDescriptor()
+        # We require an image ID
+        descr.addDataField("imageId",
+            descriptions = "Image ID",
+            hidden = True, required = True, type = "str",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 32))
+
         self.drvPopulateLaunchDescriptor(descr)
         return descr
+
+    def launchInstance(self, xmlString, requestIPAddress):
+        # Grab the launch descriptor
+        descr = self.getLaunchDescriptor()
+        descr.setRootElement('newInstance')
+        # Parse the XML string into descriptor data
+        descrData = descriptor.DescriptorData(fromStream = xmlString,
+            descriptor = descr)
+        return self.drvLaunchInstance(descrData, requestIPAddress)
 
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
