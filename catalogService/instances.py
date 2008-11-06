@@ -8,9 +8,10 @@ import xmlNode
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
-    __slots__ = [ 'id', 'instanceId',
+    __slots__ = [ 'id', 'instanceId', 'instanceName',
+                  'instanceDescription',
                   'dnsName', 'publicDnsName', 'privateDnsName',
-                  'state', 'stateCode', 'keyName', 'shutdownState',
+                  'state', 'stateCode', 'shutdownState',
                   'previousState', 'instanceType', 'launchTime',
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',

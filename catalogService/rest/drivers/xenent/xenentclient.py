@@ -301,8 +301,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instMap  = self.client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
-        # XXX
-        return instanceList
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
                 continue

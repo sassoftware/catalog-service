@@ -244,6 +244,10 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         if not image:
             raise errors.HttpNotFound()
 
+        instanceName = self._getInstanceNameFromImage(image)
+        instanceDescription = self._getInstanceDescriptionFromImage(image) \
+            or instanceName
+
         instanceId = self._instanceStore.newKey(imageId = imageId)
         self._daemonize(self._launchInstance,
                         instanceId, image,
@@ -253,6 +257,8 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instanceList = instances.BaseInstances()
         instance = self._nodeFactory.newInstance(id=instanceId,
                                         instanceId=instanceId,
+                                        instanceName=instanceName,
+                                        instanceDescription=instanceDescription,
                                         imageId=imageId,
                                         cloudName=self.cloudName,
                                         cloudAlias=cloudAlias)

@@ -99,8 +99,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 
 class VMwareInstance(instances.BaseInstance):
     "VMware Instance"
-    __slots__ = instances.BaseInstance.__slots__ + [ 'instanceName',
-                                                     'annotation' ]
+    __slots__ = instances.BaseInstance.__slots__ + [ 'annotation' ]
 
 class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Instance = VMwareInstance
@@ -240,6 +239,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             inst = self._nodeFactory.newInstance(
                 id = vminfo['config.uuid'],
                 instanceName = vminfo['name'],
+                # XXX we may find a better candidate for instanceDesc
+                instanceDescription = vminfo['name'],
                 annotation = vminfo['config.annotation'],
                 instanceId = vminfo['config.uuid'],
                 reservationId = vminfo['config.uuid'],

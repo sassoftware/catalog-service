@@ -241,3 +241,23 @@ class BaseDriver(object):
             descrData.addField(k, value = v)
         descrData.checkConstraints()
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
+
+    def _getInstanceNameFromImage(self, imageNode):
+        if imageNode is None:
+            return None
+        for method in [ imageNode.getBuildName, imageNode.getProductName,
+                        imageNode.getShortName ]:
+            val = method()
+            if val is not None:
+                return val
+        return None
+
+    def _getInstanceDescriptionFromImage(self, imageNode):
+        if imageNode is None:
+            return None
+        for method in [ imageNode.getBuildDescription,
+                        imageNode.getProductDescription, ]:
+            val = method()
+            if val is not None:
+                return val
+        return None

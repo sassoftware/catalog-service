@@ -36,6 +36,9 @@ class EC2_Image(images.BaseImage):
 class EC2_Instance(instances.BaseInstance):
     "EC2 Instance"
 
+    __slots__ = instances.BaseInstance.__slots__ + [
+                'keyName', ]
+
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
 
 class EC2_Cloud(clouds.BaseCloud):
@@ -428,30 +431,50 @@ class EC2Client(baseDriver.BaseDriver):
 
     def _getInstancesFromResult(self, resultSet):
         instanceList = instances.BaseInstances()
-        for i in resultSet:
-            instanceList.append(self._getInstance(i))
+        instanceList.extend(self._getInstances(resultSet))
         return instanceList
 
     def _getInstancesFromReservation(self, reservation):
         insts = instances.BaseInstances()
-        for instance in reservation.instances:
-            insts.append(self._getInstance(instance, reservation))
+        insts.extend(self._getInstances(reservation.instances, reservation))
         return insts
 
-    def _getInstance(self, instance, reservation=None):
+    def _getInstances(self, instancesIterable, reservation=None):
+        # Grab images first
+        imageIds = set(x.image_id for x in instancesIterable
+            if x.image_id is not None)
+        imageIdToImageMap = dict((x.getImageId(), x)
+            for x in self.drvGetImages(list(imageIds)))
+
         properties = {}
         if reservation:
             properties.update(ownerId=reservation.owner_id,
                               reservationId=reservation.id)
+        ret = []
+        for instance in instancesIterable:
+            imageNode = None
+            if instance.image_id is not None:
+                imageNode = imageIdToImageMap[instance.image_id]
+            ret.append(self._getSingleInstance(instance, imageNode,
+                       properties.copy()))
+        return ret
+
+    def _getSingleInstance(self, instance, imageNode, properties):
         if hasattr(instance, 'ami_launch_index'):
             properties['launchIndex'] = int(instance.ami_launch_index)
         for attr, botoAttr in self._instanceBotoMap.items():
             properties[attr] = getattr(instance, botoAttr, None)
+        # come up with a sane name
+
+        instanceName = self._getInstanceNameFromImage(imageNode)
+        instanceDescription = self._getInstanceDescriptionFromImage(imageNode) \
+            or instanceName
+        properties['instanceName'] = instanceName
+        properties['instanceDescription'] = instanceDescription
         i = self._nodeFactory.newInstance(id=instance.id,
                                           instanceId=instance.id,
                                           **properties)
         return i
-
 
     def _getImagesFromResult(self, results):
         imageList = images.BaseImages()
