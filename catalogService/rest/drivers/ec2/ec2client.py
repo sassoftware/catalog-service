@@ -74,11 +74,11 @@ class LaunchInstanceParameters(object):
         self.minCount = node.getMinCount() or 1
         self.maxCount = node.getMaxCount() or 1
 
+        self.keyName = None
         keyPair = node.getKeyPair()
-        if not keyPair:
-            raise errors.ParameterError('keyPair was not specified')
-        keyName = keyPair.getId()
-        self.keyName = self._extractId(keyName)
+        if keyPair:
+            keyName = keyPair.getId()
+            self.keyName = self._extractId(keyName)
 
         self.securityGroups = []
         clientSuppliedRemoteIP = None
