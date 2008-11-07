@@ -307,6 +307,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             inst = self._nodeFactory.newInstance(id = vm['uuid'],
                 #imageId = 'AAA',
                 instanceId = vm['uuid'],
+                instanceName = vm['name_label'],
+                instanceDescription = vm['name_description'],
                 reservationId = vm['uuid'],
                 dnsName = 'AAA',
                 publicDnsName = 'AAA',
