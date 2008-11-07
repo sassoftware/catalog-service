@@ -452,9 +452,10 @@ class EC2Client(baseDriver.BaseDriver):
                               reservationId=reservation.id)
         ret = []
         for instance in instancesIterable:
-            imageNode = None
-            if instance.image_id is not None:
-                imageNode = imageIdToImageMap[instance.image_id]
+            # Technically it is possible for someone to launch an instance,
+            # turn it off and remove the image; amazon will keep that around
+            # for a while, which means we may not have the image available.
+            imageNode = imageIdToImageMap.get(instance.image_id)
             ret.append(self._getSingleInstance(instance, imageNode,
                        properties.copy()))
         return ret
