@@ -133,8 +133,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                          credentials['password'],
                                          transport=self.VimServiceTransport)
         except Exception, e:
-             # FIXME: better error
-             raise AuthenticationFailure('', '')
+            # FIXME: better error
+            raise AuthenticationFailure('', '')
         return client
 
     @classmethod
