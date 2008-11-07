@@ -378,7 +378,7 @@ class EC2Client(baseDriver.BaseDriver):
             ))
         descr.addDataField("remoteIp",
             descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
-            type = "str",
+            type = "str", hidden = True,
             constraints = dict(constraintName = 'length', value = 128))
         descr.addDataField("userData",
             descriptions = "User Data",
