@@ -63,15 +63,14 @@ class ParameterError(CatalogError):
 
 class ResponseError(CatalogError):
     """Response error from remote cloud service"""
-    status = http_codes.HTTP_OK
-#    #status = http_codes.HTTP_BAD_REQUEST
-#    # XXX flex's httpd stack requires we pass a 200 or it will junk the content
+    status = http_codes.HTTP_BAD_REQUEST
+    # XXX flex's httpd stack requires we pass a 200 or it will junk the content
     def __init__(self, status, reason, body):
         # strip any xml tags
         if body.strip().startswith('<?xml'):
             body = ''.join(body.splitlines(True)[1:])
         message = "<wrapped_fault><status>%s</status><reason>%s</reason><body>%s</body></wrapped_fault>" % (status, reason, body)
-        CatalogError.__init__(self, message)
+        CatalogError.__init__(self, message, status = status)
 
 class HttpNotFound(CatalogError):
     """File not found"""

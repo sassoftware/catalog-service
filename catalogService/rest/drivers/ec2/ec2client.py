@@ -316,13 +316,17 @@ class EC2Client(baseDriver.BaseDriver):
             self._updateCatalogDefaultSecurityGroup(requestIPAddress)
 
         imageId = os.path.basename(getField('imageId'))
-        reservation = self.client.run_instances(imageId,
-                min_count=getField('minCount'),
-                max_count=getField('maxCount'),
-                key_name=getField('keyName'),
-                security_groups=getField('securityGroups'),
-                user_data=getField('userData'),
-                instance_type=getField('instanceType'))
+        try:
+            reservation = self.client.run_instances(imageId,
+                    min_count=getField('minCount'),
+                    max_count=getField('maxCount'),
+                    key_name=getField('keyName'),
+                    security_groups=getField('securityGroups'),
+                    user_data=getField('userData'),
+                    instance_type=getField('instanceType'))
+        except EC2ResponseError, e:
+            # Pass the original stack trace in
+            raise errors.ResponseError, (e.status, e.reason, e.body), sys.exc_info()[2]
         return self._getInstancesFromReservation(reservation)
 
     def terminateInstances(self, instanceIds):
