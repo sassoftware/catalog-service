@@ -314,7 +314,8 @@ class EC2Client(baseDriver.BaseDriver):
             # ports 80, 443, and 8003 for traffic from the requesting IP address
             self._updateCatalogDefaultSecurityGroup(requestIPAddress)
 
-        reservation = self.client.run_instances(getField('imageId'),
+        imageId = os.path.basename(getField('imageId'))
+        reservation = self.client.run_instances(imageId,
                 min_count=getField('minCount'),
                 max_count=getField('maxCount'),
                 key_name=getField('keyName'),
