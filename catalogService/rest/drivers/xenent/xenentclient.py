@@ -113,6 +113,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>64</length>
       </constraints>
       <required>true</required>
+      <password>true</password>
     </field>
   </dataFields>
 </descriptor>
