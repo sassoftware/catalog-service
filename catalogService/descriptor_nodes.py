@@ -342,8 +342,11 @@ class _DescriptorDataField(object):
         if self._nodeDescriptor.multiple:
             # Get the node's children as values
             values = [ x.getText() for x in self._node.iterChildren()
-                if x.getName() == 'item' ]
-            if isinstance(self._nodeDescriptor.type, list):
+                if hasattr(x, 'getName') and x.getName() == 'item' ]
+            if self._nodeDescriptor.required and not values:
+                errorList.append("Missing field: '%s'" %
+                    self._nodeDescriptor.name)
+            elif isinstance(self._nodeDescriptor.type, list):
                 errorList.extend(_validateEnumeratedValue(values,
                                  self._nodeDescriptor.type,
                                  self._nodeDescriptor.descriptions[None]))
