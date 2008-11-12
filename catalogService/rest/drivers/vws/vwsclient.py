@@ -570,7 +570,8 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             image.setIsDeployed(True)
             if not mintImageData:
                 continue
-            self._addImageDataFromMintData(image, mintImageData)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
 
         # Add the rest of the images coming from mint
         for imageId, mintImageData in sorted(imageDataLookup.iteritems()):
@@ -579,23 +580,10 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                     is_rBuilderImage = True,
                     cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
-            self._addImageDataFromMintData(image, mintImageData)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
             imageList.append(image)
         return imageList
-
-    @classmethod
-    def _addImageDataFromMintData(cls, image, mintImageData):
-        shortName = os.path.basename(mintImageData['baseFileName'])
-        longName = "%s/%s" % (mintImageData['buildId'], shortName)
-        image.setShortName(shortName)
-        image.setLongName(longName)
-        image.setDownloadUrl(mintImageData['downloadUrl'])
-        image.setBuildPageUrl(mintImageData['buildPageUrl'])
-        image.setBaseFileName(mintImageData['baseFileName'])
-        image.setBuildId(mintImageData['buildId'])
-
-        for key, methodName in images.buildToNodeFieldMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):

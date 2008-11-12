@@ -90,3 +90,18 @@ class StorageMixin(object):
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
         store.delete(self.cloudName)
+
+    @classmethod
+    def _addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        shortName = os.path.basename(mintImageData['baseFileName'])
+        longName = "%s/%s" % (mintImageData['buildId'], shortName)
+        image.setShortName(shortName)
+        image.setLongName(longName)
+        image.setDownloadUrl(mintImageData['downloadUrl'])
+        image.setBuildPageUrl(mintImageData['buildPageUrl'])
+        image.setBaseFileName(mintImageData['baseFileName'])
+        image.setBuildId(mintImageData['buildId'])
+
+        for key, methodName in methodMap.iteritems():
+            getattr(image, methodName)(mintImageData.get(key))
+

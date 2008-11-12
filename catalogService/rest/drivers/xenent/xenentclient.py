@@ -305,15 +305,18 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
                 continue
-            inst = self._nodeFactory.newInstance(id = vm['uuid'],
-                #imageId = 'AAA',
-                instanceId = vm['uuid'],
+
+            instanceId = vm['uuid']
+            imageId = vm['other_config'].get('catalog-client-checksum')
+            inst = self._nodeFactory.newInstance(id = instanceId,
+                imageId = imageId or 'UNKNOWN',
+                instanceId = instanceId,
                 instanceName = vm['name_label'],
                 instanceDescription = vm['name_description'],
                 reservationId = vm['uuid'],
-                dnsName = 'AAA',
-                publicDnsName = 'AAA',
-                privateDnsName = 'AAA',
+                dnsName = 'UNKNOWN',
+                publicDnsName = 'UNKNOWN',
+                privateDnsName = 'UNKNOWN',
                 state = vm['power_state'],
                 launchTime = 1,
                 cloudName = self.cloudName,
@@ -409,14 +412,22 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instMap  = self.client.xenapi.VM.get_all_records()
 
         imageList = images.BaseImages()
-        for opaqueId, vm in instMap.items():
+
+        for vmRef, vm in instMap.items():
             if not vm['is_a_template']:
                 continue
 
-            imageId = vm['uuid']
+            imgChecksum = vm['other_config'].get('cloud-catalog-checksum')
+            if imgChecksum:
+                is_rBuilderImage = True
+                imageId = imgChecksum
+            else:
+                is_rBuilderImage = False
+                imageId = vm['uuid']
+
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
-                    is_rBuilderImage = False,
+                    is_rBuilderImage = is_rBuilderImage,
                     shortName = vm['name_label'],
                     longName = vm['name_description'],
                     cloudName = self.cloudName,
@@ -425,48 +436,33 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return imageList
 
     def _addMintDataToImageList(self, imageList):
-        # XXX
-        return imageList
         cloudAlias = self.getCloudAlias()
 
-        imageDataLookup = self._mintClient.getAllVwsBuilds()
-        # Convert the images coming from rbuilder to .gz, to match what we're
-        # storing in globus
-        imageDataLookup = dict((x + '.gz', y)
-            for x, y in imageDataLookup.iteritems())
+        mintImages = self._mintClient.getAllBuildsByType('XEN_OVA')
+        # Convert the list into a map keyed on the sha1
+        mintImages = dict((x['sha1'], x) for x in mintImages)
+
         for image in imageList:
             imageId = image.getImageId()
-            mintImageData = imageDataLookup.pop(imageId, {})
+            mintImageData = mintImages.pop(imageId, {})
             image.setIs_rBuilderImage(bool(mintImageData))
             image.setIsDeployed(True)
             if not mintImageData:
                 continue
-            self._addImageDataFromMintData(image, mintImageData)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
 
         # Add the rest of the images coming from mint
-        for imageId, mintImageData in sorted(imageDataLookup.iteritems()):
-            image = self._nodeFactory.newImage(id = imageId,
-                    imageId = imageId, isDeployed = False,
+        for imgChecksum, mintImageData in sorted(mintImages.iteritems()):
+            image = self._nodeFactory.newImage(id = imgChecksum,
+                    imageId = imgChecksum, isDeployed = False,
                     is_rBuilderImage = True,
                     cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
-            self._addImageDataFromMintData(image, mintImageData)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
             imageList.append(image)
         return imageList
-
-    @classmethod
-    def _addImageDataFromMintData(cls, image, mintImageData):
-        shortName = os.path.basename(mintImageData['baseFileName'])
-        longName = "%s/%s" % (mintImageData['buildId'], shortName)
-        image.setShortName(shortName)
-        image.setLongName(longName)
-        image.setDownloadUrl(mintImageData['downloadUrl'])
-        image.setBuildPageUrl(mintImageData['buildPageUrl'])
-        image.setBaseFileName(mintImageData['baseFileName'])
-        image.setBuildId(mintImageData['buildId'])
-
-        for key, methodName in images.buildToNodeFieldMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
 
     def _getCredentialsForCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
