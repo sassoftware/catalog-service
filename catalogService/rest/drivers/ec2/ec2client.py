@@ -1,4 +1,5 @@
 import os
+import sys
 import urllib
 from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
