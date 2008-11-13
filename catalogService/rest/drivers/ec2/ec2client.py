@@ -63,57 +63,6 @@ class EC2_InstanceTypes(instances.InstanceTypes):
         ('c1.xlarge', "High-CPU Extra Large"),
     ]
 
-class LaunchInstanceParameters(object):
-    def __init__(self, xmlString=None, requestIPAddress = None):
-        if xmlString:
-            self.load(xmlString, requestIPAddress = requestIPAddress)
-
-    def load(self, xmlString, requestIPAddress):
-        from catalogService import newInstance
-        node = newInstance.Handler().parseString(xmlString)
-        image = node.getImage()
-        imageId = image.getId()
-        self.imageId = self._extractId(imageId)
-
-        self.minCount = node.getMinCount() or 1
-        self.maxCount = node.getMaxCount() or 1
-
-        self.keyName = None
-        keyPair = node.getKeyPair()
-        if keyPair:
-            keyName = keyPair.getId()
-            self.keyName = self._extractId(keyName)
-
-        self.securityGroups = []
-        clientSuppliedRemoteIP = None
-        for sg in (node.getSecurityGroups() or []):
-            # Ignore nodes we don't expect
-            if sg.getName() != securityGroups.BaseSecurityGroup.tag:
-                continue
-            sgId = sg.getId()
-            sgId = self._extractId(sgId)
-            self.securityGroups.append(sgId)
-            if sgId == CATALOG_DEF_SECURITY_GROUP:
-                clientSuppliedRemoteIP = sg.getRemoteIp()
-
-        self.remoteIPAddress = clientSuppliedRemoteIP or requestIPAddress
-
-        self.userData = node.getUserData()
-
-        instanceType = node.getInstanceType()
-        if instanceType is None:
-            instanceType = 'm1.small'
-        else:
-            instanceType = instanceType.getId() or 'm1.small'
-            instanceType = self._extractId(instanceType)
-        self.instanceType = instanceType
-
-    @staticmethod
-    def _extractId(value):
-        if value is None:
-            return None
-        return urllib.unquote(os.path.basename(value))
-
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
   <metadata>
