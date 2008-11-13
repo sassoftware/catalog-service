@@ -108,3 +108,35 @@ class StorageMixin(object):
     @classmethod
     def _sanitizeKey(cls, key):
         return key.replace('/', '_')
+
+    def _daemonize(self, function, *args, **kw):
+        pid = os.fork()
+        if pid:
+            os.waitpid(pid, 0)
+            return
+        try:
+            try:
+                pid = os.fork()
+                if pid:
+                    # The first child exits and is waited by the parent
+                    # the finally part will do the os._exit
+                    return
+                # Redirect stdin, stdout, stderr
+                fd = os.open(os.devnull, os.O_RDWR)
+                os.dup2(fd, 0)
+                os.dup2(fd, 1)
+                os.dup2(fd, 2)
+                os.close(fd)
+                # Create new process group
+                os.setsid()
+
+                os.chdir('/')
+                function(*args, **kw)
+            except Exception:
+                os._exit(1)
+        finally:
+            os._exit(0)
+
+    def _setState(self, instanceId, state):
+        return self._instanceStore.setState(instanceId, state)
+
