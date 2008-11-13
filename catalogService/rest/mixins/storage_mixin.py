@@ -105,3 +105,6 @@ class StorageMixin(object):
         for key, methodName in methodMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
 
+    @classmethod
+    def _sanitizeKey(cls, key):
+        return key.replace('/', '_')

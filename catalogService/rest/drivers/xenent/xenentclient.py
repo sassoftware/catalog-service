@@ -24,6 +24,8 @@ try:
 except ImportError:
     pass
 
+from catalogService.rest.drivers.xenent import xmlNodes
+
 class XenEnt_Image(images.BaseImage):
     "Xen Enterprise Image"
 
@@ -157,6 +159,9 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                      str(credentials['password']))
         except XenAPI.Failure, e:
             raise AuthenticationFailure(e.details[1], e.details[2])
+        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
+                               self._sanitizeKey(self.userId))
+        self._instanceStore = self._getInstanceStore(keyPrefix)
         return sess
 
     @classmethod
@@ -191,22 +196,30 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def drvLaunchInstance(self, descriptorData, requestIPAddress):
         client = self.client
-        imageId = parameters.imageId
+        getField = descriptorData.getField
 
-        image = self.getImage(imageId)
+        imageId = os.path.basename(getField('imageId'))
+
+        image = self.getImages([imageId])[0]
         if not image:
             raise errors.HttpNotFound()
 
+        instanceName = self._getInstanceNameFromImage(image)
+        instanceDescription = self._getInstanceDescriptionFromImage(image) \
+            or instanceName
+
         instanceId = self._instanceStore.newKey(imageId = imageId)
+
         self._daemonize(self._launchInstance,
                         instanceId, image,
-                        duration=parameters.duration,
-                        instanceType=parameters.instanceType)
-        cloudAlias = client.getCloudAlias()
+                        instanceType=getField('instanceType'))
+        cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
         instance = self._nodeFactory.newInstance(id=instanceId,
                                         instanceId=instanceId,
                                         imageId=imageId,
+                                        instanceName=instanceName,
+                                        instanceDescription=instanceDescription,
                                         cloudName=self.cloudName,
                                         cloudAlias=cloudAlias)
         instanceList.append(instance)
@@ -302,6 +315,42 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instMap  = self.client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
+
+        storeInstanceKeys = self._instanceStore.enumerate()
+        for storeKey in storeInstanceKeys:
+            instanceId = os.path.basename(storeKey)
+            expiration = self._instanceStore.getExpiration(storeKey)
+            if expiration is None or time.time() > float(expiration):
+                # This instance exists only in the store, and expired
+                self._instanceStore.delete(storeKey)
+                continue
+            imageId = self._instanceStore.getImageId(storeKey)
+            imagesL = self.getImages([imageId])
+            if not imagesL:
+                # We no longer have this image. Junk the instance
+                self._instanceStore.delete(storeKey)
+                continue
+            image = imagesL[0]
+
+            instanceName = self._getInstanceNameFromImage(image)
+            instanceDescription = self._getInstanceDescriptionFromImage(image) \
+                or instanceName
+
+            inst = self._nodeFactory.newInstance(id = instanceId,
+                imageId = imageId,
+                instanceId = instanceId,
+                instanceName = instanceName,
+                instanceDescription = instanceDescription,
+                dnsName = 'UNKNOWN',
+                publicDnsName = 'UNKNOWN',
+                privateDnsName = 'UNKNOWN',
+                state = self._instanceStore.getState(storeKey),
+                launchTime = 1,
+                cloudName = self.cloudName,
+                cloudAlias = cloudAlias)
+
+            instanceList.append(inst)
+
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
                 continue
@@ -357,8 +406,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _setState(self, instanceId, state):
         return self._instanceStore.setState(instanceId, state)
 
-    def _launchInstance(self, instanceId, image, duration,
-                        instanceType):
+    def _launchInstance(self, instanceId, image, instanceType):
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
@@ -377,7 +425,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             self._setState(instanceId, 'Launching')
 
             realId = self.client.launchInstances([imageId],
-                duration = duration, callback = callback)
+                callback = callback)
 
         finally:
             self._instanceStore.deletePid(instanceId)
@@ -499,6 +547,99 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             # At this point the instance doesn't exist anymore
             self._instanceStore.delete(instId)
 
+    def getRestClient(self):
+        creds = self.credentials
+        username, password = creds['username'], creds['password']
+        cli = restClient.Client('http://%s:%s@%s' %
+            (username, password, self.cloudName))
+        cli.connect()
+        return cli
+
+    def createVirtualMachine(self, cli, checksum, name, description):
+        cli.path = '/virtual-machines'
+
+        resp = cli.request("POST",
+            "<vm><label>%s</label><description>%s</description></vm>" %
+            (name, description))
+
+        respData = resp.read()
+        uuid = self._extractUuid(respData)
+        vmRef = self.client.xenapi.VM.get_by_uuid(uuid)
+
+        # Mark it as a template
+        self.client.xenapi.VM.set_is_a_template(vmRef, True)
+        # Set state so we can filter out these images, they are not useful yet
+        self._setVmState(vmRef, 'Downloading')
+        self._setVmMetadata(vmRef, checksum = checksum)
+        return uuid
+
+    def downloadImage(self, cli, rbuilderUrl):
+        cli.path = '/images'
+        resp = cli.request("POST",
+            "<image><rbuilderUrl>%s</rbuilderUrl></image>" % rbuilderUrl)
+
+        respData = resp.read()
+        return self._extractImage(respData)
+
+    def importVirtualMachine(self, cli, imageId, srUuid):
+        cli.path = '/virtual-machines-imported'
+        resp = cli.request("POST", "<vm><image>%s</image><sr>%s</sr></vm>" %
+            (imageId, srUuid))
+
+        respData = resp.read()
+        return self._extractUuid(respData)
+
+    def setVDIMetadata(self, vbdRecs, label, description, metadata):
+        for vbd in vbdRecs:
+            vdiRef = vbd['VDI']
+            if vdiRef == 'OpaqueRef:NULL':
+                continue
+            self.client.xenapi.VDI.set_other_config(vdiRef, metadata)
+            self.client.xenapi.VDI.set_name_label(vdiRef, label)
+            self.client.xenapi.VDI.set_name_description(vdiRef, description)
+
+
+    def cloneDisk(self, templateVbd, vmRef, otherConfig = None):
+        fields = [ 'bootable', 'device', 'empty', 'mode',
+            'qos_algorithm_params', 'qos_algorithm_type', 'type',
+            'userdevice', 'VDI', 'other_config']
+        vbdRec = dict((x, templateVbd[x]) for x in fields)
+        # Point it to the right VM
+        vbdRec['VM'] = vmRef
+        if otherConfig:
+            vbdRec['other_config'].update(otherConfig)
+        vbdRef = self.client.xenapi.VBD.create(vbdRec)
+        return vbdRef
+
+    def getVBDs(self, vmRec):
+        ret = []
+        for vbdRef in vmRec['VBDs']:
+            ret.append(self.client.xenapi.VBD.get_record(vbdRef))
+        return ret
+
+    def _setVmState(self, vmRef, state):
+        self.client.xenapi.VM.add_to_other_config(vmRef,
+            'cloud-catalog-state', state)
+
+    def _setVmMetadata(self, vmRef, checksum = None):
+        self.client.xenapi.VM.add_to_other_config(vmRef,
+            'cloud-catalog-checksum', checksum)
+
+    def _deleteVirtualMachine(self, vmRef):
+        # Get rid of the imported vm
+        self.client.xenapi.VM.destroy(vmRef)
+
+    @classmethod
+    def _extractUuid(cls, dataString):
+        hndlr = xmlNodes.UuidHandler()
+        node = hndlr.parseString(dataString)
+        return node.getText()
+
+    @classmethod
+    def _extractImage(cls, dataString):
+        hndlr = xmlNodes.ImageHandler()
+        node = hndlr.parseString(dataString)
+        return node.getText()
 
 class LaunchInstanceParameters(object):
     __slots__ = [

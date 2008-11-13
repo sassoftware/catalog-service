@@ -600,10 +600,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             store.set(key, v)
 
     @classmethod
-    def _sanitizeKey(cls, key):
-        return key.replace('/', '_')
-
-    @classmethod
     def _getCloudNameFromConfig(cls, config):
         return config['factory']
 
