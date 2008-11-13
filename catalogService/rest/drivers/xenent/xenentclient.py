@@ -476,8 +476,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
                     is_rBuilderImage = is_rBuilderImage,
-                    shortName = vm['name_label'],
-                    longName = vm['name_description'],
+                    longName = vm['name_label'],
+                    buildDescription = vm['name_description'],
                     cloudName = self.cloudName,
                     cloudAlias = cloudAlias)
             imageList.append(image)
