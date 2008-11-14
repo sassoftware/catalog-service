@@ -56,3 +56,11 @@ def getLogger(name, logFile, formatterClass = Formatter, loggerClass = Logger):
     logger = loggerClass(name)
     logger.addHandler(handler)
     return logger
+
+class LoggerCallback(object):
+    logger = None
+
+    def processRequest(self, request):
+        request.logger = self.logger
+        # This is a filter, it does not process the request
+        return None

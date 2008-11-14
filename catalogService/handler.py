@@ -87,16 +87,8 @@ def getHandler(storageConfig):
     handler.addCallback(errors.ErrorMessageCallback())
     # It is important that the logger callback is always called, so keep this
     # last
-    handler.addCallback(LoggerCallback())
+    handler.addCallback(rlogging.LoggerCallback())
     return handler
-
-class LoggerCallback(object):
-    logger = None
-
-    def processRequest(self, request):
-        request.logger = self.logger
-        # This is a filter, it does not process the request
-        return None
 
 class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     pathPrefix = '/TOPLEVEL'
@@ -114,7 +106,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do(self):
         self._logger = self._getLogger(self.address_string())
         self.handler.setLogger(self._logger)
-        LoggerCallback.logger = self._logger
+        rlogging.LoggerCallback.logger = self._logger
         self.handler.handle(self, self.path[len(self.pathPrefix):])
     do_GET = do_POST = do_PUT = do_DELETE = do
 

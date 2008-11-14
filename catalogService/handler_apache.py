@@ -25,12 +25,17 @@ class ApacheRESTHandler(object):
         self.handler.addCallback(errors.ErrorMessageCallback())
         self.addAuthCallback()
 
-
     def addAuthCallback(self):
         self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
+        # It is important that the logger callback is always called, so keep
+        # this last
+        self.handler.addCallback(rlogging.LoggerCallback())
+
 
     def handle(self, req):
-        self.handler.setLogger(self.getLogger(req))
+        logger = self.getLogger(req)
+        self.handler.setLogger(logger)
+        rlogging.LoggerCallback.logger = logger
         return self.handler.handle(req, req.unparsed_uri[len(self.pathPrefix):])
 
     def getLogger(self, req):
