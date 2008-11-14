@@ -701,7 +701,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _getStorageRepos(self):
         # Get all pools
-        pools = self.client.xenapi.pools.get_all_records()
+        pools = self.client.xenapi.pool.get_all_records()
         srList = [ x['default_SR'] for x in pools.values() ]
         # Validate the sr list
         uuidsFound = dict()
