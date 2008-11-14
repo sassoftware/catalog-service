@@ -3,6 +3,7 @@
 # Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
 #
 
+import os
 import urllib
 
 from catalogService import credentials
@@ -26,8 +27,14 @@ class InstancesController(BaseCloudController):
 
     def create(self, request, cloudName):
         "launch a new instance"
+        request.logger.info("User %s: launching instance in %s/%s" % (
+            request.auth[0], self.driver._cloudType, cloudName))
         insts = self.driver(request, cloudName).launchInstance(request.read(),
                                                                request.host)
+        request.logger.info("User %s: launched instance %s/%s/%s with image %s"
+            % ( request.auth[0], self.driver._cloudType, cloudName,
+            ','.join([os.path.basename(x.getInstanceId()) for x in insts]),
+            ','.join([os.path.basename(x.getImageId()) for x in insts])))
         return XmlResponse(insts)
 
     def destroy(self, request, cloudName, instanceId):

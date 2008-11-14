@@ -138,5 +138,6 @@ class StorageMixin(object):
             os._exit(0)
 
     def _setState(self, instanceId, state):
+        self.log_debug("Instance %s: setting state to `%s'", instanceId, state)
         return self._instanceStore.setState(instanceId, state)
 

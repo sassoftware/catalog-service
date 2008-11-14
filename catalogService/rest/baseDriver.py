@@ -37,6 +37,22 @@ class BaseDriver(object):
         self._nodeFactory = nodeFactory
         self._mintClient = mintClient
         self._nodeFactory.userId = userId
+        self._logger = None
+
+    def setLogger(self, logger):
+        self._logger = logger
+
+    def log_debug(self, *args, **kwargs):
+        if self._logger:
+            return self._logger.debug(*args, **kwargs)
+
+    def log_info(self, *args, **kwargs):
+        if self._logger:
+            return self._logger.info(*args, **kwargs)
+
+    def log_error(self, *args, **kwargs):
+        if self._logger:
+            return self._logger.error(*args, **kwargs)
 
     def isValidCloudName(self, cloudName):
         raise NotImplementedError
@@ -48,9 +64,11 @@ class BaseDriver(object):
         # get an instance that is specific to this particular request.
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
-        return self.__class__(self._cfg, self.cloudType, cloudName,
+        drv =  self.__class__(self._cfg, self.cloudType, cloudName,
                               self._nodeFactory, request.mintClient,
                               userId = request.auth[0])
+        drv.setLogger(request.logger)
+        return drv
 
     def _createNodeFactory(self):
         factory = nodeFactory.NodeFactory(
