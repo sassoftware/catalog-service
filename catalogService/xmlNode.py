@@ -23,7 +23,12 @@ class BaseNode(xmllib.BaseNode):
 
     def __init__(self, attrs=None, nsMap = None, **kwargs):
         xmllib.BaseNode.__init__(self, attrs, nsMap = nsMap)
+        if '_xmlNodeHash' in self.__slots__:
+            self._xmlNodeHash = None
+
         for slot in self.__slots__:
+            if slot.startswith('_'):
+                continue
             setattr(self, slot, None)
 
         kwargs.update(self._constructorOverrides)
@@ -95,6 +100,9 @@ class BaseNode(xmllib.BaseNode):
     # Magic function mapper
     def __getattr__(self, name):
         if name[:3] not in ['get', 'set']:
+            raise AttributeError(name)
+        if name[3] == '_':
+            # We don't allow for slots starting with _ to be magically handled
             raise AttributeError(name)
         slot = "%s%s" % (name[3].lower(), name[4:])
         if slot not in self.__slots__:

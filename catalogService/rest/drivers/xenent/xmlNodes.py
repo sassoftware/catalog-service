@@ -10,6 +10,10 @@ from catalogService import xmlNode
 class UuidNode(xmlNode.BaseNode):
     tag = 'uuid'
 
+    def __repr__(self):
+        return "<%s:tag=%s at %#x>" % (self.__class__.__name__, self.tag,
+                    id(self))
+
 class UuidHandler(xmllib.DataBinder):
     uuidClass = UuidNode
 
