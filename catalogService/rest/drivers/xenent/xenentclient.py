@@ -12,6 +12,7 @@ from catalogService import environment
 from catalogService import images
 from catalogService import instances
 from catalogService import instanceStore
+from catalogService import restClient
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
@@ -204,15 +205,21 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         if not image:
             raise errors.HttpNotFound()
 
-        instanceName = self._getInstanceNameFromImage(image)
-        instanceDescription = self._getInstanceDescriptionFromImage(image) \
-            or instanceName
+        instanceName = getField('instanceName')
+        instanceDescription = getField('instanceDescription')
+
+        instanceName = instanceName or self._getInstanceNameFromImage(image)
+        instanceDescription = instanceDescription or \
+            self._getInstanceDescriptionFromImage(image) or instanceName
 
         instanceId = self._instanceStore.newKey(imageId = imageId)
 
         self._daemonize(self._launchInstance,
                         instanceId, image,
-                        instanceType=getField('instanceType'))
+                        instanceType = getField('instanceType'),
+                        srUuid = getField('srUuid'),
+                        instanceName = instanceName,
+                        instanceDescription = instanceDescription)
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
         instance = self._nodeFactory.newInstance(id=instanceId,
@@ -283,6 +290,15 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in XenEnt_InstanceTypes.idMap)
+            )
+        storageRepos = self._getStorageRepos()
+        descr.addDataField("storageRepository",
+            descriptions = "Storage Repository",
+            required = True,
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x[0], descriptions = x[1][0])
+                for x in storageRepos),
+            default = storageRepos[0][0],
             )
         descr.addDataField("minCount", required = True,
             descriptions = "Minimum Number of Instances",
@@ -403,57 +419,50 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         finally:
             os._exit(0)
 
-    def _setState(self, instanceId, state):
-        return self._instanceStore.setState(instanceId, state)
-
-    def _launchInstance(self, instanceId, image, instanceType):
+    def _launchInstance(self, instanceId, image, instanceType, srUuid,
+            instanceName, instanceDescription):
+        cli = self.getRestClient()
+        nameLabel = image.getLongName()
+        nameDescription = image.getBuildDescription()
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
+                downloadUrl = image.getDownloadUrl()
+                checksum = image.getImageId()
+                self._setState(instanceId, 'Creating template')
+                vmRef, uuid = self.createVirtualMachineTemplate(cli, checksum,
+                    nameLabel, nameDescription)
+
                 self._setState(instanceId, 'Downloading image')
-                dlImagePath = self._downloadImage(img, imageExtraData)
-                self._setState(instanceId, 'Preparing image')
-                imgFile = self._prepareImage(dlImagePath)
+                imageHandle = self.downloadImage(cli, downloadUrl)
+                self._setState(instanceId, 'Importing image')
+                templRef = self.importVirtualMachineTemplate(cli, imageHandle,
+                    srUuid)
+                # These calls should be fast, no reason to update the state
+                # for them
+                templRec = self.client.xenapi.VM.get_record(templRef)
+                # Copy some of the params from the imported template into the
+                # one we just created
+                self.copyVmParams(templRec, vmRef)
+                vbdRecs = self.getVBDs(templRec)
+                self.setVDIMetadata(vbdRecs, nameLabel, nameDescription,
+                    metadata = {'cloud-catalog-checksum' : checksum})
+
                 self._setState(instanceId, 'Publishing image')
-                self._publishImage(imgFile)
+                for vbdRec in vbdRecs:
+                    self.cloneDisk(vbdRec, vmRef)
+                self._deleteVirtualMachine(templRef)
+                image.setImageId(uuid)
+
             imageId = image.getImageId()
 
-            def callback(realId):
-                self._instanceStore.setId(instanceId, realId)
-                # We no longer manage the state ourselves
-                self._setState(instanceId, None)
             self._setState(instanceId, 'Launching')
-
-            realId = self.client.launchInstances([imageId],
-                callback = callback)
+            realId = self.cloneTemplate(imageId, instanceName,
+                instanceDescription)
+            self.startVm(realId)
 
         finally:
             self._instanceStore.deletePid(instanceId)
-
-    def _downloadImage(self, image, imageExtraData):
-        imageId = image.getImageId()
-        # Get rid of the trailing .gz
-        assert(imageId.endswith('.gz'))
-        imageSha1 = imageId[:-3]
-        build = self._mintClient.getBuild(image.getBuildId())
-
-        downloadUrl = imageExtraData['downloadUrl']
-
-        # XXX follow redirects
-        uobj = urllib.urlopen(downloadUrl)
-        # Create temp file
-        downloadFilePath = os.path.join(self.cloudClient._tmpDir,
-            '%s.tgz' % imageSha1)
-        util.copyfileobj(uobj, file(downloadFilePath, "w"))
-        return downloadFilePath
-
-    def _prepareImage(self, downloadFilePath):
-        retfile = self.client._repackageImage(downloadFilePath)
-        os.unlink(downloadFilePath)
-        return retfile
-
-    def _publishImage(self, fileName):
-        self.client.transferInstance(fileName)
 
     def _getImagesFromGrid(self):
         cloudAlias = self.getCloudAlias()
@@ -550,12 +559,12 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getRestClient(self):
         creds = self.credentials
         username, password = creds['username'], creds['password']
-        cli = restClient.Client('http://%s:%s@%s' %
+        cli = RestClient('http://%s:%s@%s' %
             (username, password, self.cloudName))
         cli.connect()
         return cli
 
-    def createVirtualMachine(self, cli, checksum, name, description):
+    def createVirtualMachineTemplate(self, cli, checksum, name, description):
         cli.path = '/virtual-machines'
 
         resp = cli.request("POST",
@@ -571,7 +580,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         # Set state so we can filter out these images, they are not useful yet
         self._setVmState(vmRef, 'Downloading')
         self._setVmMetadata(vmRef, checksum = checksum)
-        return uuid
+        return vmRef, uuid
 
     def downloadImage(self, cli, rbuilderUrl):
         cli.path = '/images'
@@ -581,7 +590,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         respData = resp.read()
         return self._extractImage(respData)
 
-    def importVirtualMachine(self, cli, imageId, srUuid):
+    def importVirtualMachineTemplate(self, cli, imageId, srUuid):
         cli.path = '/virtual-machines-imported'
         resp = cli.request("POST", "<vm><image>%s</image><sr>%s</sr></vm>" %
             (imageId, srUuid))
@@ -598,6 +607,14 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             self.client.xenapi.VDI.set_name_label(vdiRef, label)
             self.client.xenapi.VDI.set_name_description(vdiRef, description)
 
+
+    def copyVmParams(self, srcVmRec, vmRef):
+        params = ['PV_bootloader', 'PV_kernel', 'PV_ramdisk', 'PV_args',
+            'PV_bootloader_args', 'PV_legacy_args',
+            'HVM_boot_policy', 'HVM_boot_params']
+        for param in params:
+            method = getattr(self.client.xenapi.VM, "set_" + param)
+            method(vmRef, srcVmRec[param])
 
     def cloneDisk(self, templateVbd, vmRef, otherConfig = None):
         fields = [ 'bootable', 'device', 'empty', 'mode',
@@ -617,13 +634,54 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             ret.append(self.client.xenapi.VBD.get_record(vbdRef))
         return ret
 
+    def cloneTemplate(self, imageId, instanceName, instanceDescription):
+        vmTemplateRef = self.client.xenapi.VM.get_by_uuid(imageId)
+        imageId = os.path.basename(imageId)
+
+        vmRef = self.client.xenapi.VM.clone(vmTemplateRef,
+            instanceName)
+        self.client.xenapi.VM.set_name_description(vmRef, instanceDescription)
+        self._setVmMetadata(vmRef, templateUuid = imageId)
+
+        # Get all physical interfaces
+        pifs = self.client.xenapi.PIF.get_all_records()
+        # Grab the lowest device (eth0)
+        lowest = min((v['device'], k) for k, v in pifs.items())[1]
+
+        networkRef = self.client.xenapi.PIF.get_network(lowest)
+
+        self.addVIFtoVM(vmRef, networkRef)
+
+    def startVm(self, vmRef):
+        startPaused = False
+        force = False
+        self.client.xenapi.VM.start(vmRef, startPaused, force)
+
+    def addVIFtoVM(self, vmRef, networkRef):
+        vifRec = {
+            'device' : '0',
+            'network' : networkRef,
+            'VM' : vmRef,
+            'MAC' : '',
+            'MTU' : '1500',
+            'qos_algorithm_type' : '',
+            'qos_algorithm_params' : {},
+            'other_config' : {},
+        }
+        self.client.xenapi.VIF.create(vifRec)
+
     def _setVmState(self, vmRef, state):
         self.client.xenapi.VM.add_to_other_config(vmRef,
             'cloud-catalog-state', state)
 
-    def _setVmMetadata(self, vmRef, checksum = None):
-        self.client.xenapi.VM.add_to_other_config(vmRef,
-            'cloud-catalog-checksum', checksum)
+    def _setVmMetadata(self, vmRef, checksum = None,
+            templateUuid = None):
+        if checksum:
+            self.client.xenapi.VM.add_to_other_config(vmRef,
+                'cloud-catalog-checksum', checksum)
+        if templateUuid:
+            self.client.xenapi.VM.add_to_other_config(vmRef,
+                'cloud-catalog-template-uuid', templateUuid)
 
     def _deleteVirtualMachine(self, vmRef):
         # Get rid of the imported vm
@@ -640,6 +698,39 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         hndlr = xmlNodes.ImageHandler()
         node = hndlr.parseString(dataString)
         return node.getText()
+
+    def _getStorageRepos(self):
+        # Get all pools
+        pools = self.client.xenapi.pools.get_all_records()
+        srList = [ x['default_SR'] for x in pools.values() ]
+        # Validate the sr list
+        uuidsFound = dict()
+        ret = []
+        for srRef in srList:
+            try:
+                uuid = self.client.xenapi.SR.get_uuid(srRef)
+                if uuid in uuidsFound:
+                    continue
+                ret.append(uuid)
+                uuidsFound[uuid] = None
+            except XenAPI.Failure, e:
+                if e.details[0] != 'HANDLE_INVALID':
+                    raise
+
+        srRecs = self.client.xenapi.SR.get_all_records()
+        for k, srRec in sorted(srRecs.items(), key = lambda x: x[1]['uuid']):
+            uuid = srRec['uuid']
+            if 'vdi_create' not in srRec['allowed_operations']:
+                continue
+            if uuid not in uuidsFound:
+                ret.append(uuid)
+            uuidsFound[uuid] = (
+                "%s (%s)" % (srRec['name_label'], srRec['type']),
+                srRec['name_description'])
+        return [ (x, uuidsFound[x]) for x in ret if uuidsFound[x] ]
+
+class RestClient(restClient.Client):
+    pass
 
 class LaunchInstanceParameters(object):
     __slots__ = [

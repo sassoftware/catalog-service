@@ -19,6 +19,9 @@ class ResponseError(Exception):
         return '%s: %s\n%s' % (self.status, self.reason, self.contents)
 
 class Client(object):
+    HTTPConnection = httplib.HTTPConnection
+    HTTPSConnection = httplib.HTTPSConnection
+
     def __init__(self, url):
         self.scheme = None
         self.user = None
@@ -51,9 +54,9 @@ class Client(object):
 
     def connect(self):
         if self.scheme == 'http':
-            cls = httplib.HTTPConnection
+            cls = self.HTTPConnection
         else:
-            cls = httplib.HTTPAConnection
+            cls = self.HTTPSConnection
         self._connection = cls(self.host, port = self.port)
         self._connection.connect()
         return self
