@@ -24,13 +24,12 @@ class ApacheRESTHandler(object):
                             site.CatalogServiceController(self.storageConfig))
         self.handler.addCallback(errors.ErrorMessageCallback())
         self.addAuthCallback()
-
-    def addAuthCallback(self):
-        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
         # It is important that the logger callback is always called, so keep
         # this last
         self.handler.addCallback(rlogging.LoggerCallback())
 
+    def addAuthCallback(self):
+        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
 
     def handle(self, req):
         logger = self.getLogger(req)
