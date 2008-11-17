@@ -217,7 +217,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self._daemonize(self._launchInstance,
                         instanceId, image,
                         instanceType = getField('instanceType'),
-                        srUuid = getField('srUuid'),
+                        srUuid = getField('storageRepository'),
                         instanceName = instanceName,
                         instanceDescription = instanceDescription)
         cloudAlias = self.getCloudAlias()
@@ -300,12 +300,12 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             )
         descr.addDataField("minCount", required = True,
             descriptions = "Minimum Number of Instances",
-            type = "int",
+            type = "int", default = 1,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
-            type = "int",
+            type = "int", default = 1,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
 
@@ -434,10 +434,12 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 self._setState(instanceId, 'Downloading image')
                 imageHandle = self.downloadImage(cli, downloadUrl)
                 self._setState(instanceId, 'Importing image')
-                templRef = self.importVirtualMachineTemplate(cli, imageHandle,
+                self._setVmState(vmRef, "Importing image")
+                templUuid = self.importVirtualMachineTemplate(cli, imageHandle,
                     srUuid)
                 # These calls should be fast, no reason to update the state
                 # for them
+                templRef = self.client.xenapi.VM.get_by_uuid(templUuid)
                 templRec = self.client.xenapi.VM.get_record(templRef)
                 # Copy some of the params from the imported template into the
                 # one we just created
@@ -450,6 +452,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 for vbdRec in vbdRecs:
                     self.cloneDisk(vbdRec, vmRef)
                 self._deleteVirtualMachine(templRef)
+                self._setVmState(vmRef, None)
                 image.setImageId(uuid)
 
             imageId = image.getImageId()
@@ -558,8 +561,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getRestClient(self):
         creds = self.credentials
         username, password = creds['username'], creds['password']
-        cli = RestClient('http://%s:%s@%s' %
-            (username, password, self.cloudName))
+        cli = RestClient('http://%s:%s@%s:%d' %
+            (username, password, self.cloudName, 12321))
         cli.connect()
         return cli
 
@@ -582,6 +585,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return vmRef, uuid
 
     def downloadImage(self, cli, rbuilderUrl):
+        # XXX
+        rbuilderUrl = rbuilderUrl.replace('?id=', '?fileId=')
         cli.path = '/images'
         resp = cli.request("POST",
             "<image><rbuilderUrl>%s</rbuilderUrl></image>" % rbuilderUrl)
@@ -650,6 +655,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         networkRef = self.client.xenapi.PIF.get_network(lowest)
 
         self.addVIFtoVM(vmRef, networkRef)
+        return vmRef
 
     def startVm(self, vmRef):
         self.client.xenapi.VM.provision(vmRef)
@@ -668,20 +674,37 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             'qos_algorithm_params' : {},
             'other_config' : {},
         }
-        self.client.xenapi.VIF.create(vifRec)
+        try:
+            self.client.xenapi.VIF.create(vifRec)
+        except Exception, e:
+            if e.details[0] != 'DEVICE_ALREADY_EXISTS':
+                raise
 
     def _setVmState(self, vmRef, state):
-        self.client.xenapi.VM.add_to_other_config(vmRef,
-            'cloud-catalog-state', state)
+        key = 'cloud-catalog-state'
+        self._wrapper_remove_from_other_config(vmRef, key)
+        if state:
+            self._wrapper_add_to_other_config(vmRef, key, state)
 
     def _setVmMetadata(self, vmRef, checksum = None,
             templateUuid = None):
         if checksum:
-            self.client.xenapi.VM.add_to_other_config(vmRef,
+            self._wrapper_add_to_other_config(vmRef,
                 'cloud-catalog-checksum', checksum)
+
         if templateUuid:
-            self.client.xenapi.VM.add_to_other_config(vmRef,
+            self._wrapper_add_to_other_config(vmRef,
                 'cloud-catalog-template-uuid', templateUuid)
+
+    def _wrapper_add_to_other_config(self, vmRef, key, data):
+        try:
+            self.client.xenapi.VM.add_to_other_config(vmRef, key, data)
+        except XenAPI.Failure, e:
+            if e.details[0] != 'MAP_DUPLICATE_KEY':
+                raise
+
+    def _wrapper_remove_from_other_config(self, vmRef, key):
+        self.client.xenapi.VM.remove_from_other_config(vmRef, key)
 
     def _deleteVirtualMachine(self, vmRef):
         # Get rid of the imported vm
@@ -725,7 +748,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             if uuid not in uuidsFound:
                 ret.append(uuid)
             uuidsFound[uuid] = (
-                "%s (%s)" % (srRec['name_label'], srRec['type']),
+                "%s (%s) - %s" % (srRec['name_label'], srRec['type'],
+                                  uuid.split('-')[0]),
                 srRec['name_description'])
         return [ (x, uuidsFound[x]) for x in ret if uuidsFound[x] ]
 
