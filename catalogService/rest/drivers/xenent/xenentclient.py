@@ -273,9 +273,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             imagesById = dict((x.getImageId(), x) for x in imageList )
             newImageList = images.BaseImages()
             for imageId in imageIds:
-                if imageId.endswith('.gz') and imageId not in imagesById:
-                    imageId = imageId[:-3]
-                if imageId not in imagesById:
+                if imageId is None or imageId not in imagesById:
                     continue
                 newImageList.append(imagesById[imageId])
             imageList = newImageList
@@ -456,9 +454,10 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
             imageId = image.getImageId()
 
-            self._setState(instanceId, 'Launching')
+            self._setState(instanceId, 'Cloning template')
             realId = self.cloneTemplate(imageId, instanceName,
                 instanceDescription)
+            self._setState(instanceId, 'Launching')
             self.startVm(realId)
 
         finally:
@@ -653,6 +652,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self.addVIFtoVM(vmRef, networkRef)
 
     def startVm(self, vmRef):
+        self.client.xenapi.VM.provision(vmRef)
         startPaused = False
         force = False
         self.client.xenapi.VM.start(vmRef, startPaused, force)
