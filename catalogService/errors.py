@@ -7,7 +7,10 @@ from catalogService.rest.response import XmlStringResponse
 from catalogService import http_codes
 
 class CatalogErrorResponse(XmlStringResponse):
-    def __init__(self, status, message, tracebackData='', *args, **kw):
+    def __init__(self, status, message, tracebackData='', envelopeStatus=None,
+                 *args, **kw):
+        # See RBL-3818 - flex does not expose the content of a non-200
+        # response, so we have to tunnel faults through 200.
         faultNode = etree.Element("fault")
         node = etree.Element("code")
         node.text = str(status)
@@ -24,8 +27,9 @@ class CatalogErrorResponse(XmlStringResponse):
 
         content = etree.tostring(faultNode, pretty_print = True,
             xml_declaration = True, encoding = 'UTF-8')
+        # Prefer envelopeStatus if set, otherwise use status
         XmlStringResponse.__init__(self, content=content,
-                                   status=status,
+                                   status=envelopeStatus or status,
                                    message=message, *args, **kw)
 
 
@@ -82,15 +86,25 @@ class ErrorMessageCallback(object):
             return
         return CatalogErrorResponse(status=response.status,
                             message=response.message,
-                            headers=response.headers)
+                            headers=response.headers,
+                            envelopeStatus = self._getEnvelopeStatus(request))
 
     def processException(self, request, excClass, exception, tb):
+        envelopeStatus = self._getEnvelopeStatus(request)
         if isinstance(exception, CatalogError):
             return CatalogErrorResponse(status=exception.status,
-                                        message=exception.message)
+                                        message=exception.message,
+                                        envelopeStatus = envelopeStatus)
         from restlib.http import handler
         response = handler.ExceptionCallback().processException(request,
             excClass, exception, tb)
         return CatalogErrorResponse(status = response.status,
             message = response.message,
-            tracebackData = response.content)
+            tracebackData = response.content,
+            envelopeStatus = envelopeStatus)
+
+    @classmethod
+    def _getEnvelopeStatus(cls, request):
+        if 'HTTP_X_FLASH_VERSION' not in request.headers:
+            return None
+        return 200
