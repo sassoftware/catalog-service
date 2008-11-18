@@ -162,7 +162,8 @@ class BaseDriver(object):
         descr = self.getCredentialsDescriptor()
         descrData = descriptor.DescriptorData(descriptor = descr)
         if not cred:
-            return descrData
+            raise errors.MissingCredentials(status = 404,
+                message = "User credentials not configured")
         for descrName, localName in self._credNameMap:
             descrData.addField(descrName, value = cred[localName])
         descrData.checkConstraints()
