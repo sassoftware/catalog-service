@@ -198,7 +198,7 @@ class EC2Client(baseDriver.BaseDriver):
 
     def drvGetCloudConfiguration(self):
         store = self._getConfigurationDataStore()
-        if store.get('disabled'):
+        if not store.get('enabled'):
             return {}
         return dict(name = 'aws', cloudAlias = 'ec2', fullDescription = EC2_DESCRIPTION)
 
@@ -214,12 +214,12 @@ class EC2Client(baseDriver.BaseDriver):
 
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
-        store.set('disabled', "1")
+        store.delete('enabled')
 
     def drvCreateCloud(self, descriptorData):
-        # Nothing fancy, just remove the disabled flag
         store = self._getConfigurationDataStore()
-        store.delete('disabled')
+        # Nothing fancy, just reenable the cloud
+        store.set('enabled', 1)
         return self.listClouds()[0]
 
     def isDriverFunctional(self):
