@@ -15,6 +15,13 @@ from ZSI.wstools import TimeoutSocket
 from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
 
+def _strToMor(smor, mortype=None):
+    # convert a string to a managed object reference
+    mor = ns0.ManagedObjectReference_Def('').pyclass(smor)
+    if mortype:
+        mor.set_attribute_type(mortype)
+    return mor
+
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
                  **kw):
@@ -631,7 +638,16 @@ class VimService(object):
             mor = datum.get_element_obj()
             props = {}
             for prop in datum.get_element_propSet():
-                props[prop.get_element_name()] = prop.get_element_val()
+                name = prop.get_element_name()
+                val = prop.get_element_val()
+                if (hasattr(val, 'typecode')
+                    and isinstance(val.typecode, ns0.ArrayOfOptionValue_Def)):
+                    # unroll option=value arrays into a dictionary
+                    d = {}
+                    for holder in val.get_element_OptionValue():
+                        d[holder.get_element_key()] = holder.get_element_value()
+                    val = d
+                props[name] = val
             ret[mor] = props
         return ret
 
@@ -699,11 +715,30 @@ class VimService(object):
         ret = self._service.FindByUuid(req)
         return ret.get_element_returnval()
 
+    def setExtraConfig(self, vm, options):
+        req = ReconfigVM_TaskRequestMsg()
+        spec = req.new_spec()
+        req.set_element__this(_strToMor(vm, 'VirtualMachine'))
+        req.set_element_spec(spec)
+        l = []
+        for key, value in options.iteritems():
+            option = ns0.OptionValue_Def('').pyclass()
+            option.set_element_key(key)
+            option.set_element_value(value)
+            l.append(option)
+        spec.set_element_extraConfig(l)
+        ret = self._service.ReconfigVM_Task(req)
+        task = ret.get_element_returnval()
+        res = self.waitForTask(task)
+
     def shutdownVM(self, mor=None, uuid=None):
         if not mor and not uuid:
             raise TypeError('either VM object reference (mor) or uuid required')
         if mor and uuid:
             raise TypeError('either VM object reference (mor) or uuid required, but not both')
+
+        if mor:
+            mor = _strToMor(mor, 'VirtualMachine')
 
         if uuid:
             mor = self.findVMByUUID(uuid)
