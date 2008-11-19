@@ -27,5 +27,6 @@ export pydir = $(sitedir)
 export initdir = /etc/init.d
 export sysconfdir = /etc/sysconfig
 export docdir = $(datadir)/doc/product-common-$(VERSION)
+export helpdir=$(datadir)/catalog-service/help
 
 export VERSION

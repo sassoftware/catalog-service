@@ -16,11 +16,19 @@ from catalogService import storage
 from catalogService.rest import auth
 from catalogService.rest import response, site
 
+class Request(modpython.ModPythonRequest):
+    _helpDir = '/usr/share/catalog-service/help'
+    _driverHelpDir = 'drivers/%(driverName)s'
+
+class ModPythonHttpHandler(modpython.ModPythonHttpHandler):
+    requestClass = Request
+
 class ApacheRESTHandler(object):
+    httpHandlerClass = ModPythonHttpHandler
     def __init__(self, pathPrefix, storagePath):
         self.pathPrefix = pathPrefix
         self.storageConfig = storage.StorageConfig(storagePath=storagePath)
-        self.handler = modpython.ModPythonHttpHandler(
+        self.handler = self.httpHandlerClass(
                             site.CatalogServiceController(self.storageConfig))
         self.handler.addCallback(errors.ErrorMessageCallback())
         self.addAuthCallback()

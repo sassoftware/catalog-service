@@ -80,9 +80,15 @@ if not hasattr(BaseHTTPServer, '_quote_html'):
         return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     BaseHTTPServer._quote_html = _quote_html
 
+class Request(simplehttp.SimpleHttpRequest):
+    _helpDir = '/usr/share/catalog-service/help'
+    _driverHelpDir = 'drivers/%(driverName)s'
+
+class SimpleHttpHandler(simplehttp.SimpleHttpHandler):
+    requestClass = Request
+
 def getHandler(storageConfig):
-    handler = simplehttp.SimpleHttpHandler(
-                        site.CatalogServiceController(storageConfig))
+    handler = SimpleHttpHandler(site.CatalogServiceController(storageConfig))
     handler.addCallback(auth.AuthenticationCallback(storageConfig))
     handler.addCallback(errors.ErrorMessageCallback())
     # It is important that the logger callback is always called, so keep this

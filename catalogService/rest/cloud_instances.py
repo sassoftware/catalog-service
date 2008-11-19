@@ -28,11 +28,11 @@ class InstancesController(BaseCloudController):
     def create(self, request, cloudName):
         "launch a new instance"
         request.logger.info("User %s: launching instance in %s/%s" % (
-            request.auth[0], self.driver._cloudType, cloudName))
+            request.auth[0], self.driver.cloudType, cloudName))
         insts = self.driver(request, cloudName).launchInstance(request.read(),
                                                                request.host)
         request.logger.info("User %s: launched instance %s/%s/%s with image %s"
-            % ( request.auth[0], self.driver._cloudType, cloudName,
+            % ( request.auth[0], self.driver.cloudType, cloudName,
             ','.join([os.path.basename(x.getInstanceId()) for x in insts]),
             ','.join([os.path.basename(x.getImageId()) for x in insts])))
         return XmlResponse(insts)

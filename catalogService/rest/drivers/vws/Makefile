@@ -11,6 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
+SUBDIRS = help
 python_files =	$(wildcard *.py)
 
 dist_files = Makefile $(python_files)

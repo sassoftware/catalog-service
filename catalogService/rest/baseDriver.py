@@ -22,13 +22,13 @@ class BaseDriver(object):
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
     _credNameMap = []
-    _cloudType = None
+    cloudType = None
 
-    def __init__(self, cfg, cloudType, cloudName=None,
+    def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, mintClient=None, userId = None):
         self.userId = userId
-        self.cloudType = cloudType
         self.cloudName = cloudName
+        self.driverName = driverName
         self._cfg = cfg
         self._cloudClient = None
         self._cloudCredentials = None
@@ -64,7 +64,7 @@ class BaseDriver(object):
         # get an instance that is specific to this particular request.
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
-        drv =  self.__class__(self._cfg, self.cloudType, cloudName,
+        drv =  self.__class__(self._cfg, self.driverName, cloudName,
                               self._nodeFactory, request.mintClient,
                               userId = request.auth[0])
         drv.setLogger(request.logger)
@@ -170,7 +170,7 @@ class BaseDriver(object):
         return self._nodeFactory.newCredentialsDescriptorData(descrData)
 
     def getCloudType(self):
-        node = self._createCloudTypeNode(self._cloudType)
+        node = self._createCloudTypeNode(self.cloudType)
         return node
 
     def _createCloudTypeNode(self, cloudTypeName):

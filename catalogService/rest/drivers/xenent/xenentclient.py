@@ -125,7 +125,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = XenEnt_Image
 
-    _cloudType = 'xen-enterprise'
+    cloudType = 'xen-enterprise'
 
     _credNameMap = [
         ('username', 'username'),

@@ -105,7 +105,7 @@ class VMwareInstance(instances.BaseInstance):
 class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Instance = VMwareInstance
 
-    _cloudType = 'vmware'
+    cloudType = 'vmware'
 
     _credNameMap = [
         ('username', 'username'),

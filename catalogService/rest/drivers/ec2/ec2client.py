@@ -156,7 +156,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 """
 
 class EC2Client(baseDriver.BaseDriver):
-    _cloudType = 'ec2'
+    cloudType = 'ec2'
 
     Cloud = EC2_Cloud
     EnvironmentCloud = EC2_EnvironmentCloud
@@ -503,7 +503,7 @@ class EC2Client(baseDriver.BaseDriver):
 
     def _getConfigurationDataStore(self):
         path = os.path.join(self._cfg.storagePath, 'configuration',
-            self._cloudType, 'aws')
+            self.cloudType, 'aws')
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
