@@ -39,7 +39,7 @@ class ApacheRESTHandler(object):
 
     def getLogger(self, req):
         logger = rlogging.getLogger('catalog-service', None)
-        logger.setAddress('1.2.3.4')
+        logger.setAddress(req.connection.remote_ip)
         return logger
 
 def handler(req):
