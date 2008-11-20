@@ -135,6 +135,9 @@ class BaseDescriptor(_BaseClass):
         descriptions = kwargs.get('descriptions', [])
         if not isinstance(descriptions, list):
             descriptions = [ descriptions ]
+        help = kwargs.get('help', [])
+        if not isinstance(help, list):
+            help = [ help ]
         constraintsDescriptions = kwargs.get('constraintsDescriptions', [])
         default = None
         if 'default' in kwargs:
@@ -151,6 +154,7 @@ class BaseDescriptor(_BaseClass):
         df.descriptions = dnodes._Descriptions()
         df.descriptions.extend(
             [ dnodes.DescriptionNode.fromData(x) for x in descriptions ])
+        df.help = [ dnodes.HelpNode.fromData(x) for x in help ]
         df.constraints = dnodes._ConstraintsNode.fromData(constraints)
         if df.constraints and constraintsDescriptions:
             df.constraints.descriptions = dnodes._Descriptions()
