@@ -8,6 +8,7 @@ from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
 from mint.mint_error import EC2Exception as MintEC2Exception
+from mint.mint_error import TargetExists
 
 from catalogService import clouds
 from catalogService import descriptor
@@ -81,7 +82,8 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Name</desc>
       </descriptions>
       <type>str</type>
-      <required>true</required>
+      <default>aws</default>
+      <hidden>true</hidden>
     </field>
     <field>
       <name>cloudAlias</name>
@@ -89,7 +91,8 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Cloud Alias</desc>
       </descriptions>
       <type>str</type>
-      <required>true</required>
+      <default>ec2</default>
+      <hidden>true</hidden>
     </field>
     <field>
       <name>fullDescription</name>
@@ -97,6 +100,64 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Full Description</desc>
       </descriptions>
       <type>str</type>
+      <default>Amazon Elastic Compute Cloud</default>
+      <hidden>true</hidden>
+    </field>
+    <field>
+      <name>accountId</name>
+      <descriptions>
+        <desc>Amazon Account Number</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>12</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>publicAccessKeyId</name>
+      <descriptions>
+        <desc>Access Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>100</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>secretAccessKey</name>
+      <descriptions>
+        <desc>Secret Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>256</length>
+      </constraints>
+      <required>true</required>
+      <password>true</password>
+    </field>
+    <field>
+      <name>s3Bucket</name>
+      <descriptions>
+        <desc>S3 Bucket</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>32</length>
+      </constraints>
       <required>true</required>
     </field>
   </dataFields>
@@ -222,6 +283,20 @@ class EC2Client(baseDriver.BaseDriver):
     def drvCreateCloud(self, descriptorData):
         store = self._getConfigurationDataStore()
         # Nothing fancy, just reenable the cloud
+        getField = descriptorData.getField
+        dataDict = dict(
+            ec2AccountId = getField('accountId'),
+            ec2PublicKey = getField('publicAccessKeyId'),
+            ec2PrivateKey = getField('secretAccessKey'),
+            ec2S3Bucket = getField('ec2S3Bucket'),
+            ec2CertificateFile = None,
+            ec2CertificateKeyFile = None,
+            ec2LaunchUsers = None,
+            ec2LaunchGroups = None)
+        try:
+            self._mintClient.addTarget('ec2', 'aws', dataDict)
+        except TargetExists:
+            pass
         store.set('enabled', 1)
         return self.listClouds()[0]
 
