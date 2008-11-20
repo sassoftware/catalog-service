@@ -163,6 +163,17 @@ class HelpNode(xmllib.BaseNode):
         dn = cls(attrs, name = cls.name)
         return dn
 
+    def _getLang(self):
+        return self.getAttribute('lang')
+    lang = property(_getLang)
+
+    def _getHref(self):
+        return self.getAttribute('href')
+    def _setHref(self, val):
+        # XXX that's not very polite
+        self._otherAttributes[(None, 'href')] = val
+    href = property(_getHref, _setHref)
+
 class _RootElement(xmllib.StringNode):
     name = "rootElement"
 

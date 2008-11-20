@@ -199,6 +199,7 @@ class BaseDriver(object):
                                min = 1, max = 32))
 
         self.drvPopulateLaunchDescriptor(descr)
+        descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
     def launchInstance(self, xmlString, requestIPAddress):

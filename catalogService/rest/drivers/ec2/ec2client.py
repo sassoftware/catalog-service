@@ -309,6 +309,9 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [
                 ("Instance Size", None),
                 ("Type de l'instance", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             required = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
@@ -319,6 +322,9 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [
                 ("Minimum Number of Instances", None),
                 ("Nombre minimal d'instances", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
@@ -326,11 +332,17 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [
                 ("Maximum Number of Instances", None),
                 ("Nombre maximal d'instances", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyPair",
             descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
@@ -338,6 +350,9 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDataField("securityGroups",
             descriptions = [("Security Groups", None),
                 (u"Groupes de sécurité", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -350,6 +365,9 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDataField("userData",
             descriptions = [("User Data", None),
                 ("Data utilisateur", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
         return descr

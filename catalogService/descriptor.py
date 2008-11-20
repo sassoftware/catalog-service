@@ -129,6 +129,9 @@ class BaseDescriptor(_BaseClass):
         """
         return [ PresentationField(x) for x in self._dataFields ]
 
+    def iterRawDataFields(self):
+        return iter(self._dataFields)
+
     def addDataField(self, name, **kwargs):
         nodeType = kwargs.get('type')
         constraints = kwargs.get('constraints', [])
@@ -374,12 +377,13 @@ class EnumeratedType(list):
         return enumer
 
 class PresentationField(object):
-    __slots__ = [ 'name', 'descriptions', 'type', 'multiple', 'default',
+    __slots__ = [ 'name', 'descriptions', 'help', 'type', 'multiple', 'default',
                   'constraints', 'constraintsDescriptions', 'required',
                   'hidden', 'password', ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
+        self.help = dict((x.lang, x.href) for x in (node.help or []))
         if node.enumeratedType is None:
             self.type = node.type
         else:
