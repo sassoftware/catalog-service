@@ -1,3 +1,6 @@
+
+# vim: set fileencoding=utf-8 :
+
 import os
 import sys
 import urllib
@@ -303,30 +306,38 @@ class EC2Client(baseDriver.BaseDriver):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
         descr.addDescription("Amazon EC2 Launch Parameters")
         descr.addDataField("instanceType",
-            descriptions = "Instance Size", required = True,
+            descriptions = [
+                ("Instance Size", None),
+                ("Type de l'instance", "fr_FR")],
+            required = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in EC2_InstanceTypes.idMap)
             )
         descr.addDataField("minCount",
-            descriptions = "Minimum Number of Instances",
+            descriptions = [
+                ("Minimum Number of Instances", None),
+                ("Nombre minimal d'instances", "fr_FR")],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount",
-            descriptions = "Maximum Number of Instances",
+            descriptions = [
+                ("Maximum Number of Instances", None),
+                ("Nombre maximal d'instances", "fr_FR")],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyPair",
-            descriptions = "Key Pair",
+            descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
         descr.addDataField("securityGroups",
-            descriptions = "Security Groups",
+            descriptions = [("Security Groups", None),
+                (u"Groupes de sécurité", "fr_FR")],
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -337,7 +348,8 @@ class EC2Client(baseDriver.BaseDriver):
             type = "str", hidden = True,
             constraints = dict(constraintName = 'length', value = 128))
         descr.addDataField("userData",
-            descriptions = "User Data",
+            descriptions = [("User Data", None),
+                ("Data utilisateur", "fr_FR")],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
         return descr
