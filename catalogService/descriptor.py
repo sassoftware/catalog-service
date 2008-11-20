@@ -169,6 +169,9 @@ class BaseDescriptor(_BaseClass):
         df.required = kwargs.get('required')
         df.hidden = kwargs.get('hidden')
         df.password = kwargs.get('password')
+        conditional = kwargs.get('conditional')
+        if conditional:
+            df.conditional = dnodes._ConditionalNode.fromConditional(conditional)
         self._dataFields.extend([ df ])
         self._dataFieldsHash[df.name] = df
 
@@ -395,3 +398,10 @@ class PresentationField(object):
             self.constraintsDescriptions = node.constraints.getDescriptions()
         else:
             self.constraints = []
+
+class Conditional(object):
+    __slots__ = [ 'fieldName', 'operator', 'value' ]
+    def __init__(self, fieldName = None, operator = None, value = None):
+        self.fieldName = fieldName
+        self.operator = operator
+        self.value = value
