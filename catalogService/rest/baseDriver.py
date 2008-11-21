@@ -257,7 +257,7 @@ class BaseDriver(object):
         descrData = descriptor.DescriptorData(descriptor = descr)
 
         cloudConfig = self.drvGetCloudConfiguration()
-        for k, v in cloudConfig.iteritems():
+        for k, v in sorted(cloudConfig.items()):
             descrData.addField(k, value = v)
         descrData.checkConstraints()
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
