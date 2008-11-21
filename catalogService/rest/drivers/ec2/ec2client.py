@@ -473,7 +473,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Minimum Number of Instances", None),
                 ("Nombre minimal d'instances", "fr_FR")],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("minInstances.html", None)
             ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
@@ -483,7 +483,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Maximum Number of Instances", None),
                 ("Nombre maximal d'instances", "fr_FR")],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("maxInstances.html", None)
             ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
@@ -491,7 +491,7 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDataField("keyPair",
             descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("keyPair.html", None)
             ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
@@ -501,7 +501,7 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [("Security Groups", None),
                 (u"Groupes de sécurité", "fr_FR")],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("securityGroups.html", None)
             ],
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
@@ -516,7 +516,7 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [("User Data", None),
                 ("Data utilisateur", "fr_FR")],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("userData.html", None)
             ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
