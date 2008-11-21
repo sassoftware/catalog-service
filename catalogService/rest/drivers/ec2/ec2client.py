@@ -310,7 +310,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Instance Size", None),
                 ("Type de l'instance", "fr_FR")],
             help = [
-                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+                ("instanceTypes.html", None)
             ],
             required = True,
             type = descriptor.EnumeratedType(
