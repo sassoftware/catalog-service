@@ -264,7 +264,16 @@ class EC2Client(baseDriver.BaseDriver):
         store = self._getConfigurationDataStore()
         if not store.get('enabled'):
             return {}
-        return dict(name = 'aws', cloudAlias = 'ec2', fullDescription = EC2_DESCRIPTION)
+        ret = dict(name = 'aws', cloudAlias = 'ec2',
+            fullDescription = EC2_DESCRIPTION,
+            )
+        if self._mintClient:
+            targetData = self._mintClient.getTargetData('ec2', 'aws')
+            ret.update(dict(accountId = targetData['ec2AccountId'],
+                publicAccessKeyId = targetData['ec2PublicKey'],
+                secretAccessKey = targetData['ec2PrivateKey'],
+                s3Bucket = targetData['ec2S3Bucket']))
+        return ret
 
     def _getCloudCredentialsForUser(self):
         cloudConfig = self.drvGetCloudConfiguration()
