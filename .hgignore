@@ -6,3 +6,7 @@
 .*\.so$
 ^tmp/
 ^pylint/reports/
+
+^.*project$
+^.*pydevproject$
+
