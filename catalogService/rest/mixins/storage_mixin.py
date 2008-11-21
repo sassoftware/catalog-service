@@ -25,13 +25,13 @@ class StorageMixin(object):
 
     def _getCredentialsDataStore(self):
         path = os.path.join(self._cfg.storagePath, 'credentials',
-            self._cloudType)
+            self.cloudType)
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
     def _getConfigurationDataStore(self, cloudName = None):
         path = os.path.join(self._cfg.storagePath, 'configuration',
-            self._cloudType)
+            self.cloudType)
         if cloudName is not None:
             path += '/' + self._sanitizeKey(cloudName)
         cfg = storage.StorageConfig(storagePath = path)
@@ -39,7 +39,7 @@ class StorageMixin(object):
 
     def _getInstanceStore(self, keyPrefix):
         path = os.path.join(self._cfg.storagePath, 'instances',
-            self._cloudType)
+            self.cloudType)
         cfg = storage.StorageConfig(storagePath = path)
 
         dstore = storage.DiskStorage(cfg)

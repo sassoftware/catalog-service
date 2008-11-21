@@ -12,21 +12,17 @@
 # full details.
 #
 
-SUBDIRS = help
-python_files =	$(wildcard *.py)
+help_files =	$(shell find . -name \*.html)
 
-dist_files = Makefile $(python_files)
+dist_files = Makefile $(help_files)
 
 all: default-all
 
-install: all pyfiles-install default-install install-subdirs
-	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
-	$(PYTHON) -OO -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
+install: all helpfiles-install default-install install-subdirs
 
 dist: default-dist
 
 clean: default-clean
-	rm -f xmllib_constants.py
 
-include ../../../../Make.rules
-include ../../../../Make.defs
+include ../../../../../Make.rules
+include ../../../../../Make.defs

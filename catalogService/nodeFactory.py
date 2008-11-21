@@ -116,6 +116,16 @@ class NodeFactory(object):
         node.setId(self.getSecurityGroupUrl(node))
         return node
 
+    def newLaunchDescriptor(self, descriptor):
+        cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
+
+        for field in descriptor.iterRawDataFields():
+            for helpNode in field.help:
+                href = helpNode.href
+                if '://' not in href:
+                    helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
+        return descriptor
+
     @classmethod
     def join(cls, *args):
         """Join the arguments into a URL"""

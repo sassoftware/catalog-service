@@ -1,3 +1,6 @@
+
+# vim: set fileencoding=utf-8 :
+
 import os
 import sys
 import urllib
@@ -156,7 +159,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 """
 
 class EC2Client(baseDriver.BaseDriver):
-    _cloudType = 'ec2'
+    cloudType = 'ec2'
 
     Cloud = EC2_Cloud
     EnvironmentCloud = EC2_EnvironmentCloud
@@ -198,7 +201,7 @@ class EC2Client(baseDriver.BaseDriver):
 
     def drvGetCloudConfiguration(self):
         store = self._getConfigurationDataStore()
-        if store.get('disabled'):
+        if not store.get('enabled'):
             return {}
         return dict(name = 'aws', cloudAlias = 'ec2', fullDescription = EC2_DESCRIPTION)
 
@@ -214,12 +217,12 @@ class EC2Client(baseDriver.BaseDriver):
 
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
-        store.set('disabled', "1")
+        store.delete('enabled')
 
     def drvCreateCloud(self, descriptorData):
-        # Nothing fancy, just remove the disabled flag
         store = self._getConfigurationDataStore()
-        store.delete('disabled')
+        # Nothing fancy, just reenable the cloud
+        store.set('enabled', 1)
         return self.listClouds()[0]
 
     def isDriverFunctional(self):
@@ -303,30 +306,53 @@ class EC2Client(baseDriver.BaseDriver):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
         descr.addDescription("Amazon EC2 Launch Parameters")
         descr.addDataField("instanceType",
-            descriptions = "Instance Size", required = True,
+            descriptions = [
+                ("Instance Size", None),
+                ("Type de l'instance", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
+            required = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in EC2_InstanceTypes.idMap)
             )
         descr.addDataField("minCount",
-            descriptions = "Minimum Number of Instances",
+            descriptions = [
+                ("Minimum Number of Instances", None),
+                ("Nombre minimal d'instances", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount",
-            descriptions = "Maximum Number of Instances",
+            descriptions = [
+                ("Maximum Number of Instances", None),
+                ("Nombre maximal d'instances", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyPair",
-            descriptions = "Key Pair",
+            descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
         descr.addDataField("securityGroups",
-            descriptions = "Security Groups",
+            descriptions = [("Security Groups", None),
+                (u"Groupes de sécurité", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -337,7 +363,11 @@ class EC2Client(baseDriver.BaseDriver):
             type = "str", hidden = True,
             constraints = dict(constraintName = 'length', value = 128))
         descr.addDataField("userData",
-            descriptions = "User Data",
+            descriptions = [("User Data", None),
+                ("Data utilisateur", "fr_FR")],
+            help = [
+                ("demo/about.html", None), ("demo/about_fr.html", "fr_FR"),
+            ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
         return descr
@@ -503,7 +533,7 @@ class EC2Client(baseDriver.BaseDriver):
 
     def _getConfigurationDataStore(self):
         path = os.path.join(self._cfg.storagePath, 'configuration',
-            self._cloudType, 'aws')
+            self.cloudType, 'aws')
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 

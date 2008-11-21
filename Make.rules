@@ -16,11 +16,20 @@ PYTHON = $(shell [ -x /usr/bin/python2.4 ] && echo /usr/bin/python2.4)
 PYVERSION = $(shell $(PYTHON) -c 'import os, sys; print sys.version[:3]')
 PYINCLUDE = $(shell $(PYTHON) -c 'import os, sys; print os.sep.join((sys.prefix, "include", "python" + sys.version[:3]))')
 
+HELPDIR = $(helpdir)/drivers/$(notdir $(patsubst %/,%,$(dir $(shell pwd))))
+
 pyfiles-install:
 	mkdir -p $(DESTDIR)$(pydir)
 	for f in $(python_files); do \
 		mkdir -p `dirname $(DESTDIR)/$(sitedir)/$(DIR)/$$f`; \
 		cp -a $$f $(DESTDIR)/$(sitedir)/$(DIR)/$$f; \
+	done
+
+helpfiles-install:
+	mkdir -p $(DESTDIR)$(HELPDIR)
+	for f in $(help_files); do \
+		mkdir -p `dirname $(DESTDIR)$(HELPDIR)/$$f`; \
+		cp -a $$f $(DESTDIR)$(HELPDIR)/$$f; \
 	done
 
 default-dist: dist-subdirs

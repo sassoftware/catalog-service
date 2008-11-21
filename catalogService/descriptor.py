@@ -129,12 +129,18 @@ class BaseDescriptor(_BaseClass):
         """
         return [ PresentationField(x) for x in self._dataFields ]
 
+    def iterRawDataFields(self):
+        return iter(self._dataFields)
+
     def addDataField(self, name, **kwargs):
         nodeType = kwargs.get('type')
         constraints = kwargs.get('constraints', [])
         descriptions = kwargs.get('descriptions', [])
         if not isinstance(descriptions, list):
             descriptions = [ descriptions ]
+        help = kwargs.get('help', [])
+        if not isinstance(help, list):
+            help = [ help ]
         constraintsDescriptions = kwargs.get('constraintsDescriptions', [])
         default = None
         if 'default' in kwargs:
@@ -151,6 +157,7 @@ class BaseDescriptor(_BaseClass):
         df.descriptions = dnodes._Descriptions()
         df.descriptions.extend(
             [ dnodes.DescriptionNode.fromData(x) for x in descriptions ])
+        df.help = [ dnodes.HelpNode.fromData(x) for x in help ]
         df.constraints = dnodes._ConstraintsNode.fromData(constraints)
         if df.constraints and constraintsDescriptions:
             df.constraints.descriptions = dnodes._Descriptions()
@@ -370,12 +377,13 @@ class EnumeratedType(list):
         return enumer
 
 class PresentationField(object):
-    __slots__ = [ 'name', 'descriptions', 'type', 'multiple', 'default',
+    __slots__ = [ 'name', 'descriptions', 'help', 'type', 'multiple', 'default',
                   'constraints', 'constraintsDescriptions', 'required',
                   'hidden', 'password', ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
+        self.help = dict((x.lang, x.href) for x in (node.help or []))
         if node.enumeratedType is None:
             self.type = node.type
         else:

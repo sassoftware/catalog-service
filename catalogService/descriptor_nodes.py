@@ -39,7 +39,13 @@ class _NodeDescriptorMixin(object):
         if child.__class__ not in self._mapping:
             return
         attrName = self._mapping[child.__class__]
-        if hasattr(self, 'extend'):
+        if getattr(child.__class__, 'multiple', None):
+            vlist = getattr(self, attrName)
+            if vlist is None:
+                vlist = []
+                setattr(self, attrName, vlist)
+            vlist.append(child.finalize())
+        elif hasattr(self, 'extend'):
             self.extend([child.finalize()])
         else:
             setattr(self, attrName, child.finalize())
@@ -66,6 +72,11 @@ class _NodeDescriptorMixin(object):
                         xmllib.BooleanNode.toString(val))
                 elif issubclass(nodeClass, xmllib.NullNode):
                     val = xmllib.NullNode(name = attrName)
+                elif getattr(nodeClass, 'multiple', None):
+                    # This value can appear multiple times
+                    for v in val:
+                        yield v
+                    continue
                 yield val
 
     def _getName(self):
@@ -135,6 +146,33 @@ class _Descriptions(_ExtendEnabledMixin, _NoCharDataNode):
 
     def getDescriptions(self):
         return dict((x.getAttribute('lang'), x.getText()) for x in self)
+
+class HelpNode(xmllib.BaseNode):
+    name = 'help'
+    multiple = True
+
+    @classmethod
+    def fromData(cls, href, lang = None):
+        if isinstance(href, tuple):
+            href, lang = href
+        elif hasattr(href, 'href'):
+            href, lang = href.href, href.lang
+        attrs = {'href' : href}
+        if lang is not None:
+            attrs['lang'] = lang
+        dn = cls(attrs, name = cls.name)
+        return dn
+
+    def _getLang(self):
+        return self.getAttribute('lang')
+    lang = property(_getLang)
+
+    def _getHref(self):
+        return self.getAttribute('href')
+    def _setHref(self, val):
+        # XXX that's not very polite
+        self._otherAttributes[(None, 'href')] = val
+    href = property(_getHref, _setHref)
 
 class _RootElement(xmllib.StringNode):
     name = "rootElement"
@@ -303,6 +341,7 @@ class DataFieldNode(_NoCharDataNode):
     _nodeDescription = [
         (_NameNode, None),
         (_Descriptions, None),
+        (HelpNode, None),
         (_TypeNode, None),
         (_EnumeratedTypeNode, None),
         (_MultipleNode, None),

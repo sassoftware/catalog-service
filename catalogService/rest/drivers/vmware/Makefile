@@ -11,7 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = viclient viclient_vendor
+SUBDIRS = help viclient viclient_vendor
 
 python_files =	$(wildcard *.py)
 

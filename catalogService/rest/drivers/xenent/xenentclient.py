@@ -125,7 +125,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = XenEnt_Image
 
-    _cloudType = 'xen-enterprise'
+    cloudType = 'xen-enterprise'
 
     _credNameMap = [
         ('username', 'username'),
@@ -429,12 +429,12 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _launchInstance(self, instanceId, image, instanceType, srUuid,
             instanceName, instanceDescription):
-        cli = self.getRestClient()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
+                cli = self.getRestClient()
                 downloadUrl = image.getDownloadUrl()
                 checksum = image.getImageId()
                 self._setState(instanceId, 'Creating template')
@@ -474,7 +474,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             self.startVm(realId)
 
         finally:
-            self._instanceStore.deletePid(instanceId)
+            self._instanceStore.delete(instanceId)
 
     def _getImagesFromGrid(self):
         cloudAlias = self.getCloudAlias()

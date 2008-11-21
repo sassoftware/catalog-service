@@ -4,6 +4,7 @@ from base import BaseController
 
 from catalogService import cloud_types
 
+from catalogService.rest import cloud_help
 from catalogService.rest import cloud_instances
 from catalogService.rest import descriptor_controllers
 from catalogService.rest.base_cloud import BaseCloudController
@@ -13,6 +14,7 @@ class CloudTypeController(BaseCloudController):
     urls = {
         'instances' : cloud_instances.CloudTypeModelController,
         'descriptor' : descriptor_controllers.DescriptorController,
+        'help' : cloud_help.CloudHelpController,
     }
 
 SUPPORTED_MODULES = [ 'ec2', 'vmware', 'vws', 'xenent' ]
@@ -35,8 +37,8 @@ class AllCloudController(BaseController):
             driverClass = __import__('%s.%s' % (moduleDir, driverName),
                                       {}, {}, ['driver']).driver
             # XXX we should make this a class method
-            driverName = driverClass._cloudType
+            cloudType = driverClass.cloudType
             driver = driverClass(self.cfg, driverName)
-            controller =  CloudTypeController(self, driverName,
+            controller =  CloudTypeController(self, cloudType,
                                               driver, self.cfg)
-            self.urls[driverName] = controller
+            self.urls[cloudType] = controller
