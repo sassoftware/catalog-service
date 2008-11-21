@@ -147,6 +147,60 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <password>true</password>
     </field>
     <field>
+      <name>certificateData</name>
+      <descriptions>
+        <desc>EC2 X509 Certificate</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>2048</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>certificateKeyData</name>
+      <descriptions>
+        <desc>EC2 X509 Certificate Key</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>1024</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>launchUsers</name>
+      <descriptions>
+        <desc>Launch Users (comma-separated)</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>256</length>
+      </constraints>
+    </field>
+    <field>
+      <name>launchGroups</name>
+      <descriptions>
+        <desc>Launch Groups (comma-separated)</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Maximum Characters</desc>
+        </descriptions>
+        <length>256</length>
+      </constraints>
+    </field>
+    <field>
       <name>s3Bucket</name>
       <descriptions>
         <desc>S3 Bucket</desc>
@@ -269,9 +323,15 @@ class EC2Client(baseDriver.BaseDriver):
             )
         if self._mintClient:
             targetData = self._mintClient.getTargetData('ec2', 'aws')
+            launchUsers = ','.join(targetData['ec2LaunchUsers'])
+            launchGroups = ','.join(targetData['ec2LaunchGroups'])
             ret.update(dict(accountId = targetData['ec2AccountId'],
                 publicAccessKeyId = targetData['ec2PublicKey'],
                 secretAccessKey = targetData['ec2PrivateKey'],
+                certificateData = targetData['ec2Certificate'],
+                certificateKeyData = targetData['ec2CertificateKey'],
+                launchUsers = launchUsers,
+                launchGroups = launchGroups,
                 s3Bucket = targetData['ec2S3Bucket']))
         return ret
 
@@ -293,15 +353,21 @@ class EC2Client(baseDriver.BaseDriver):
         store = self._getConfigurationDataStore()
         # Nothing fancy, just reenable the cloud
         getField = descriptorData.getField
+        launchUsers = getField('launchUsers')
+        if launchUsers:
+            launchUsers = [ x.strip() for x in launchUsers.split(',') ]
+        launchGroups = getField('launchGroups')
+        if launchGroups:
+            launchGroups = [ x.strip() for x in launchGroups.split(',') ]
         dataDict = dict(
             ec2AccountId = getField('accountId'),
             ec2PublicKey = getField('publicAccessKeyId'),
             ec2PrivateKey = getField('secretAccessKey'),
-            ec2S3Bucket = getField('ec2S3Bucket'),
-            ec2CertificateFile = None,
-            ec2CertificateKeyFile = None,
-            ec2LaunchUsers = None,
-            ec2LaunchGroups = None)
+            ec2S3Bucket = getField('s3Bucket'),
+            ec2Certificate = getField('certificateData'),
+            ec2CertificateKey = getField('certificateKeyData'),
+            ec2LaunchUsers = launchUsers,
+            ec2LaunchGroups = launchGroups)
         try:
             self._mintClient.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
