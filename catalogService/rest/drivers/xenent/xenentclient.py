@@ -238,19 +238,15 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         instIdSet = set(os.path.basename(x) for x in instanceIds)
         runningInsts = self.getInstances(instanceIds)
 
-        # Separate the ones that really exist in globus
-        nonGlobusInstIds = [ x.getInstanceId() for x in runningInsts
-            if x.getReservationId() is None ]
+        synthesizedInstIds = [ x.getInstanceId() for x in runningInsts
+            if len(x.getInstanceId()) != 36 ]
+        realInstIds =  [ x.getInstanceId() for x in runningInsts
+            if len(x.getInstanceId()) == 36 ]
 
-        globusInstIds = [ x.getReservationId() for x in runningInsts
-            if x.getReservationId() is not None ]
+        for instId in realInstIds:
+            client.xenapi.VM.clean_shutdown(instId)
 
-        if globusInstIds:
-            client.terminateInstances(globusInstIds)
-            # Don't bother to remove the instances from the store,
-            # getInstances() should take care of that
-
-        self._killRunningProcessesForInstances(nonGlobusInstIds)
+        self._killRunningProcessesForInstances(synthesizedInstIds)
 
         insts = instances.BaseInstances()
         insts.extend(runningInsts)
@@ -396,6 +392,10 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
+        if instanceIds:
+            instanceIds = set(os.path.basename(x) for x in instanceIds)
+            instanceList = [ x for x in instanceList
+                if x.getInstanceId() in instanceIds ]
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
 
@@ -553,9 +553,9 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             for (x, y) in VWS_InstanceTypes.idMap)
         return ret
 
-    def _killRunningProcessesForInstances(self, nonGlobusInstIds):
-        # For non-globus instances, try to kill the pid
-        for instId in nonGlobusInstIds:
+    def _killRunningProcessesForInstances(self, synthesizedInstIds):
+        # For synthesized instances, try to kill the pid
+        for instId in synthesizedInstIds:
             pid = self._instanceStore.getPid(instId)
             if pid is not None:
                 # try to kill the child process
