@@ -7,6 +7,7 @@ import urllib
 from conary.lib import util
 
 from catalogService import clouds
+from catalogService import errors
 from catalogService import descriptor
 from catalogService import environment
 from catalogService import images
@@ -159,7 +160,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             sess.login_with_password(credentials['username'],
                                      str(credentials['password']))
         except XenAPI.Failure, e:
-            raise AuthenticationFailure(e.details[1], e.details[2])
+            raise errors.PermissionDenied(message = "User %s: %s" % (
+                e.details[1], e.details[2]))
         keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
                                self._sanitizeKey(self.userId))
         self._instanceStore = self._getInstanceStore(keyPrefix)

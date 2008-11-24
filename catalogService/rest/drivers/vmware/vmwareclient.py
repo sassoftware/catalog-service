@@ -11,6 +11,7 @@ import urllib
 from conary.lib import util
 
 from catalogService import clouds
+from catalogService import errors
 from catalogService import environment
 from catalogService import images
 from catalogService import instances
@@ -135,7 +136,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                          transport=self.VimServiceTransport)
         except Exception, e:
              # FIXME: better error
-             raise AuthenticationFailure('', '')
+             raise errors.PermissionDenied(message = "")
         return client
 
     @classmethod
