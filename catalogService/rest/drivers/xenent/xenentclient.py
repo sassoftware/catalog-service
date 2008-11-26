@@ -287,15 +287,24 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         descr.addDataField("instanceName",
             descriptions = "Instance Name",
             type = "str",
+            help = [
+                ("instanceName.html", None)
+            ],
             constraints = dict(constraintName = 'length',
                                value = 32))
         descr.addDataField("instanceDescription",
             descriptions = "Instance Description",
             type = "str",
+            help = [
+                ("instanceDescription.html", None)
+            ],
             constraints = dict(constraintName = 'length',
                                value = 128))
         descr.addDataField("instanceType", required = True,
             descriptions = "Instance Size",
+            help = [
+                ("instanceSize.html", None)
+            ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
@@ -305,6 +314,9 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         descr.addDataField("storageRepository",
             descriptions = "Storage Repository",
             required = True,
+            help = [
+                ("storageRepository.html", None)
+            ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1][0])
                 for x in storageRepos),
@@ -313,11 +325,17 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         descr.addDataField("minCount", required = True,
             descriptions = "Minimum Number of Instances",
             type = "int", default = 1,
+            help = [
+                ("minInstances.html", None)
+            ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
             type = "int", default = 1,
+            help = [
+                ("maxInstances.html", None)
+            ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
 
