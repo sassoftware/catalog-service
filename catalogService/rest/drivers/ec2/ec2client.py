@@ -338,7 +338,7 @@ class EC2Client(baseDriver.BaseDriver):
             type = "int", required = True,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
-        descr.addDataField("keyPair",
+        descr.addDataField("keyName",
             descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
                 ("keyPair.html", None)
