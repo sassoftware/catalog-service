@@ -15,6 +15,54 @@ from ZSI.wstools import TimeoutSocket
 from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
 
+def _strToMor(smor, mortype=None):
+    # convert a string to a managed object reference
+    mor = ns0.ManagedObjectReference_Def('').pyclass(smor)
+    if mortype:
+        mor.set_attribute_type(mortype)
+    return mor
+
+class ComputeResource:
+    def __init__(self, obj, properties, configTarget, resourcePools):
+        self.obj = obj
+        self.properties = properties
+        self.configTarget = configTarget
+        self.resourcePools = resourcePools
+
+class Datacenter:
+    def __init__(self, obj, properties):
+        self.crs = []
+        self.obj = obj
+        self.properties = properties
+
+    def addComputeResource(self, cr):
+        self.crs.append(cr)
+
+    def getComputeResources(self):
+        return self.crs
+
+class VIConfig:
+    def __init__(self):
+        self.datacenters = []
+        self.namemap = {}
+        self.mormap = {}
+
+    def addDatacenter(self, dc):
+        self.datacenters.append(dc)
+
+    def updateNamemap(self, names):
+        self.namemap.update(names)
+        self.mormap.update(dict((x[1], x[0]) for x in names.iteritems()))
+
+    def getDatacenters(self):
+        return self.datacenters
+
+    def getName(self, mor):
+        return self.namemap[mor]
+
+    def getMOR(self, name):
+        return self.mormap[name]
+
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
                  **kw):
@@ -115,11 +163,12 @@ class VimService(object):
             propMor = props
         return propMor
 
-    def getConfigTargetForHost(self, computeRes, host):
+    def getConfigTarget(self, computeRes, host=None):
         envBrowse = self.getMoRefProp(computeRes, 'environmentBrowser')
         req = QueryConfigTargetRequestMsg()
         req.set_element__this(envBrowse)
-        req.set_element_host(host)
+        if host:
+            req.set_element_host(host)
         resp = self._service.QueryConfigTarget(req)
         return resp.get_element_returnval()
 
@@ -178,7 +227,7 @@ class VimService(object):
 
     def createVmConfigSpec(self, vmName, datastoreName, diskSizeMB,
                            computeResMor, hostMor):
-        configTarget = self.getConfigTargetForHost(computeResMor, hostMor)
+        configTarget = self.getConfigTarget(computeResMor, hostMor)
         defaultDevices = self.getDefaultDevices(computeResMor, hostMor)
 
         configSpec = ns0.VirtualMachineConfigSpec_Def('').pyclass()
@@ -623,17 +672,36 @@ class VimService(object):
             return error
         assert('not reached')
 
-    def getVirtualMachines(self, propertyList):
-        propsWanted = {'VirtualMachine': propertyList}
-        data = self.getContentsRecursively(None, None, propsWanted, True)
+    def getProperties(self, propsWanted, root=None):
+        data = self.getContentsRecursively(None, root, propsWanted, True)
         ret = {}
         for datum in data:
             mor = datum.get_element_obj()
             props = {}
             for prop in datum.get_element_propSet():
-                props[prop.get_element_name()] = prop.get_element_val()
+                name = prop.get_element_name()
+                val = prop.get_element_val()
+                if hasattr(val, 'typecode'):
+                    typecode = val.typecode.type[1]
+                    if typecode == 'ArrayOfManagedObjectReference':
+                        val = val.get_element_ManagedObjectReference()
+                    elif typecode == 'ArrayOfOptionValue':
+                        # unroll option=value arrays into a dictionary
+                        d = {}
+                        for holder in val.get_element_OptionValue():
+                            d[holder.get_element_key()] = holder.get_element_value()
+                            val = d
+                props[name] = val
             ret[mor] = props
         return ret
+
+    def getDatacenters(self):
+        propsWanted = {'Datacenter': ['name']}
+        return self.getProperties(propsWanted)
+
+    def getVirtualMachines(self, propertyList):
+        propsWanted = {'VirtualMachine': propertyList}
+        return self.getProperties(propsWanted)
 
     def createVM(self, dcName, vmName, dataStore=None,
                  annotation=None, memory=512, cpus=1,
@@ -644,7 +712,6 @@ class VimService(object):
 
         hostFolder = self.getMoRefProp(dc, 'hostFolder')
         computeResources = self.getDecendentMoRefs(hostFolder, 'ComputeResource')
-
         hostName = None
         if hostName:
             hostmor = self.getDecendentMoRef(hostFolder, 'HostSystem', hostName)
@@ -699,17 +766,155 @@ class VimService(object):
         ret = self._service.FindByUuid(req)
         return ret.get_element_returnval()
 
-    def shutdownVM(self, mor=None, uuid=None):
+    def setExtraConfig(self, vm, options):
+        req = ReconfigVM_TaskRequestMsg()
+        spec = req.new_spec()
+        l = []
+        for key, value in options.iteritems():
+            option = ns0.OptionValue_Def('').pyclass()
+            option.set_element_key(key)
+            option.set_element_value(value)
+            l.append(option)
+        spec.set_element_extraConfig(l)
+        return self._reconfigVM(vm, spec)
+
+    def reconfigVM(self, vm, options):
+        req = ReconfigVM_TaskRequestMsg()
+        spec = req.new_spec()
+        for key, value in options.iteritems():
+            method = 'set_element_' + key
+            if not hasattr(spec, method):
+                raise TypeError('no such configuration value "%s"' %key)
+            setter = getattr(spec, method)
+            setter(value)
+        return self._reconfigVM(vm, spec)
+
+    def _reconfigVM(self, vm, spec):
+        req = ReconfigVM_TaskRequestMsg()
+        req.set_element__this(_strToMor(vm, 'VirtualMachine'))
+        req.set_element_spec(spec)
+        ret = self._service.ReconfigVM_Task(req)
+        task = ret.get_element_returnval()
+        return self.waitForTask(task)
+
+    def getVIConfig(self):
+        props = self.getProperties({'Datacenter': [ 'name',
+                                                    'hostFolder',
+                                                    'datastore',
+                                                    'network'],
+                                    'HostSystem': [ 'name',
+                                                    'datastore',
+                                                    'network' ],
+                                    'ComputeResource': [ 'name',
+                                                         'datastore',
+                                                         'parent',
+                                                         'host',
+                                                         'resourcePool',
+                                                         'network' ],
+                                    'ResourcePool': [ 'name',
+                                                      'parent' ],
+                                    })
+        crs = []
+        hostFolderToDataCenter = {}
+        rps = {}
+        childRps = {}
+        nameMap = dict((x[0], x[1]['name']) for x in props.iteritems())
+
+        for mor, morProps in props.iteritems():
+            # this is ClusterComputeResource in case of DRS
+            objType = mor.get_attribute_type()
+            if objType.endswith('ComputeResource'):
+                crs.append(mor)
+            elif objType == 'Datacenter':
+                # build a map from host folder -> data center
+                dc = Datacenter(mor, morProps)
+                hostFolderToDataCenter[morProps['hostFolder']] = dc
+            elif objType == 'ResourcePool':
+                rps[mor] = morProps
+                l = childRps.setdefault(morProps['parent'], [])
+                l.append(mor)
+
+        ret = []
+
+        vicfg = VIConfig()
+        for cr in crs:
+            configTarget = self.getConfigTarget(cr)
+            for ds in configTarget.get_element_datastore():
+                ds = ds.get_element_datastore()
+                nameMap[ds.get_element_datastore()] = ds.get_element_name()
+            crProps = props[cr]
+            crRp = crProps['resourcePool']
+            crRpsMors = childRps[crRp]
+            crRps = dict(x for x in props.iteritems() if x[0] in rps)
+            crRps[crRp] = props[crRp]
+            cr = ComputeResource(cr, crProps, configTarget, crRps)
+            dc = hostFolderToDataCenter[crProps['parent']]
+            dc.addComputeResource(cr)
+
+        for dc in hostFolderToDataCenter.values():
+            vicfg.addDatacenter(dc)
+        vicfg.updateNamemap(nameMap)
+        return vicfg
+
+    def _getVM(self, mor=None, uuid=None):
         if not mor and not uuid:
             raise TypeError('either VM object reference (mor) or uuid required')
         if mor and uuid:
             raise TypeError('either VM object reference (mor) or uuid required, but not both')
 
+        if mor:
+            mor = _strToMor(mor, 'VirtualMachine')
+
         if uuid:
             mor = self.findVMByUUID(uuid)
             if not mor:
                 raise RuntimeError('VM matching uuid %s not found' %uuid)
+        return mor
 
+    def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
+                dc=None, cr=None, ds=None, rp=None, newuuid=None):
+        if uuid:
+            # ugh, findVMByUUID does not return templates
+            vms = self.getVirtualMachines([ 'config.template',
+                                         'config.uuid' ])
+            mor = None
+            for obj, props in vms.iteritems():
+                if props['config.template'] and props['config.uuid'] == uuid:
+                    mor = obj
+                    break
+            if not mor:
+                raise RuntimeError('No template with UUID %s' %uuid)
+        hostFolder = self.getMoRefProp(dc, 'hostFolder')
+        vmFolder = self.getMoRefProp(dc, 'vmFolder')
+
+        req = CloneVM_TaskRequestMsg()
+        req.set_element__this(mor)
+        req.set_element_folder(vmFolder)
+        req.set_element_name(name)
+
+        cloneSpec = req.new_spec()
+        cloneSpec.set_element_template(False)
+        cloneSpec.set_element_powerOn(True)
+        # set up the data relocation
+        loc = cloneSpec.new_location()
+        #loc.set_element_datastore(ds)
+        loc.set_element_pool(rp)
+        import epdb;epdb.st()
+        cloneSpec.set_element_location(loc)
+        # set up the vm config (uuid)
+        config = cloneSpec.new_config()
+        if newuuid:
+            config.set_element_uuid(newuuid)
+        config.set_element_annotation(annotation)
+        cloneSpec.set_element_config(config)
+        req.set_element_spec(cloneSpec)
+
+        ret = self._service.CloneVM_Task(req)
+        task = ret.get_element_returnval()
+        return self.waitForTask(task)
+
+    def shutdownVM(self, mor=None, uuid=None):
+        mor = self._getVM(mor=mor, uuid=uuid)
         req = ShutdownGuestRequestMsg()
         req.set_element__this(mor)
         try:

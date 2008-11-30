@@ -335,6 +335,32 @@ class _ConstraintsNode(_ExtendEnabledMixin, _NoCharDataNode):
             node._children.append(rev[constraintName].fromData(cdict))
         return node
 
+class _FieldNameNode(xmllib.StringNode):
+   name = 'fieldName'
+
+class _OperatorNode(xmllib.StringNode):
+    name = 'operator'
+
+class _ValueNode(xmllib.StringNode):
+    name = 'value'
+
+class _ConditionalNode(_NoCharDataNode):
+    name = 'conditional'
+
+    _nodeDescription = [
+        (_FieldNameNode, None),
+        (_OperatorNode, None),
+        (_ValueNode, None),
+    ]
+
+    @classmethod
+    def fromConditional(cls, conditional):
+        obj = cls(name = cls.name)
+        obj.fieldName = conditional.fieldName
+        obj.operator = conditional.operator
+        obj.value = conditional.value
+        return obj
+
 class DataFieldNode(_NoCharDataNode):
     name = 'field'
 
@@ -350,6 +376,7 @@ class DataFieldNode(_NoCharDataNode):
         (_RequiredNode, None),
         (_HiddenNode, None),
         (_PasswordNode, None),
+        (_ConditionalNode, None),
     ]
 
 class _DataFieldsNode(_ExtendEnabledMixin, _NoCharDataNode):
