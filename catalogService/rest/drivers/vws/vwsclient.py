@@ -322,21 +322,33 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
-                  for (x, y) in VWS_InstanceTypes.idMap)
-            )
+                  for (x, y) in VWS_InstanceTypes.idMap),
+            help = [
+                ("instanceSize.html", None)
+            ]
+        )
         descr.addDataField("minCount",
             descriptions = "Minimum Number of Instances",
             type = "int", required = True,
+            help = [
+                ("minInstances.html", None)
+            ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
             type = "int",
+            help = [
+                ("maxInstances.html", None)
+            ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("duration", required = True,
             descriptions = "Duration (minutes)",
             type = "int",
+            help = [
+                ("duration.html", None)
+            ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 1440))
         return descr
