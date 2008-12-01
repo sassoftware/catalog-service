@@ -582,13 +582,91 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                   rp=self.vicfg.getMOR(resourcePool),
                                   newuuid=uuid)
 
+    def _downloadImage(self, image):
+        # FIXME: copied from VWS driver
+        imageId = image.getImageId()
+        build = self._mintClient.getBuild(image.getBuildId())
+
+        downloadUrl = image.getDownloadUrl()
+
+        # XXX follow redirects
+        uobj = urllib.urlopen(downloadUrl)
+        # Create temp file
+        downloadFilePath = os.path.join(self.cloudClient._tmpDir,
+                                        '%s.tgz' % imageSha1)
+        util.copyfileobj(uobj, file(downloadFilePath, "w"))
+        return downloadFilePath
+
+    def _deployImage(self, instanceId, image, dataCenter, dataStore):
+        downloadUrl = image.getDownloadUrl()
+        imageId = image.getImageId()
+
+        dataCenterName = self.vicfg.getName(dataCenter)
+        baseFileName = image.getBaseFilename()
+        templateName = 'template-' + baseFileName
+        dc = self.vicfg.getDatacenter(dataCenter)
+        vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
+        inventoryPrefix = '/%s/%s/' %(dataCenterName, vmFolder)
+
+        self._setState(instanceId, 'Downloading image')
+        path = self._downloadImage(image)
+
+        # make sure that the vm name is not used in the inventory
+        testName = templateName
+        x = 0
+        while True:
+            ret = self.client.findVMByInventoryPath(inventoryPrefix + testName)
+            if not ret:
+                # the name is not used in the inventory, stop looking
+                break
+            x += 1
+            # add a suffix to make it unique
+            testName = templateName + '-%d' %x
+        templateName = testName
+
+        # FIXME: make sure that there isn't something in the way on
+        # the data store
+
+        self._setState(instanceId, 'Extracting image')
+        try:
+            if path.endswith('.zip'):
+                workdir = path[:-3]
+                util.mkdirChain(workdir)
+                cmd = 'unzip -d %s %s' % (workdir, path)
+            elif path.endswith('.tgz'):
+                workdir = path[:-3]
+                util.mkdirChain(workdir)
+                cmd = 'tar -C %s zxSvf %s' % (workdir, path)
+            else:
+                raise RuntimeError('unsupported rBuilder image archive format')
+            p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, "w"))
+            p.wait()
+            self._setState(instanceId, 'Uploading image to VMware')
+            vmx = viclient.vmutils.uploadVMFiles(self.client,
+                                                 os.path.join(workdir + baseFileName),
+                                                 templateName,
+                                                 dataCenter=dataCenterName,
+                                                 dataStore=dataStore)
+            try:
+                vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
+                                            templateName, asTemplate=True)
+            except viclient.Error, e:
+                raise RuntimeError('An error occurred when registering the VM '
+                                   'template: %s' %str(e))
+            # set the template uuid to the imageId
+            ret = self.client.reconfigVM(vm, {'uuid': imageId})
+        finally:
+            # clean up our mess
+            util.rmtree(workdir, ignore_errors=True)
+
     def _launchInstance(self, instanceId, image, dataCenter,
                         computeResource, dataStore, resourcePool,
                         instanceName, instanceDescription):
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
-                raise NotImplementedError
+                self._deployImage(image, dataCenter, dataStore)
+
             imageId = image.getImageId()
 
             self._setState(instanceId, 'Cloning template')
@@ -597,7 +675,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                 dataCenter, computeResource,
                                 dataStore, resourcePool)
             self._setState(instanceId, 'Launching')
-            self.startVm(imageId)
         finally:
             self._instanceStore.deletePid(instanceId)
 
