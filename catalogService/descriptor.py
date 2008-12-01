@@ -299,12 +299,8 @@ class DescriptorData(_BaseClass):
             raise errors.ConstraintsValidationError(errorList)
 
     def _cleanseValue(self, fieldDescription, value):
-        if fieldDescription.password:
-            if fieldDescription.type == 'int':
-                value = 0
-            elif fieldDescription.type == 'str':
-                value = '*' * 8
-        value = str(value)
+        if not isinstance(value, basestring):
+            value = str(value)
         return value
 
 
