@@ -67,7 +67,7 @@ class StorageMixin(object):
         store = self._getConfigurationDataStore(cloudName)
         return dict((k, store.get(k)) for k in store.enumerate())
 
-    def drvGetCloudConfiguration(self):
+    def drvGetCloudConfiguration(self, isAdmin = False):
         return self._getCloudConfiguration(self.cloudName)
 
     def drvCreateCloud(self, descriptorData):

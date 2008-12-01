@@ -314,14 +314,14 @@ class EC2Client(baseDriver.BaseDriver):
         return EC2Connection(credentials['awsPublicAccessKeyId'],
                              credentials['awsSecretAccessKey'])
 
-    def drvGetCloudConfiguration(self):
+    def drvGetCloudConfiguration(self, isAdmin = False):
         store = self._getConfigurationDataStore()
         if not store.get('enabled'):
             return {}
         ret = dict(name = 'aws', cloudAlias = 'ec2',
             fullDescription = EC2_DESCRIPTION,
             )
-        if self._mintClient:
+        if self._mintClient and isAdmin:
             targetData = self._mintClient.getTargetData('ec2', 'aws')
             launchUsers = ','.join(targetData['ec2LaunchUsers'])
             launchGroups = ','.join(targetData['ec2LaunchGroups'])
