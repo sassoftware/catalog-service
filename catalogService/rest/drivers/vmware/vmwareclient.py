@@ -104,13 +104,21 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 class VMwareImage(images.BaseImage):
     "VMware Image"
 
-    __slots__ = images.BaseImage.__slots__ + [ 'isDeployed', ]
-    _slotTypeMap = images.BaseImage._slotTypeMap.copy()
-    _slotTypeMap.update(dict(isDeployed = bool))
+def _uuid(s):
+    return '-'.join((s[:8], s[8:12], s[12:16], s[16:20], s[20:32]))
 
 def uuidgen():
     hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
-    return '-'.join((hex[:8], hex[8:12], hex[12:16], hex[16:20], hex[20:]))
+    return _uuid(hex)
+
+def formatSize(size):
+    suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
+    div = 1
+    for suffix in suffixes:
+        if size < (div * 1024):
+            return '%d %s' %(size / div, suffix)
+        div = div * 1024
+    return '%d TiB' %(size / div)
 
 class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = VMwareImage
@@ -312,14 +320,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         for cr in crToDc.keys():
             cfg = cr.configTarget
             dataStores = []
-            def formatSize(size):
-                suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
-                div = 1
-                for suffix in suffixes:
-                    if size < (div * 1024):
-                        return '%d %s' %(size / div, suffix)
-                    div = div * 1024
-                return '%d TiB' %(size / div)
 
             for ds in cfg.get_element_datastore():
                 name = ds.get_element_name()
@@ -384,7 +384,12 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory()
+        imageList = self._addMintDataToImageList(imageList)
 
+        # FIXME: duplicate code
+        # now that we've grabbed all the images, we can return only the one
+        # we want.  This is horribly inefficient, but neither the mint call
+        # nor the grid call allow us to filter by image, at least for now
         if imageIds is None:
             # no filtering required
             return imageList
@@ -454,7 +459,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
-            # END FIXME
+        # END FIXME
         instMap = self.client.getVirtualMachines([ 'name',
                                                    'config.annotation',
                                                    'config.template',
@@ -487,6 +492,36 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             instanceList.append(inst)
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
+
+    def _addMintDataToImageList(self, imageList):
+        # FIXME: duplicate code
+        cloudAlias = self.getCloudAlias()
+
+        mintImages = self._mintClient.getAllBuildsByType('VMWARE_ESX_IMAGE')
+        # Convert the list into a map keyed on the sha1 converted into
+        # uuid format
+        mintImages = dict((_uuid(x['sha1']), x) for x in mintImages)
+        for image in imageList:
+            imageId = image.getImageId()
+            mintImageData = mintImages.pop(imageId, {})
+            image.setIs_rBuilderImage(bool(mintImageData))
+            image.setIsDeployed(True)
+            if not mintImageData:
+                continue
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+
+        # Add the rest of the images coming from mint
+        for uuid, mintImageData in sorted(mintImages.iteritems()):
+            image = self._nodeFactory.newImage(id=uuid,
+                    imageId=uuid, isDeployed=False,
+                    is_rBuilderImage=True,
+                    cloudName=self.cloudName,
+                    cloudAlias=cloudAlias)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+            imageList.append(image)
+        return imageList
 
     def _getTemplatesFromInventory(self):
         """

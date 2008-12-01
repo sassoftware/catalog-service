@@ -31,12 +31,6 @@ from catalogService.rest.drivers.xenent import xmlNodes
 class XenEnt_Image(images.BaseImage):
     "Xen Enterprise Image"
 
-    __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId',
-                                              'downloadUrl', 'buildPageUrl',
-                                              'baseFileName']
-    _slotTypeMap = images.BaseImage._slotTypeMap.copy()
-    _slotTypeMap.update(dict(isDeployed = bool))
-
 class XenEnt_InstanceTypes(instances.InstanceTypes):
     "Xen Enterprise Instance Types"
 
