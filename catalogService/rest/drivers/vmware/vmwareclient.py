@@ -102,7 +102,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 """
 
 class VMwareImage(images.BaseImage):
-    "VMware Image"
+    'VMware Image'
 
 def _uuid(s):
     return '-'.join((s[:8], s[8:12], s[12:16], s[16:20], s[20:32]))
@@ -153,9 +153,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                          transport=self.VimServiceTransport)
         except Exception, e:
             # FIXME: better error
-            raise errors.PermissionDenied(message = "")
+            raise errors.PermissionDenied(message = '')
         # FIXME: refactor this into common code
-        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
+        keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
                                self._sanitizeKey(self.userId))
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return client
@@ -267,7 +267,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            type = 'str',
                            required = True,
                            help = [
-                               ("instanceName.html", None)
+                               ('instanceName.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 32))
@@ -276,7 +276,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Instance Description',
                            type = 'str',
                            help = [
-                               ("instanceDescription.html", None)
+                               ('instanceDescription.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 128))
@@ -287,7 +287,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Data Center',
                            required = True,
                            help = [
-                               ("dataCenter.html", None)
+                               ('dataCenter.html', None)
                            ],
                            type = descriptor.EnumeratedType(
             descriptor.ValueWithDescription(x.properties['name'],
@@ -305,7 +305,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Compute Resource',
                                required = True,
                                help = [
-                                   ("computeResource.html", None)
+                                   ('computeResource.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(
@@ -332,7 +332,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Data Store',
                                required = True,
                                help = [
-                                   ("dataStore.html", None)
+                                   ('dataStore.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -354,7 +354,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Resource Pool',
                                required = True,
                                help = [
-                                   ("resourcePool.html", None)
+                                   ('resourcePool.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
@@ -594,7 +594,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         # Create temp file
         downloadFilePath = os.path.join(self.cloudClient._tmpDir,
                                         '%s.tgz' % imageSha1)
-        util.copyfileobj(uobj, file(downloadFilePath, "w"))
+        util.copyfileobj(uobj, file(downloadFilePath, 'w'))
         return downloadFilePath
 
     def _deployImage(self, instanceId, image, dataCenter, dataStore):
@@ -639,7 +639,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 cmd = 'tar -C %s zxSvf %s' % (workdir, path)
             else:
                 raise RuntimeError('unsupported rBuilder image archive format')
-            p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, "w"))
+            p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
             p.wait()
             self._setState(instanceId, 'Uploading image to VMware')
             vmx = viclient.vmutils.uploadVMFiles(self.client,
