@@ -307,7 +307,7 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDescription("Amazon EC2 Launch Parameters")
         descr.addDataField("instanceType",
             descriptions = [
-                ("Instance Size", None),
+                ("Instance Type", None),
                 ("Type de l'instance", "fr_FR")],
             help = [
                 ("instanceTypes.html", None)
@@ -339,7 +339,7 @@ class EC2Client(baseDriver.BaseDriver):
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyName",
-            descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
+            descriptions = [ ("SSH Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
                 ("keyPair.html", None)
             ],
