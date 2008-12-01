@@ -22,12 +22,6 @@ class VWS_Cloud(clouds.BaseCloud):
 
 class VWS_Image(images.BaseImage):
     "Globus Virtual Workspaces Image"
-
-    __slots__ = images.BaseImage.__slots__ + ['isDeployed', 'buildId',
-                                              'downloadUrl', 'buildPageUrl',
-                                              'baseFileName']
-    _slotTypeMap = images.BaseImage._slotTypeMap.copy()
-    _slotTypeMap.update(dict(isDeployed = bool))
     _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
 
 class VWS_Instance(instances.BaseInstance):

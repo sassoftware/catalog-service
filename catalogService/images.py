@@ -10,13 +10,16 @@ from catalogService import instances
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
-            'state', 'isPublic', 'buildDescription', 'productName',
-            'role', 'publisher', 'awsAccountNumber', 'buildName',
-            'isPrivate_rBuilder', 'productDescription', 'is_rBuilderImage',
-            'cloudName', 'cloudType', 'cloudAlias',
-            '_xmlNodeHash' ]
+                  'state', 'isPublic', 'buildDescription',
+                  'productName', 'role', 'publisher',
+                  'awsAccountNumber', 'buildName',
+                  'isPrivate_rBuilder', 'productDescription',
+                  'is_rBuilderImage', 'cloudName', 'cloudType',
+                  'cloudAlias', 'isDeployed', 'buildId',
+                  'downloadUrl', 'buildPageUrl', 'baseFileName',
+                  '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
-                        is_rBuilderImage = bool)
+                        is_rBuilderImage = bool, isDeployed = bool)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 
