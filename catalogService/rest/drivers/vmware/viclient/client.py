@@ -16,6 +16,8 @@ from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
 
 def _strToMor(smor, mortype=None):
+    if type(smor) != str:
+        return smor
     # convert a string to a managed object reference
     mor = ns0.ManagedObjectReference_Def('').pyclass(smor)
     if mortype:
@@ -57,11 +59,20 @@ class VIConfig:
     def getDatacenters(self):
         return self.datacenters
 
+    def getDatacenter(self, name):
+        for dc in self.datacenters:
+            if dc.properties['name'] == name:
+                return dc
+        return None
+
     def getName(self, mor):
         return self.namemap[mor]
 
     def getMOR(self, name):
         return self.mormap[name]
+
+class Error(Exception):
+    pass
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -766,6 +777,44 @@ class VimService(object):
         ret = self._service.FindByUuid(req)
         return ret.get_element_returnval()
 
+    def findVMByInventoryPath(self, path):
+        searchIndex = self._sic.get_element_searchIndex()
+        req = FindByInventoryPathRequestMsg()
+        req.set_element__this(searchIndex)
+        req.set_element_inventoryPath(path)
+        ret = self._service.FindByInventoryPath(req)
+        return ret.get_element_returnval()
+
+    def registerVM(self, folderMor, vmxPath, vmName, asTemplate=False,
+                   pool=None, host=None):
+        req = RegisterVM_TaskRequestMsg()
+        req.set_element__this(folderMor)
+        req.set_element_path(vmxPath)
+        req.set_element_name(vmName)
+        req.set_element_asTemplate(asTemplate)
+        if pool:
+            req.set_element_pool(pool)
+        if host:
+            req.set_element_pool(host)
+        ret = self._service.RegisterVM_Task(req)
+        task = ret.get_element_returnval()
+
+        result = self.waitForValues(task,
+                                    [ 'info.state', 'info.error' ],
+                                    [ 'state' ],
+                                    [ [ 'success', 'error' ] ])
+        if result[0] == 'success':
+            tinfo = self.getDynamicProperty(task, 'info')
+            vm = tinfo.get_element_result()
+            return vm
+        else:
+            tinfo = self.getDynamicProperty(task, 'info')
+            fault = tinfo.get_element_error()
+            error = 'Error Occurred'
+            if fault:
+                error = fault.get_element_localizedMessage()
+            raise Error(error)
+
     def setExtraConfig(self, vm, options):
         req = ReconfigVM_TaskRequestMsg()
         spec = req.new_spec()
@@ -800,8 +849,10 @@ class VimService(object):
     def getVIConfig(self):
         props = self.getProperties({'Datacenter': [ 'name',
                                                     'hostFolder',
+                                                    'vmFolder',
                                                     'datastore',
                                                     'network'],
+                                    'Folder': ['name'],
                                     'HostSystem': [ 'name',
                                                     'datastore',
                                                     'network' ],

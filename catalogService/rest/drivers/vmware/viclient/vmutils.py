@@ -66,8 +66,7 @@ def _putFile(inPath, outUrl, session=None):
     resp = r.getresponse()
     r.close()
 
-def importVM(v, path, vmName=None, host=None, dataStore=None,
-             dataCenter=None):
+def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
     vmx = glob.glob(os.path.join(path, '*.vmx'))
     if not vmx:
         raise RuntimeError('no .vmx file found in %s' %path)
@@ -90,3 +89,5 @@ def importVM(v, path, vmName=None, host=None, dataStore=None,
     for fn in os.listdir(path):
         fn = urllib.quote(fn)
         _putFile(os.path.join(path, fn), urlPattern % fn, session)
+    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx))
+    return vmx
