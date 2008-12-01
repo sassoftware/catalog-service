@@ -258,12 +258,18 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Instance Name',
                            type = 'str',
                            required = True,
+                           help = [
+                               ("instanceName.html", None)
+                           ],
                            constraints = dict(constraintName = 'length',
                                               value = 32))
 
         descr.addDataField('instanceDescription',
                            descriptions = 'Instance Description',
                            type = 'str',
+                           help = [
+                               ("instanceDescription.html", None)
+                           ],
                            constraints = dict(constraintName = 'length',
                                               value = 128))
 
@@ -272,6 +278,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         descr.addDataField('dataCenter',
                            descriptions = 'Data Center',
                            required = True,
+                           help = [
+                               ("dataCenter.html", None)
+                           ],
                            type = descriptor.EnumeratedType(
             descriptor.ValueWithDescription(x.properties['name'],
                                             descriptions=x.properties['name'])
@@ -287,6 +296,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descr.addDataField('cr-%s' %dc.properties['name'],
                                descriptions = 'Compute Resource',
                                required = True,
+                               help = [
+                                   ("computeResource.html", None)
+                               ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(
                 x.properties['name'], descriptions=x.properties['name'])
@@ -319,6 +331,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descr.addDataField('dataStore-%s' %cr.properties['name'],
                                descriptions = 'Data Store',
                                required = True,
+                               help = [
+                                   ("dataStore.html", None)
+                               ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
                 for x in dataStores),
@@ -338,6 +353,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descr.addDataField('resourcePool-%s' %cr.properties['name'],
                                descriptions = 'Resource Pool',
                                required = True,
+                               help = [
+                                   ("resourcePool.html", None)
+                               ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                                                 descriptions=x)
