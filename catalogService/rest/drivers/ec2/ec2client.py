@@ -8,7 +8,7 @@ from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
 from mint.mint_error import EC2Exception as MintEC2Exception
-from mint.mint_error import TargetExists
+from mint.mint_error import TargetExists, TargetMissing
 
 from catalogService import clouds
 from catalogService import descriptor
@@ -322,17 +322,20 @@ class EC2Client(baseDriver.BaseDriver):
             fullDescription = EC2_DESCRIPTION,
             )
         if self._mintClient and isAdmin:
-            targetData = self._mintClient.getTargetData('ec2', 'aws')
-            launchUsers = ','.join(targetData['ec2LaunchUsers'])
-            launchGroups = ','.join(targetData['ec2LaunchGroups'])
-            ret.update(dict(accountId = targetData['ec2AccountId'],
-                publicAccessKeyId = targetData['ec2PublicKey'],
-                secretAccessKey = targetData['ec2PrivateKey'],
-                certificateData = targetData['ec2Certificate'],
-                certificateKeyData = targetData['ec2CertificateKey'],
+            try:
+                targetData = self._mintClient.getTargetData('ec2', 'aws')
+            except TargetMissing:
+                targetData = {}
+            launchUsers = ','.join(targetData.get('ec2LaunchUsers', []))
+            launchGroups = ','.join(targetData.get('ec2LaunchGroups', []))
+            ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
+                publicAccessKeyId = targetData.get('ec2PublicKey', ''),
+                secretAccessKey = targetData.get('ec2PrivateKey', ''),
+                certificateData = targetData.get('ec2Certificate', ''),
+                certificateKeyData = targetData.get('ec2CertificateKey', ''),
                 launchUsers = launchUsers,
                 launchGroups = launchGroups,
-                s3Bucket = targetData['ec2S3Bucket']))
+                s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
     def _getCloudCredentialsForUser(self):
