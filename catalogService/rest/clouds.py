@@ -24,6 +24,8 @@ class AllCloudController(BaseController):
     def index(self, request):
         cloudTypeNodes = cloud_types.CloudTypes()
         for cloudType, cloudController in sorted(self.urls.items()):
+            if not cloudController.driver.isDriverFunctional():
+                continue
             cloudTypeNodes.append(cloudController.driver(request).getCloudType())
         return XmlResponse(cloudTypeNodes)
 
