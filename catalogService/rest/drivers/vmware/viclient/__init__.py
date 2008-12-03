@@ -13,3 +13,4 @@ sys.path.append(vendor_dir)
 import client, vmutils
 
 VimService = client.VimService
+Error = client.Error

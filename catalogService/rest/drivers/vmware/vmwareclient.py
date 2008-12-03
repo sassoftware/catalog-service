@@ -102,15 +102,23 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 """
 
 class VMwareImage(images.BaseImage):
-    "VMware Image"
+    'VMware Image'
 
-    __slots__ = images.BaseImage.__slots__ + [ 'isDeployed', ]
-    _slotTypeMap = images.BaseImage._slotTypeMap.copy()
-    _slotTypeMap.update(dict(isDeployed = bool))
+def _uuid(s):
+    return '-'.join((s[:8], s[8:12], s[12:16], s[16:20], s[20:32]))
 
 def uuidgen():
     hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
-    return '-'.join((hex[:8], hex[8:12], hex[12:16], hex[16:20], hex[20:]))
+    return _uuid(hex)
+
+def formatSize(size):
+    suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
+    div = 1
+    for suffix in suffixes:
+        if size < (div * 1024):
+            return '%d %s' %(size / div, suffix)
+        div = div * 1024
+    return '%d TiB' %(size / div)
 
 class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = VMwareImage
@@ -145,9 +153,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                          transport=self.VimServiceTransport)
         except Exception, e:
             # FIXME: better error
-            raise errors.PermissionDenied(message = "")
+            raise errors.PermissionDenied(message = '')
         # FIXME: refactor this into common code
-        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
+        keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
                                self._sanitizeKey(self.userId))
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return client
@@ -259,7 +267,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            type = 'str',
                            required = True,
                            help = [
-                               ("instanceName.html", None)
+                               ('instanceName.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 32))
@@ -268,7 +276,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Instance Description',
                            type = 'str',
                            help = [
-                               ("instanceDescription.html", None)
+                               ('instanceDescription.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 128))
@@ -279,7 +287,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Data Center',
                            required = True,
                            help = [
-                               ("dataCenter.html", None)
+                               ('dataCenter.html', None)
                            ],
                            type = descriptor.EnumeratedType(
             descriptor.ValueWithDescription(x.properties['name'],
@@ -297,7 +305,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Compute Resource',
                                required = True,
                                help = [
-                                   ("computeResource.html", None)
+                                   ('computeResource.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(
@@ -312,14 +320,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         for cr in crToDc.keys():
             cfg = cr.configTarget
             dataStores = []
-            def formatSize(size):
-                suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
-                div = 1
-                for suffix in suffixes:
-                    if size < (div * 1024):
-                        return '%d %s' %(size / div, suffix)
-                    div = div * 1024
-                return '%d TiB' %(size / div)
 
             for ds in cfg.get_element_datastore():
                 name = ds.get_element_name()
@@ -332,7 +332,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Data Store',
                                required = True,
                                help = [
-                                   ("dataStore.html", None)
+                                   ('dataStore.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -354,7 +354,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Resource Pool',
                                required = True,
                                help = [
-                                   ("resourcePool.html", None)
+                                   ('resourcePool.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
@@ -384,7 +384,12 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory()
+        imageList = self._addMintDataToImageList(imageList)
 
+        # FIXME: duplicate code
+        # now that we've grabbed all the images, we can return only the one
+        # we want.  This is horribly inefficient, but neither the mint call
+        # nor the grid call allow us to filter by image, at least for now
         if imageIds is None:
             # no filtering required
             return imageList
@@ -454,7 +459,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
-            # END FIXME
+        # END FIXME
         instMap = self.client.getVirtualMachines([ 'name',
                                                    'config.annotation',
                                                    'config.template',
@@ -487,6 +492,36 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             instanceList.append(inst)
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
+
+    def _addMintDataToImageList(self, imageList):
+        # FIXME: duplicate code
+        cloudAlias = self.getCloudAlias()
+
+        mintImages = self._mintClient.getAllBuildsByType('VMWARE_ESX_IMAGE')
+        # Convert the list into a map keyed on the sha1 converted into
+        # uuid format
+        mintImages = dict((_uuid(x['sha1']), x) for x in mintImages)
+        for image in imageList:
+            imageId = image.getImageId()
+            mintImageData = mintImages.pop(imageId, {})
+            image.setIs_rBuilderImage(bool(mintImageData))
+            image.setIsDeployed(True)
+            if not mintImageData:
+                continue
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+
+        # Add the rest of the images coming from mint
+        for uuid, mintImageData in sorted(mintImages.iteritems()):
+            image = self._nodeFactory.newImage(id=uuid,
+                    imageId=uuid, isDeployed=False,
+                    is_rBuilderImage=True,
+                    cloudName=self.cloudName,
+                    cloudAlias=cloudAlias)
+            self._addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+            imageList.append(image)
+        return imageList
 
     def _getTemplatesFromInventory(self):
         """
@@ -547,13 +582,91 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                   rp=self.vicfg.getMOR(resourcePool),
                                   newuuid=uuid)
 
+    def _downloadImage(self, image):
+        # FIXME: copied from VWS driver
+        imageId = image.getImageId()
+        build = self._mintClient.getBuild(image.getBuildId())
+
+        downloadUrl = image.getDownloadUrl()
+
+        # XXX follow redirects
+        uobj = urllib.urlopen(downloadUrl)
+        # Create temp file
+        downloadFilePath = os.path.join(self.cloudClient._tmpDir,
+                                        '%s.tgz' % imageSha1)
+        util.copyfileobj(uobj, file(downloadFilePath, 'w'))
+        return downloadFilePath
+
+    def _deployImage(self, instanceId, image, dataCenter, dataStore):
+        downloadUrl = image.getDownloadUrl()
+        imageId = image.getImageId()
+
+        dataCenterName = self.vicfg.getName(dataCenter)
+        baseFileName = image.getBaseFilename()
+        templateName = 'template-' + baseFileName
+        dc = self.vicfg.getDatacenter(dataCenter)
+        vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
+        inventoryPrefix = '/%s/%s/' %(dataCenterName, vmFolder)
+
+        self._setState(instanceId, 'Downloading image')
+        path = self._downloadImage(image)
+
+        # make sure that the vm name is not used in the inventory
+        testName = templateName
+        x = 0
+        while True:
+            ret = self.client.findVMByInventoryPath(inventoryPrefix + testName)
+            if not ret:
+                # the name is not used in the inventory, stop looking
+                break
+            x += 1
+            # add a suffix to make it unique
+            testName = templateName + '-%d' %x
+        templateName = testName
+
+        # FIXME: make sure that there isn't something in the way on
+        # the data store
+
+        self._setState(instanceId, 'Extracting image')
+        try:
+            if path.endswith('.zip'):
+                workdir = path[:-3]
+                util.mkdirChain(workdir)
+                cmd = 'unzip -d %s %s' % (workdir, path)
+            elif path.endswith('.tgz'):
+                workdir = path[:-3]
+                util.mkdirChain(workdir)
+                cmd = 'tar -C %s zxSvf %s' % (workdir, path)
+            else:
+                raise RuntimeError('unsupported rBuilder image archive format')
+            p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
+            p.wait()
+            self._setState(instanceId, 'Uploading image to VMware')
+            vmx = viclient.vmutils.uploadVMFiles(self.client,
+                                                 os.path.join(workdir + baseFileName),
+                                                 templateName,
+                                                 dataCenter=dataCenterName,
+                                                 dataStore=dataStore)
+            try:
+                vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
+                                            templateName, asTemplate=True)
+            except viclient.Error, e:
+                raise RuntimeError('An error occurred when registering the VM '
+                                   'template: %s' %str(e))
+            # set the template uuid to the imageId
+            ret = self.client.reconfigVM(vm, {'uuid': imageId})
+        finally:
+            # clean up our mess
+            util.rmtree(workdir, ignore_errors=True)
+
     def _launchInstance(self, instanceId, image, dataCenter,
                         computeResource, dataStore, resourcePool,
                         instanceName, instanceDescription):
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
-                raise NotImplementedError
+                self._deployImage(image, dataCenter, dataStore)
+
             imageId = image.getImageId()
 
             self._setState(instanceId, 'Cloning template')
@@ -562,7 +675,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                 dataCenter, computeResource,
                                 dataStore, resourcePool)
             self._setState(instanceId, 'Launching')
-            self.startVm(imageId)
         finally:
             self._instanceStore.deletePid(instanceId)
 
