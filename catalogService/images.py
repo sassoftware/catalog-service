@@ -66,5 +66,6 @@ buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
             'role': 'setRole',
             'createdBy': 'setPublisher',
             'awsAccountNumber': 'setAwsAccountNumber',
+            'buildPageUrl' : 'setBuildPageUrl',
             'buildName': 'setBuildName'}
 
