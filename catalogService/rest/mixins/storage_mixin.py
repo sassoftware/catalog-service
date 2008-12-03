@@ -6,6 +6,7 @@
 import os
 
 from catalogService import clouds
+from catalogService import errors
 from catalogService import instanceStore
 from catalogService import storage
 
@@ -75,6 +76,8 @@ class StorageMixin(object):
         config = dict((k.getName(), k.getValue())
             for k in descriptorData.getFields())
         store = self._getConfigurationDataStore()
+        if store.exists(cloudName):
+            raise errors.CloudExists()
         self.configureCloud(store, config)
         return self._createCloudNode(config)
 

@@ -354,6 +354,8 @@ class EC2Client(baseDriver.BaseDriver):
 
     def drvCreateCloud(self, descriptorData):
         store = self._getConfigurationDataStore()
+        if store.get('enabled'):
+            raise errors.CloudExists()
         # Nothing fancy, just reenable the cloud
         getField = descriptorData.getField
         launchUsers = getField('launchUsers')

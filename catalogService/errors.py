@@ -76,6 +76,10 @@ class ResponseError(CatalogError):
         message = "<wrapped_fault><status>%s</status><reason>%s</reason><body>%s</body></wrapped_fault>" % (status, reason, body)
         CatalogError.__init__(self, message, status = status)
 
+class CloudExists(CatalogError):
+    """Target already exists"""
+    status = http_codes.HTTP_CONFLICT
+
 class HttpNotFound(CatalogError):
     """File not found"""
     status = 404
