@@ -43,11 +43,18 @@ class Datacenter:
     def getComputeResources(self):
         return self.crs
 
+    def getComputeResource(self, name):
+        for cr in self.crs:
+            if cr.properties['name'] == name:
+                return cr
+        return None
+
 class VIConfig:
     def __init__(self):
         self.datacenters = []
         self.namemap = {}
         self.mormap = {}
+        self.props = {}
 
     def addDatacenter(self, dc):
         self.datacenters.append(dc)
@@ -70,6 +77,12 @@ class VIConfig:
 
     def getMOR(self, name):
         return self.mormap[name]
+
+    def setProperties(self, props):
+        self.props = props
+
+    def getProperties(self):
+        return self.props
 
 class Error(Exception):
     pass
@@ -795,7 +808,7 @@ class VimService(object):
         if pool:
             req.set_element_pool(pool)
         if host:
-            req.set_element_pool(host)
+            req.set_element_host(host)
         ret = self._service.RegisterVM_Task(req)
         task = ret.get_element_returnval()
 
@@ -845,6 +858,11 @@ class VimService(object):
         ret = self._service.ReconfigVM_Task(req)
         task = ret.get_element_returnval()
         return self.waitForTask(task)
+
+    def markAsTemplate(self, vm):
+        req = MarkAsTemplateRequestMsg()
+        req.set_element__this(vm)
+        self._service.MarkAsTemplate(req)
 
     def getVIConfig(self):
         props = self.getProperties({'Datacenter': [ 'name',
@@ -905,6 +923,7 @@ class VimService(object):
         for dc in hostFolderToDataCenter.values():
             vicfg.addDatacenter(dc)
         vicfg.updateNamemap(nameMap)
+        vicfg.setProperties(props)
         return vicfg
 
     def _getVM(self, mor=None, uuid=None):
@@ -950,7 +969,6 @@ class VimService(object):
         loc = cloneSpec.new_location()
         #loc.set_element_datastore(ds)
         loc.set_element_pool(rp)
-        import epdb;epdb.st()
         cloneSpec.set_element_location(loc)
         # set up the vm config (uuid)
         config = cloneSpec.new_config()

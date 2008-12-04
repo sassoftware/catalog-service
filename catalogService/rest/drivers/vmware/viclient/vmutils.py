@@ -89,5 +89,5 @@ def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
     for fn in os.listdir(path):
         fn = urllib.quote(fn)
         _putFile(os.path.join(path, fn), urlPattern % fn, session)
-    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx))
+    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0]))
     return vmx
