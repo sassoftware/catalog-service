@@ -398,6 +398,9 @@ class EC2Client(baseDriver.BaseDriver):
         except MintEC2Exception, e:
             raise errors.PermissionDenied(message = str(e))
 
+        if not valid:
+            raise errors.PermissionDenied(
+                message = "The supplied credentials are invalid")
         return self._nodeFactory.newCredentials(valid = valid)
 
     def _enumerateConfiguredClouds(self):
