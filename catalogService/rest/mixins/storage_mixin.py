@@ -5,6 +5,8 @@
 
 import os
 
+from conary.lib import util
+
 from catalogService import clouds
 from catalogService import errors
 from catalogService import instanceStore
@@ -45,6 +47,25 @@ class StorageMixin(object):
 
         dstore = storage.DiskStorage(cfg)
         return instanceStore.InstanceStore(dstore, keyPrefix)
+
+    def _getCloudCredentialsForUser(self, cloudName):
+        return self._getCredentialsForCloudName(cloudName)[1]
+
+    def _getCredentialsForCloudName(self, cloudName):
+        cloudConfig = self._getCloudConfiguration(cloudName)
+        if not cloudConfig:
+            return {}, {}
+
+        store = self._getCredentialsDataStore()
+        creds = self._readCredentialsFromStore(store, self.userId, cloudName)
+        if not creds:
+            return cloudConfig, creds
+        # Protect the password fields
+        credDesc = self.getCredentialsDescriptor()
+        for field in credDesc.getDataFields():
+            if field.password and field.name in creds:
+                creds[field.name] = util.ProtectedString(creds[field.name])
+        return cloudConfig, creds
 
     @classmethod
     def _sanitizeKey(cls, key):

@@ -91,11 +91,16 @@ class BaseDriver(object):
         return factory
 
     def listClouds(self):
+        self._checkAuth()
         ret = clouds.BaseClouds()
         if not self.isDriverFunctional():
             return ret
         for cloudConfig in self._enumerateConfiguredClouds():
-            ret.append(self._createCloudNode(cloudConfig))
+            cloudNode = self._createCloudNode(cloudConfig)
+            creds = self._getCloudCredentialsForUser(cloudNode.getCloudName())
+            if not creds:
+                cloudNode.setDescriptorLaunch(None)
+            ret.append(cloudNode)
         return ret
 
     def getCloud(self, cloudName):
@@ -132,7 +137,8 @@ class BaseDriver(object):
         """
         if self._cloudCredentials is None:
             self._checkAuth()
-            self._cloudCredentials = self._getCloudCredentialsForUser()
+            self._cloudCredentials = self._getCloudCredentialsForUser(
+                                                            self.cloudName)
         return self._cloudCredentials
 
     credentials = property(drvGetCloudCredentialsForUser)
@@ -190,6 +196,9 @@ class BaseDriver(object):
         return descr
 
     def getLaunchDescriptor(self):
+        cred = self.credentials
+        if not cred:
+            raise errors.HttpNotFound(message = "User has no credentials set")
         descr = descriptor.LaunchDescriptor()
         # We require an image ID
         descr.addDataField("imageId",

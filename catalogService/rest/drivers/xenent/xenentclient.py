@@ -169,9 +169,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('name')
 
-    def _getCloudCredentialsForUser(self):
-        return self._getCredentialsForCloudName(self.cloudName)[1]
-
     def isValidCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
@@ -546,19 +543,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 images.buildToNodeFieldMap)
             imageList.append(image)
         return imageList
-
-    def _getCredentialsForCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        if not cloudConfig:
-            return {}, {}
-
-        store = self._getCredentialsDataStore()
-        creds = self._readCredentialsFromStore(store, self.userId, cloudName)
-        if not creds:
-            return cloudConfig, creds
-        # Protect the password
-        creds['password'] = util.ProtectedString(creds['password'])
-        return cloudConfig, creds
 
     def _getInstanceTypes(self):
         ret = VWS_InstanceTypes()

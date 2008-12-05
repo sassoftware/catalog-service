@@ -186,10 +186,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             ret.append(self._getCloudConfiguration(cloudName))
         return ret
 
-    def _getCloudCredentialsForUser(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        return self._getCredentialsForCloudName(self.cloudName)[1]
-
     def isValidCloudName(self, cloudName):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         cloudConfig = self._getCloudConfiguration(cloudName)
@@ -554,20 +550,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
-
-    def _getCredentialsForCloudName(self, cloudName):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        if not cloudConfig:
-            return {}, {}
-
-        store = self._getCredentialsDataStore()
-        creds = self._readCredentialsFromStore(store, self.userId, cloudName)
-        if not creds:
-            return cloudConfig, creds
-        # Protect the password
-        creds['password'] = util.ProtectedString(creds['password'])
-        return cloudConfig, creds
 
     def _cloneTemplate(self, imageId, instanceName, instanceDescription,
                        uuid, dataCenter, computeResource, dataStore,

@@ -215,9 +215,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
 
-    def _getCloudCredentialsForUser(self):
-        return self._getCredentialsForCloudName(self.cloudName)[1]
-
     def isValidCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
@@ -581,15 +578,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     @classmethod
     def _getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('factory')
-
-    def _getCredentialsForCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        if not cloudConfig:
-            return {}, {}
-
-        store = self._getCredentialsDataStore()
-        creds = self._readCredentialsFromStore(store, self.userId, cloudName)
-        return cloudConfig, creds
 
     def _getInstanceTypes(self):
         ret = VWS_InstanceTypes()

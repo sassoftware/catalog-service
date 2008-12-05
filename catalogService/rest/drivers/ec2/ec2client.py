@@ -8,7 +8,7 @@ from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
 from mint.mint_error import EC2Exception as MintEC2Exception
-from mint.mint_error import TargetExists, TargetMissing
+from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
 
 from catalogService import clouds
 from catalogService import descriptor
@@ -338,14 +338,14 @@ class EC2Client(baseDriver.BaseDriver):
                 s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
-    def _getCloudCredentialsForUser(self):
+    def _getCloudCredentialsForUser(self, cloudName):
         cloudConfig = self.drvGetCloudConfiguration()
         if not cloudConfig:
             return {}
         try:
             return self._mintClient.getEC2CredentialsForUser(
                                                     self._mintAuth.userId)
-        except mint.mint_error.PermissionDenied:
+        except PermissionDenied:
             raise errors.PermissionDenied
 
     def drvRemoveCloud(self):
