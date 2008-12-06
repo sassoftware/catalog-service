@@ -61,6 +61,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/alias.html'/>
     </field>
     <field>
       <name>description</name>
@@ -69,6 +70,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/description.html'/>
     </field>
     <field>
       <name>factory</name>
@@ -77,6 +79,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/factoryName.html'/>
     </field>
     <field>
       <name>factoryIdentity</name>
@@ -85,6 +88,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/factoryIdentity.html'/>
     </field>
     <field>
       <name>repository</name>
@@ -93,6 +97,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/repository.html'/>
     </field>
     <field>
       <name>repositoryIdentity</name>
@@ -101,6 +106,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/repositoryIdentity.html'/>
     </field>
     <field>
       <name>caCert</name>
@@ -115,6 +121,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>4096</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/caCert.html'/>
     </field>
   </dataFields>
 </descriptor>"""
