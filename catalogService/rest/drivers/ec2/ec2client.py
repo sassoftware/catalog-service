@@ -116,6 +116,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>12</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/accountNumber.html'/>
     </field>
     <field>
       <name>publicAccessKeyId</name>
@@ -130,6 +131,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>100</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/accessKey.html'/>
     </field>
     <field>
       <name>secretAccessKey</name>
@@ -145,6 +147,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </constraints>
       <required>true</required>
       <password>true</password>
+      <help href='configuration/secretAccessKey.html'/>
     </field>
     <field>
       <name>certificateData</name>
@@ -159,6 +162,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>2048</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/certificateData.html'/>
     </field>
     <field>
       <name>certificateKeyData</name>
@@ -173,6 +177,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>1024</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/certificateKeyData.html'/>
     </field>
     <field>
       <name>launchUsers</name>
@@ -186,6 +191,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         </descriptions>
         <length>256</length>
       </constraints>
+      <help href='configuration/launchUsers.html'/>
     </field>
     <field>
       <name>launchGroups</name>
@@ -199,6 +205,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         </descriptions>
         <length>256</length>
       </constraints>
+      <help href='configuration/launchGroups.html'/>
     </field>
     <field>
       <name>s3Bucket</name>
@@ -213,6 +220,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>32</length>
       </constraints>
       <required>true</required>
+      <help href='configuration/s3Bucket.html'/>
     </field>
   </dataFields>
 </descriptor>"""
