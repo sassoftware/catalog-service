@@ -320,7 +320,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         )
         descr.addDataField("minCount",
             descriptions = "Minimum Number of Instances",
-            type = "int", required = True,
+            type = "int", required = True, default = 1,
             help = [
                 ("minInstances.html", None)
             ],
@@ -328,7 +328,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                min = 1, max = 100))
         descr.addDataField("maxCount", required = True,
             descriptions = "Maximum Number of Instances",
-            type = "int",
+            type = "int", default = 1,
             help = [
                 ("maxInstances.html", None)
             ],

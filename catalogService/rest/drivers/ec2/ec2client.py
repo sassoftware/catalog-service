@@ -483,7 +483,7 @@ class EC2Client(baseDriver.BaseDriver):
             help = [
                 ("minInstances.html", None)
             ],
-            type = "int", required = True,
+            type = "int", required = True, default = 1,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("maxCount",
@@ -493,7 +493,7 @@ class EC2Client(baseDriver.BaseDriver):
             help = [
                 ("maxInstances.html", None)
             ],
-            type = "int", required = True,
+            type = "int", required = True, default = 1,
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyName",
