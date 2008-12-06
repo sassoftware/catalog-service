@@ -519,7 +519,7 @@ class EC2Client(baseDriver.BaseDriver):
             help = [
                 ("securityGroups.html", None)
             ],
-            required = True, multiple = True, default = CATALOG_DEF_SECURITY_GROUP_DESC,
+            required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
                 for x in self._cliGetSecurityGroups()
