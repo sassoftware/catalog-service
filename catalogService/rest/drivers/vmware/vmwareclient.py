@@ -39,6 +39,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/serverName.html'/>
     </field>
     <field>
       <name>alias</name>
@@ -47,6 +48,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/alias.html'/>
     </field>
     <field>
       <name>description</name>
@@ -55,6 +57,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <help href='configuration/description.html'/>
     </field>
   </dataFields>
 </descriptor>"""
