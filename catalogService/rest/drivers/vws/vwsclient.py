@@ -322,14 +322,14 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                     descriptions = y)
                   for (x, y) in VWS_InstanceTypes.idMap),
             help = [
-                ("instanceSize.html", None)
+                ("launch/instanceSize.html", None)
             ]
         )
         descr.addDataField("minCount",
             descriptions = "Minimum Number of Instances",
             type = "int", required = True, default = 1,
             help = [
-                ("minInstances.html", None)
+                ("launch/minInstances.html", None)
             ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
@@ -337,7 +337,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Maximum Number of Instances",
             type = "int", default = 1,
             help = [
-                ("maxInstances.html", None)
+                ("launch/maxInstances.html", None)
             ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
@@ -345,7 +345,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Duration (minutes)",
             type = "int",
             help = [
-                ("duration.html", None)
+                ("launch/duration.html", None)
             ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 1440))
