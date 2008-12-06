@@ -8,6 +8,8 @@ import signal
 import time
 import urllib
 import datetime
+import tempfile
+import subprocess
 
 from conary.lib import util, sha1helper
 
@@ -567,34 +569,49 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                   rp=self.vicfg.getMOR(resourcePool),
                                   newuuid=uuid)
 
-    def _downloadImage(self, image):
+    def _downloadImage(self, image, tmpDir):
         # FIXME: copied from VWS driver
         imageId = image.getImageId()
         build = self._mintClient.getBuild(image.getBuildId())
 
         downloadUrl = image.getDownloadUrl()
+        imageId = os.path.basename(image.getId())
 
         # XXX follow redirects
         uobj = urllib.urlopen(downloadUrl)
         # Create temp file
-        downloadFilePath = os.path.join(self.cloudClient._tmpDir,
-                                        '%s.tgz' % imageSha1)
+        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
         util.copyfileobj(uobj, file(downloadFilePath, 'w'))
         return downloadFilePath
 
-    def _deployImage(self, instanceId, image, dataCenter, dataStore):
+    def _deployImage(self, instanceId, image, dataCenter, dataStore,
+                     computeResource, resourcePool):
         downloadUrl = image.getDownloadUrl()
         imageId = image.getImageId()
 
-        dataCenterName = self.vicfg.getName(dataCenter)
-        baseFileName = image.getBaseFilename()
+        baseFileName = image.getBaseFileName()
         templateName = 'template-' + baseFileName
         dc = self.vicfg.getDatacenter(dataCenter)
+
+        # unfortunately registering a vm as a template
+        # still requires a host.  That host needs to be
+        # able to access the requested datastore.
+        cr = dc.getComputeResource(computeResource)
+        ds = self.vicfg.getMOR(dataStore)
+        rp = self.vicfg.getMOR(resourcePool)
+        props = self.vicfg.getProperties()
+        # find a host that can access the datastore
+        hosts = [ x for x in cr.properties['host'] if ds in props[x]['datastore'] ]
+        if not hosts:
+            raise RuntimeError('no host can access the requested datastore')
+        host = hosts[0]
+
         vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
-        inventoryPrefix = '/%s/%s/' %(dataCenterName, vmFolder)
+        inventoryPrefix = '/%s/%s/' %(dataCenter, vmFolder)
 
         self._setState(instanceId, 'Downloading image')
-        path = self._downloadImage(image)
+        tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
+        path = self._downloadImage(image, tmpDir)
 
         # make sure that the vm name is not used in the inventory
         testName = templateName
@@ -615,34 +632,36 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self._setState(instanceId, 'Extracting image')
         try:
             if path.endswith('.zip'):
-                workdir = path[:-3]
+                workdir = path[:-4]
                 util.mkdirChain(workdir)
                 cmd = 'unzip -d %s %s' % (workdir, path)
             elif path.endswith('.tgz'):
-                workdir = path[:-3]
+                workdir = path[:-4]
                 util.mkdirChain(workdir)
-                cmd = 'tar -C %s zxSvf %s' % (workdir, path)
+                cmd = 'tar zxSf %s -C %s' % (path, workdir)
             else:
                 raise RuntimeError('unsupported rBuilder image archive format')
             p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
             p.wait()
             self._setState(instanceId, 'Uploading image to VMware')
             vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                                 os.path.join(workdir + baseFileName),
+                                                 os.path.join(workdir, baseFileName),
                                                  templateName,
-                                                 dataCenter=dataCenterName,
+                                                 dataCenter=dataCenter,
                                                  dataStore=dataStore)
             try:
                 vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
-                                            templateName, asTemplate=True)
+                                            templateName, asTemplate=False,
+                                            host=host, pool=rp)
             except viclient.Error, e:
                 raise RuntimeError('An error occurred when registering the VM '
                                    'template: %s' %str(e))
             # set the template uuid to the imageId
-            ret = self.client.reconfigVM(vm, {'uuid': imageId})
+            self.client.reconfigVM(vm, {'uuid': imageId})
+            self.client.markAsTemplate(vm)
         finally:
             # clean up our mess
-            util.rmtree(workdir, ignore_errors=True)
+            util.rmtree(tmpDir, ignore_errors=True)
 
     def _launchInstance(self, instanceId, image, dataCenter,
                         computeResource, dataStore, resourcePool,
@@ -650,7 +669,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
-                self._deployImage(image, dataCenter, dataStore)
+                self._deployImage(instanceId, image, dataCenter, dataStore,
+                                  computeResource, resourcePool)
 
             imageId = image.getImageId()
 
