@@ -263,7 +263,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            type = 'str',
                            required = True,
                            help = [
-                               ('instanceName.html', None)
+                               ('launch/instanceName.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 32))
@@ -272,7 +272,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Instance Description',
                            type = 'str',
                            help = [
-                               ('instanceDescription.html', None)
+                               ('launch/instanceDescription.html', None)
                            ],
                            constraints = dict(constraintName = 'length',
                                               value = 128))
@@ -283,7 +283,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                            descriptions = 'Data Center',
                            required = True,
                            help = [
-                               ('dataCenter.html', None)
+                               ('launch/dataCenter.html', None)
                            ],
                            type = descriptor.EnumeratedType(
             descriptor.ValueWithDescription(x.properties['name'],
@@ -301,7 +301,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Compute Resource',
                                required = True,
                                help = [
-                                   ('computeResource.html', None)
+                                   ('launch/computeResource.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(
@@ -328,7 +328,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Data Store',
                                required = True,
                                help = [
-                                   ('dataStore.html', None)
+                                   ('launch/dataStore.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
@@ -350,7 +350,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                descriptions = 'Resource Pool',
                                required = True,
                                help = [
-                                   ('resourcePool.html', None)
+                                   ('launch/resourcePool.html', None)
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,

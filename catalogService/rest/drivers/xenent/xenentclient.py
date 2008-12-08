@@ -278,7 +278,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Instance Name",
             type = "str",
             help = [
-                ("instanceName.html", None)
+                ("launch/instanceName.html", None)
             ],
             constraints = dict(constraintName = 'length',
                                value = 32))
@@ -286,14 +286,14 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Instance Description",
             type = "str",
             help = [
-                ("instanceDescription.html", None)
+                ("launch/instanceDescription.html", None)
             ],
             constraints = dict(constraintName = 'length',
                                value = 128))
         descr.addDataField("instanceType", required = True,
             descriptions = "Instance Size",
             help = [
-                ("instanceSize.html", None)
+                ("launch/instanceSize.html", None)
             ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
@@ -305,7 +305,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Storage Repository",
             required = True,
             help = [
-                ("storageRepository.html", None)
+                ("launch/storageRepository.html", None)
             ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1][0])
@@ -316,7 +316,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Minimum Number of Instances",
             type = "int", default = 1,
             help = [
-                ("minInstances.html", None)
+                ("launch/minInstances.html", None)
             ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
@@ -324,7 +324,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             descriptions = "Maximum Number of Instances",
             type = "int", default = 1,
             help = [
-                ("maxInstances.html", None)
+                ("launch/maxInstances.html", None)
             ],
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))

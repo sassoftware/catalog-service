@@ -476,7 +476,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Instance Size", None),
                 ("Type de l'instance", "fr_FR")],
             help = [
-                ("instanceTypes.html", None)
+                ("launch/instanceTypes.html", None)
             ],
             required = True,
             type = descriptor.EnumeratedType(
@@ -489,7 +489,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Minimum Number of Instances", None),
                 ("Nombre minimal d'instances", "fr_FR")],
             help = [
-                ("minInstances.html", None)
+                ("launch/minInstances.html", None)
             ],
             type = "int", required = True, default = 1,
             constraints = dict(constraintName = 'range',
@@ -499,7 +499,7 @@ class EC2Client(baseDriver.BaseDriver):
                 ("Maximum Number of Instances", None),
                 ("Nombre maximal d'instances", "fr_FR")],
             help = [
-                ("maxInstances.html", None)
+                ("launch/maxInstances.html", None)
             ],
             type = "int", required = True, default = 1,
             constraints = dict(constraintName = 'range',
@@ -507,7 +507,7 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDataField("keyName",
             descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
-                ("keyPair.html", None)
+                ("launch/keyPair.html", None)
             ],
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
@@ -517,7 +517,7 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [("Security Groups", None),
                 (u"Groupes de sécurité", "fr_FR")],
             help = [
-                ("securityGroups.html", None)
+                ("launch/securityGroups.html", None)
             ],
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
@@ -532,7 +532,7 @@ class EC2Client(baseDriver.BaseDriver):
             descriptions = [("User Data", None),
                 ("Data utilisateur", "fr_FR")],
             help = [
-                ("userData.html", None)
+                ("launch/userData.html", None)
             ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
