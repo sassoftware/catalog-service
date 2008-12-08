@@ -8,7 +8,7 @@ class CredentialsDescriptorController(BaseCloudController):
 
 class ConfigurationDescriptorController(BaseCloudController):
     def index(self, request):
-        return XmlResponse(self.driver.getCloudConfigurationDescriptor())
+        return XmlResponse(self.driver(request).getCloudConfigurationDescriptor())
 
 class DescriptorController(BaseCloudController):
     urls = dict(
