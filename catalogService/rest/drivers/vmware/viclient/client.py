@@ -950,7 +950,6 @@ class VimService(object):
         loc = cloneSpec.new_location()
         #loc.set_element_datastore(ds)
         loc.set_element_pool(rp)
-        import epdb;epdb.st()
         cloneSpec.set_element_location(loc)
         # set up the vm config (uuid)
         config = cloneSpec.new_config()
