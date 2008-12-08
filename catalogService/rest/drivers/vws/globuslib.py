@@ -487,6 +487,9 @@ class WorkspaceCloudClient(object):
         shutil.rmtree(self._tmpDir, ignore_errors = True)
         self._tmpDir = None
 
+    def __del__(self):
+        self.close()
+
     _policyTemplate = """
 access_id_CA    X509    '%(caSubject)s'
 pos_rights      globus  CA:sign
