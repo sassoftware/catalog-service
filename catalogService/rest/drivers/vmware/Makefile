@@ -21,9 +21,7 @@ all: default-all
 
 subdirs: default-subdirs
 
-install: all pyfiles-install default-install install-subdirs
-	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
-	$(PYTHON) -OO -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
+install: all pyfiles-install default-install install-subdirs pyfiles-compile
 
 dist: default-dist
 

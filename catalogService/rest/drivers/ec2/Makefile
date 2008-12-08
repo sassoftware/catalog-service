@@ -19,9 +19,7 @@ dist_files = Makefile $(python_files)
 
 all: default-all
 
-install: all pyfiles-install default-install install-subdirs
-	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
-	$(PYTHON) -OO -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/$(DIR)', ddir='$(pydir)/$(DIR)', quiet=1)"
+install: all pyfiles-install default-install install-subdirs pyfiles-compile
 
 dist: default-dist
 
