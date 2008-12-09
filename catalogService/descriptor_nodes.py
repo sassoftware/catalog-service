@@ -50,6 +50,20 @@ class _NodeDescriptorMixin(object):
         else:
             setattr(self, attrName, child.finalize())
 
+    def _encodeChild(self, nodeClass, attrName, val):
+        if issubclass(nodeClass, xmllib.IntegerNode):
+            return xmllib.IntegerNode(name = attrName).characters(str(val))
+        if issubclass(nodeClass, xmllib.StringNode):
+            return xmllib.StringNode(name = attrName).characters(val)
+        if issubclass(nodeClass, xmllib.BooleanNode):
+            return xmllib.BooleanNode(name = attrName).characters(
+                xmllib.BooleanNode.toString(val))
+        if issubclass(nodeClass, xmllib.NullNode):
+            return xmllib.NullNode(name = attrName)
+        if hasattr(val, 'getElementTree'):
+            return val
+        return None
+
     def _iterChildren(self):
         if hasattr(self, 'extend'):
             for y in self.iterChildren():
@@ -62,22 +76,16 @@ class _NodeDescriptorMixin(object):
                 if val is None and not issubclass(nodeClass, xmllib.NullNode):
                     # The value was not set
                     continue
-                if issubclass(nodeClass, xmllib.IntegerNode):
-                    val = xmllib.IntegerNode(name = attrName).characters(
-                                             str(val))
-                elif issubclass(nodeClass, xmllib.StringNode):
-                    val = xmllib.StringNode(name = attrName).characters(val)
-                elif issubclass(nodeClass, xmllib.BooleanNode):
-                    val = xmllib.BooleanNode(name = attrName).characters(
-                        xmllib.BooleanNode.toString(val))
-                elif issubclass(nodeClass, xmllib.NullNode):
-                    val = xmllib.NullNode(name = attrName)
-                elif getattr(nodeClass, 'multiple', None):
-                    # This value can appear multiple times
-                    for v in val:
-                        yield v
-                    continue
-                yield val
+                if getattr(nodeClass, 'multiple', None):
+                    if not hasattr(val, 'extend'):
+                        val = [ val ]
+                else:
+                    val = [ val ]
+
+                for v in val:
+                    node = self._encodeChild(nodeClass, attrName, v)
+                    if node is not None:
+                        yield node
 
     def _getName(self):
         return self.__class__.name
@@ -215,6 +223,7 @@ class _MultipleNode(xmllib.BooleanNode):
 
 class _DefaultNode(xmllib.StringNode):
     name = 'default'
+    multiple = True
 
 class _MinNode(xmllib.IntegerNode):
     name = 'min'

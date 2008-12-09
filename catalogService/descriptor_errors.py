@@ -17,3 +17,6 @@ class DataValidationError(Error):
 
 class ConstraintsValidationError(Error):
     ""
+
+class InvalidDefaultValue(Error):
+    ""
