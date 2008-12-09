@@ -20,3 +20,6 @@ class ConstraintsValidationError(Error):
 
 class InvalidDefaultValue(Error):
     ""
+
+class UndefinedFactoryDataField(Error):
+    ""

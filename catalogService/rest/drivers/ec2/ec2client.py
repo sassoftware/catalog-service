@@ -180,34 +180,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <help href='configuration/certificateKeyData.html'/>
     </field>
     <field>
-      <name>launchUsers</name>
-      <descriptions>
-        <desc>Launch Users (comma-separated)</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Characters</desc>
-        </descriptions>
-        <length>256</length>
-      </constraints>
-      <help href='configuration/launchUsers.html'/>
-    </field>
-    <field>
-      <name>launchGroups</name>
-      <descriptions>
-        <desc>Launch Groups (comma-separated)</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Characters</desc>
-        </descriptions>
-        <length>256</length>
-      </constraints>
-      <help href='configuration/launchGroups.html'/>
-    </field>
-    <field>
       <name>s3Bucket</name>
       <descriptions>
         <desc>S3 Bucket</desc>
@@ -334,15 +306,11 @@ class EC2Client(baseDriver.BaseDriver):
                 targetData = self._mintClient.getTargetData('ec2', 'aws')
             except TargetMissing:
                 targetData = {}
-            launchUsers = ','.join(targetData.get('ec2LaunchUsers', []))
-            launchGroups = ','.join(targetData.get('ec2LaunchGroups', []))
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
                 certificateData = targetData.get('ec2Certificate', ''),
                 certificateKeyData = targetData.get('ec2CertificateKey', ''),
-                launchUsers = launchUsers,
-                launchGroups = launchGroups,
                 s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
