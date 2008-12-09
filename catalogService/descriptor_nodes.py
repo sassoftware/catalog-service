@@ -54,6 +54,8 @@ class _NodeDescriptorMixin(object):
         if issubclass(nodeClass, xmllib.IntegerNode):
             return xmllib.IntegerNode(name = attrName).characters(str(val))
         if issubclass(nodeClass, xmllib.StringNode):
+            if not isinstance(val, basestring):
+                val = str(val)
             return xmllib.StringNode(name = attrName).characters(val)
         if issubclass(nodeClass, xmllib.BooleanNode):
             return xmllib.BooleanNode(name = attrName).characters(

@@ -513,6 +513,7 @@ class EC2Client(baseDriver.BaseDriver):
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
+        sgList = self._cliGetSecurityGroups()
         descr.addDataField("securityGroups",
             descriptions = [("Security Groups", None),
                 (u"Groupes de sécurité", "fr_FR")],
@@ -522,8 +523,9 @@ class EC2Client(baseDriver.BaseDriver):
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
-                for x in self._cliGetSecurityGroups()
-            ))
+                for x in sgList),
+            default = sgList[0][0],
+            )
         descr.addDataField("remoteIp",
             descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
             type = "str", hidden = True,

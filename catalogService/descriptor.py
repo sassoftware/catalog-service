@@ -160,7 +160,7 @@ class BaseDescriptor(_BaseClass):
                     invalidDefaults = set(default) - properKeys
                     if invalidDefaults:
                         raise errors.InvalidDefaultValue(", ".join(sorted(invalidDefaults)))
-                elif not isinstance(default, basestring):
+                elif not isinstance(default, (basestring, int)):
                     # single values can only have one default value
                     raise errors.InvalidDefaultValue(default)
                 elif default not in properKeys:
@@ -168,6 +168,14 @@ class BaseDescriptor(_BaseClass):
         else:
             df.type = nodeType
             df.enumeratedType = None
+            if default is not None:
+                if df.multiple:
+                    if not isinstance(default, list):
+                        # Silently convert a single value into a list
+                        default = [ default ]
+                elif not isinstance(default, (basestring, int)):
+                    # single values can only have one default value
+                    raise errors.InvalidDefaultValue(default)
         df.descriptions = dnodes._Descriptions()
         df.descriptions.extend(
             [ dnodes.DescriptionNode.fromData(x) for x in descriptions ])
@@ -403,6 +411,11 @@ class PresentationField(object):
             self.type = EnumeratedType.fromNode(node.enumeratedType)
         self.multiple = node.multiple
         self.default = node.default
+        if not node.multiple:
+            if isinstance(self.default, list):
+                self.default = self.default[0]
+            if self.default is not None:
+                self.default = dnodes._cast(self.default, self.type)
         self.required = node.required
         self.hidden = node.hidden
         self.password = node.password
