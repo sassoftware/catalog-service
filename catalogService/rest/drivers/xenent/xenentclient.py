@@ -282,16 +282,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             ],
             constraints = dict(constraintName = 'length',
                                value = 128))
-        descr.addDataField("instanceType", required = True,
-            descriptions = "Instance Size",
-            help = [
-                ("launch/instanceSize.html", None)
-            ],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
-                    descriptions = y)
-                  for (x, y) in XenEnt_InstanceTypes.idMap)
-            )
         storageRepos = self._getStorageRepos()
         descr.addDataField("storageRepository",
             descriptions = "Storage Repository",
@@ -304,22 +294,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 for x in storageRepos),
             default = storageRepos[0][0],
             )
-        descr.addDataField("minCount", required = True,
-            descriptions = "Minimum Number of Instances",
-            type = "int", default = 1,
-            help = [
-                ("launch/minInstances.html", None)
-            ],
-            constraints = dict(constraintName = 'range',
-                               min = 1, max = 100))
-        descr.addDataField("maxCount", required = True,
-            descriptions = "Maximum Number of Instances",
-            type = "int", default = 1,
-            help = [
-                ("launch/maxInstances.html", None)
-            ],
-            constraints = dict(constraintName = 'range',
-                               min = 1, max = 100))
 
         return descr
 
