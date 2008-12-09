@@ -9,6 +9,7 @@ from conary.lib import util
 from catalogService import clouds
 from catalogService import descriptor
 from catalogService import environment
+from catalogService import errors
 from catalogService import images
 from catalogService import instances
 from catalogService import storage
@@ -214,9 +215,12 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         props.set('vws.repository', cloudConfig['repository'])
         props.set('vws.factory.identity', cloudConfig['factoryIdentity'])
         props.set('vws.repository.identity', cloudConfig['repositoryIdentity'])
-        cli = globuslib.WorkspaceCloudClient(props, cloudConfig['caCert'],
-            userCredentials['userCert'], userCredentials['userKey'],
-            userCredentials['sshPubKey'], cloudConfig['alias'])
+        try:
+            cli = globuslib.WorkspaceCloudClient(props, cloudConfig['caCert'],
+                userCredentials['userCert'], userCredentials['userKey'],
+                userCredentials['sshPubKey'], cloudConfig['alias'])
+        except globuslib.Error, e:
+            raise errors.PermissionDenied(message = str(e))
         keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
                                cli.userCertHash)
         self._instanceStore = self._getInstanceStore(keyPrefix)

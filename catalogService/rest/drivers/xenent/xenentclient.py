@@ -176,15 +176,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
 
-    def drvSetUserCredentials(self, fields):
-        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
-        store = self._getCredentialsDataStore()
-        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
-        # XXX validate
-        valid = True
-        node = self._nodeFactory.newCredentials(valid)
-        return node
-
     def _createCloudNode(self, cloudConfig):
         cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
                          description = cloudConfig['description'],
