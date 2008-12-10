@@ -72,7 +72,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
   <metadata>
     <displayName>EC2 Cloud Configuration</displayName>
     <descriptions>
-      <desc>Configure AWS EC2 Cloud</desc>
+      <desc>Configure Amazon EC2</desc>
     </descriptions>
   </metadata>
   <dataFields>
@@ -106,7 +106,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>accountId</name>
       <descriptions>
-        <desc>Amazon Account Number</desc>
+        <desc>AWS Account Number</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -121,7 +121,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>publicAccessKeyId</name>
       <descriptions>
-        <desc>Access Key</desc>
+        <desc>Access Key ID</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -136,7 +136,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>secretAccessKey</name>
       <descriptions>
-        <desc>Secret Key</desc>
+        <desc>Secret Access Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -152,7 +152,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>certificateData</name>
       <descriptions>
-        <desc>EC2 X509 Certificate</desc>
+        <desc>X.509 Certificate</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -167,7 +167,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>certificateKeyData</name>
       <descriptions>
-        <desc>EC2 X509 Certificate Key</desc>
+        <desc>X.509 Private Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -223,7 +223,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>publicAccessKeyId</name>
       <descriptions>
-        <desc>Access Key</desc>
+        <desc>Access Key ID</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -237,7 +237,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>secretAccessKey</name>
       <descriptions>
-        <desc>Secret Key</desc>
+        <desc>Secret Access Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
