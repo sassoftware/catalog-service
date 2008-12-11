@@ -104,12 +104,12 @@ class StorageMixin(object):
 
     def drvSetUserCredentials(self, fields):
         valid = self.drvValidateCredentials(fields)
-        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
-        store = self._getCredentialsDataStore()
-        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
         if not valid:
             raise errors.PermissionDenied(
                 message = "The supplied credentials are invalid")
+        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
+        store = self._getCredentialsDataStore()
+        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
         node = self._nodeFactory.newCredentials(valid)
         return node
 
