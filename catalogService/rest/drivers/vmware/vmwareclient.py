@@ -196,19 +196,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
 
-    def drvSetUserCredentials(self, fields):
-        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
-        store = self._getCredentialsDataStore()
-        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
-        try:
-            self.drvCreateCloudClient(data)
-            valid = True
-        except:
-            # FIXME: exception handler too broad
-            valid = False
-        node = self._nodeFactory.newCredentials(valid)
-        return node
-
     def _createCloudNode(self, cloudConfig):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         cld = self._nodeFactory.newCloud(

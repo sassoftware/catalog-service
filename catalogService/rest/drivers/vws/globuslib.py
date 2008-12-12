@@ -46,6 +46,16 @@ class WorkspaceCloudProperties(object):
         for k, v in sorted(self.properties.items()):
             stream.write("%s=%s\n" % (k, v))
 
+class Error(Exception):
+    "Base exception"
+    def __init__(self, message = None):
+        if message is None:
+            message = self.__class__.__doc__
+        Exception.__init__(self, message)
+
+class MalformedCredentials(Error):
+    "The credentials that were presented were not properly formed"
+
 class WorkspaceCloudClient(object):
     __slots__ = [
         '_caCert', '_caCertDir', '_caCertHash', '_caCertSubject',
@@ -229,7 +239,7 @@ class WorkspaceCloudClient(object):
         self._caCertSubject, _, self._caCertHash = self._parseCertData(stdout)
         if self._caCertSubject is None:
             # Some kind of syntax error
-            raise Exception("XXX 1")
+            raise MalformedCredentials()
 
         cmdline = self._opensslCmdline('-in', self._userCertPath,
             '-subject', '-issuer', '-hash')
@@ -239,7 +249,7 @@ class WorkspaceCloudClient(object):
         self._userCertSubject, self._userCertIssuer, self._userCertHash = \
             self._parseCertData(stdout)
         if self._userCertSubject is None:
-            raise Exception("XXX 1")
+            raise MalformedCredentials()
 
         fpath = os.path.join(self._caCertDir, self._caCertHash)
         # Write the cert as <hash>.0
@@ -486,6 +496,9 @@ class WorkspaceCloudClient(object):
             return
         shutil.rmtree(self._tmpDir, ignore_errors = True)
         self._tmpDir = None
+
+    def __del__(self):
+        self.close()
 
     _policyTemplate = """
 access_id_CA    X509    '%(caSubject)s'

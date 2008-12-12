@@ -193,6 +193,7 @@ class BaseDriver(object):
     def getCloudConfigurationDescriptor(self):
         descr = descriptor.ConfigurationDescriptor(
             fromStream = self.configurationDescriptorXmlData)
+        descr = self._nodeFactory.newCloudConfigurationDescriptor(descr)
         return descr
 
     def getLaunchDescriptor(self):

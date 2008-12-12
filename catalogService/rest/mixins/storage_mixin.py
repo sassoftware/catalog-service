@@ -103,13 +103,23 @@ class StorageMixin(object):
         return self._createCloudNode(config)
 
     def drvSetUserCredentials(self, fields):
+        valid = self.drvValidateCredentials(fields)
+        if not valid:
+            raise errors.PermissionDenied(
+                message = "The supplied credentials are invalid")
         data = dict((x.getName(), x.getValue()) for x in fields.getFields())
         store = self._getCredentialsDataStore()
         self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
-        # XXX validate
-        valid = True
         node = self._nodeFactory.newCredentials(valid)
         return node
+
+    def drvValidateCredentials(self, credentials):
+        cdata = dict((x.getName(), x.getValue()) for x in credentials.getFields())
+        try:
+            self.drvCreateCloudClient(cdata)
+        except errors.PermissionDenied:
+            return False
+        return True
 
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()

@@ -1,6 +1,7 @@
 
 import os
 import signal
+import socket
 import time
 import urllib
 
@@ -176,15 +177,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
 
-    def drvSetUserCredentials(self, fields):
-        data = dict((x.getName(), x.getValue()) for x in fields.getFields())
-        store = self._getCredentialsDataStore()
-        self._writeCredentialsToStore(store, self.userId, self.cloudName, data)
-        # XXX validate
-        valid = True
-        node = self._nodeFactory.newCredentials(valid)
-        return node
-
     def _createCloudNode(self, cloudConfig):
         cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
                          description = cloudConfig['description'],
@@ -290,16 +282,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             ],
             constraints = dict(constraintName = 'length',
                                value = 128))
-        descr.addDataField("instanceType", required = True,
-            descriptions = "Instance Size",
-            help = [
-                ("launch/instanceSize.html", None)
-            ],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
-                    descriptions = y)
-                  for (x, y) in XenEnt_InstanceTypes.idMap)
-            )
         storageRepos = self._getStorageRepos()
         descr.addDataField("storageRepository",
             descriptions = "Storage Repository",
@@ -312,22 +294,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 for x in storageRepos),
             default = storageRepos[0][0],
             )
-        descr.addDataField("minCount", required = True,
-            descriptions = "Minimum Number of Instances",
-            type = "int", default = 1,
-            help = [
-                ("launch/minInstances.html", None)
-            ],
-            constraints = dict(constraintName = 'range',
-                               min = 1, max = 100))
-        descr.addDataField("maxCount", required = True,
-            descriptions = "Maximum Number of Instances",
-            type = "int", default = 1,
-            help = [
-                ("launch/maxInstances.html", None)
-            ],
-            constraints = dict(constraintName = 'range',
-                               min = 1, max = 100))
 
         return descr
 
@@ -751,17 +717,28 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 if e.details[0] != 'HANDLE_INVALID':
                     raise
 
+        hCache = XenEntHostCache(self.client)
+
         srRecs = self.client.xenapi.SR.get_all_records()
         for k, srRec in sorted(srRecs.items(), key = lambda x: x[1]['uuid']):
             uuid = srRec['uuid']
+            if not srRec['PBDs']:
+                # Improperly configured SR - no PBDs
+                continue
             if 'vdi_create' not in srRec['allowed_operations']:
                 continue
-            if uuid not in uuidsFound:
-                ret.append(uuid)
-            uuidsFound[uuid] = (
-                "%s (%s) - %s" % (srRec['name_label'], srRec['type'],
-                                  uuid.split('-')[0]),
-                srRec['name_description'])
+            if uuid in uuidsFound:
+                continue
+            ret.append(uuid)
+            srRecNameLabel = srRec['name_label']
+            srRecType = srRec['type']
+            if srRecType == 'lvm':
+                # Grab the host name from the first PBD
+                hostName = hCache.getHostNameFromPbd(srRec['PBDs'][0])
+                label = "%s (%s) on %s" % (srRecNameLabel, srRecType, hostName)
+            else:
+                label = "%s (%s)" % (srRecNameLabel, srRecType)
+            uuidsFound[uuid] = (label, srRec['name_description'])
         return [ (x, uuidsFound[x]) for x in ret if uuidsFound[x] ]
 
 class RestClient(restClient.Client):
@@ -799,3 +776,36 @@ class LaunchInstanceParameters(object):
         if value is None:
             return None
         return urllib.unquote(os.path.basename(value))
+
+class XenEntHostCache(object):
+    __slots__ = ['client', 'hostNameMap', 'hostRefMap']
+    def __init__(self, client):
+        self.client = client
+        self.hostRefMap = {}
+        self.hostNameMap = {}
+
+    def getHostNameFromPbd(self, pbdRef):
+        hostRef = self.client.xenapi.PBD.get_host(pbdRef)
+        hostRec = self.hostRefMap.get(hostRef)
+        if hostRec is not None:
+            return self.hostNameMap[hostRec['address']]
+
+        hostRec = self.hostRefMap[hostRef] = self.client.xenapi.host.get_record(hostRef)
+        addr = hostRec['address']
+        if addr in self.hostNameMap:
+            return self.hostNameMap[addr]
+
+        hostName = self.resolveAddress(addr)
+        self.hostNameMap[addr] = hostName
+        return hostName
+
+    def resolveAddress(self, addr):
+        try:
+            hostName = socket.gethostbyaddr(addr)[0]
+        except socket.error, e:
+            if e.args[0] != 1: # Unknown host
+                raise
+            # Negative lookup
+            hostName = addr
+        return hostName
+

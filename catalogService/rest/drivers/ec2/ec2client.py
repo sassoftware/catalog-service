@@ -72,7 +72,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
   <metadata>
     <displayName>EC2 Cloud Configuration</displayName>
     <descriptions>
-      <desc>Configure AWS EC2 Cloud</desc>
+      <desc>Configure Amazon EC2</desc>
     </descriptions>
   </metadata>
   <dataFields>
@@ -106,7 +106,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>accountId</name>
       <descriptions>
-        <desc>Amazon Account Number</desc>
+        <desc>AWS Account Number</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -121,7 +121,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>publicAccessKeyId</name>
       <descriptions>
-        <desc>Access Key</desc>
+        <desc>Access Key ID</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -136,7 +136,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>secretAccessKey</name>
       <descriptions>
-        <desc>Secret Key</desc>
+        <desc>Secret Access Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -152,7 +152,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>certificateData</name>
       <descriptions>
-        <desc>EC2 X509 Certificate</desc>
+        <desc>X.509 Certificate</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -167,7 +167,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>certificateKeyData</name>
       <descriptions>
-        <desc>EC2 X509 Certificate Key</desc>
+        <desc>X.509 Private Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -178,34 +178,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </constraints>
       <required>true</required>
       <help href='configuration/certificateKeyData.html'/>
-    </field>
-    <field>
-      <name>launchUsers</name>
-      <descriptions>
-        <desc>Launch Users (comma-separated)</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Characters</desc>
-        </descriptions>
-        <length>256</length>
-      </constraints>
-      <help href='configuration/launchUsers.html'/>
-    </field>
-    <field>
-      <name>launchGroups</name>
-      <descriptions>
-        <desc>Launch Groups (comma-separated)</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Characters</desc>
-        </descriptions>
-        <length>256</length>
-      </constraints>
-      <help href='configuration/launchGroups.html'/>
     </field>
     <field>
       <name>s3Bucket</name>
@@ -251,7 +223,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>publicAccessKeyId</name>
       <descriptions>
-        <desc>Access Key</desc>
+        <desc>Access Key ID</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -265,7 +237,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>secretAccessKey</name>
       <descriptions>
-        <desc>Secret Key</desc>
+        <desc>Secret Access Key</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -334,15 +306,11 @@ class EC2Client(baseDriver.BaseDriver):
                 targetData = self._mintClient.getTargetData('ec2', 'aws')
             except TargetMissing:
                 targetData = {}
-            launchUsers = ','.join(targetData.get('ec2LaunchUsers', []))
-            launchGroups = ','.join(targetData.get('ec2LaunchGroups', []))
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
                 certificateData = targetData.get('ec2Certificate', ''),
                 certificateKeyData = targetData.get('ec2CertificateKey', ''),
-                launchUsers = launchUsers,
-                launchGroups = launchGroups,
                 s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
@@ -473,7 +441,7 @@ class EC2Client(baseDriver.BaseDriver):
         descr.addDescription("Amazon EC2 Launch Parameters")
         descr.addDataField("instanceType",
             descriptions = [
-                ("Instance Size", None),
+                ("Instance Type", None),
                 ("Type de l'instance", "fr_FR")],
             help = [
                 ("launch/instanceTypes.html", None)
@@ -505,7 +473,7 @@ class EC2Client(baseDriver.BaseDriver):
             constraints = dict(constraintName = 'range',
                                min = 1, max = 100))
         descr.addDataField("keyName",
-            descriptions = [ ("Key Pair", None), ("Paire de clefs", "fr_FR") ],
+            descriptions = [ ("SSH Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
                 ("launch/keyPair.html", None)
             ],
@@ -513,6 +481,7 @@ class EC2Client(baseDriver.BaseDriver):
                 descriptor.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
+        sgList = self._cliGetSecurityGroups()
         descr.addDataField("securityGroups",
             descriptions = [("Security Groups", None),
                 (u"Groupes de sécurité", "fr_FR")],
@@ -522,8 +491,9 @@ class EC2Client(baseDriver.BaseDriver):
             required = True, multiple = True,
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x[0], descriptions = x[1])
-                for x in self._cliGetSecurityGroups()
-            ))
+                for x in sgList),
+            default = sgList[0][0],
+            )
         descr.addDataField("remoteIp",
             descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
             type = "str", hidden = True,
