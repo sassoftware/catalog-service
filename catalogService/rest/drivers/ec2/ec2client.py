@@ -327,6 +327,10 @@ class EC2Client(baseDriver.BaseDriver):
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
         store.delete('enabled')
+        try:
+            self._mintClient.deleteTarget('ec2', 'aws')
+        except TargetMissing:
+            pass
 
     def drvCreateCloud(self, descriptorData):
         store = self._getConfigurationDataStore()
