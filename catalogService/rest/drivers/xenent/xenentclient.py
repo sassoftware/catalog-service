@@ -355,6 +355,15 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             if vm['is_a_template']:
                 continue
 
+            # Try to grab the guest metrics, if available
+            publicIpAddr = None
+            guestMetricsRef = vm['guest_metrics']
+            if guestMetricsRef != 'OpaqueRef:NULL':
+                networks = self.client.xenapi.VM_guest_metrics.get_networks(
+                    guestMetricsRef)
+                # XXX we are assuming eth0
+                publicIpAddr = networks.get('0/ip')
+
             instanceId = vm['uuid']
             imageId = vm['other_config'].get('catalog-client-checksum')
             inst = self._nodeFactory.newInstance(id = instanceId,
@@ -364,7 +373,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 instanceDescription = vm['name_description'],
                 reservationId = vm['uuid'],
                 dnsName = 'UNKNOWN',
-                publicDnsName = 'UNKNOWN',
+                publicDnsName = publicIpAddr,
                 privateDnsName = 'UNKNOWN',
                 state = vm['power_state'],
                 launchTime = 1,
