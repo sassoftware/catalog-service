@@ -306,6 +306,8 @@ class EC2Client(baseDriver.BaseDriver):
                 targetData = self._mintClient.getTargetData('ec2', 'aws')
             except TargetMissing:
                 targetData = {}
+            except PermissionDenied:
+                raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
