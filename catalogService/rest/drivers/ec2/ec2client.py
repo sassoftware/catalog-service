@@ -7,6 +7,7 @@ import urllib
 from boto.ec2.connection import EC2Connection
 from boto.exception import EC2ResponseError
 
+from mint import helperfuncs
 from mint.mint_error import EC2Exception as MintEC2Exception
 from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
 
@@ -291,8 +292,18 @@ class EC2Client(baseDriver.BaseDriver):
         for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
             if key not in credentials or not credentials[key]:
                 raise errors.MissingCredentials()
+        proxyUrl = self._mintClient._cfg.proxy.get('https')
+        if proxyUrl:
+            splitUrl = helperfuncs.urlSplit(proxyUrl)
+            proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
+        else:
+            proxyUser, proxyPass, proxy, proxyPort = None, None, None, None
         return EC2Connection(credentials['awsPublicAccessKeyId'],
-                             credentials['awsSecretAccessKey'])
+                             credentials['awsSecretAccessKey'],
+                             proxy_user = proxyUser,
+                             proxy_pass = proxyPass,
+                             proxy = proxy,
+                             proxy_port = proxyPort)
 
     def drvGetCloudConfiguration(self, isAdmin = False):
         store = self._getConfigurationDataStore()
