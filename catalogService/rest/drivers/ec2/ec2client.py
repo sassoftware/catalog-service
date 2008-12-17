@@ -470,7 +470,8 @@ class EC2Client(baseDriver.BaseDriver):
             type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(x,
                     descriptions = y)
-                  for (x, y) in EC2_InstanceTypes.idMap)
+                  for (x, y) in EC2_InstanceTypes.idMap),
+            default = EC2_InstanceTypes.idMap[0][0],
             )
         descr.addDataField("minCount",
             descriptions = [
