@@ -332,10 +332,13 @@ class EC2Client(baseDriver.BaseDriver):
         if not cloudConfig:
             return {}
         try:
-            return self._mintClient.getEC2CredentialsForUser(
+            creds = self._mintClient.getEC2CredentialsForUser(
                                                     self._mintAuth.userId)
         except PermissionDenied:
             raise errors.PermissionDenied
+        if not creds.get('awsPublicAccessKeyId'):
+            return {}
+        return creds
 
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
