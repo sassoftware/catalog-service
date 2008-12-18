@@ -98,8 +98,8 @@ class BaseDriver(object):
         for cloudConfig in self._enumerateConfiguredClouds():
             cloudNode = self._createCloudNode(cloudConfig)
             creds = self._getCloudCredentialsForUser(cloudNode.getCloudName())
-            if not creds:
-                cloudNode.setDescriptorLaunch(None)
+            # RBL-4055: no longer erase launch descriptor if the credentials
+            # are not set
             ret.append(cloudNode)
         return ret
 
