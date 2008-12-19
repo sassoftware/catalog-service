@@ -433,7 +433,7 @@ class EC2Client(baseDriver.BaseDriver):
                     instance_type=getField('instanceType'))
         except EC2ResponseError, e:
             # Pass the original stack trace in
-            raise errors.ResponseError, (e.status, e.reason, e.body), sys.exc_info()[2]
+            raise errors.ResponseError, (e.status, e.message, e.body), sys.exc_info()[2]
         return self._getInstancesFromReservation(reservation)
 
     def terminateInstances(self, instanceIds):
@@ -555,7 +555,7 @@ class EC2Client(baseDriver.BaseDriver):
             if e.status == 400 and e.code == 'InvalidGroup.Duplicate':
                 pass # ignore this error
             else:
-                raise errors.ResponseError(e.status, e.reason, e.body)
+                raise errors.ResponseError(e.status, e.message, e.body)
 
         # open ingress for ports 80, 443, and 8003 on TCP
         # for the IP address
@@ -568,7 +568,7 @@ class EC2Client(baseDriver.BaseDriver):
                 if e.status == 400 and e.code == 'InvalidPermission.Duplicate':
                     pass # ignore this error
                 else:
-                    raise errors.ResponseError(e.status, e.reason, e.body)
+                    raise errors.ResponseError(e.status, e.message, e.body)
 
         return CATALOG_DEF_SECURITY_GROUP
 
@@ -655,7 +655,7 @@ class EC2Client(baseDriver.BaseDriver):
         try:
             rs = self.client.get_all_key_pairs(keynames = keynames)
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, e.reason, e.body)
+            raise errors.ResponseError(e.status, e.message, e.body)
         return [ (x.name, x.fingerprint) for x in rs ]
 
     def _getSecurityGroups(self, groupNames = None):
@@ -671,7 +671,7 @@ class EC2Client(baseDriver.BaseDriver):
         try:
             rs = self.client.get_all_security_groups(groupnames = groupNames)
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, e.reason, e.body)
+            raise errors.ResponseError(e.status, e.message, e.body)
         ret = []
         defSecurityGroup = None
         for sg in rs:
