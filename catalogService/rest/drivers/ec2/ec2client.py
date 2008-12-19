@@ -450,11 +450,6 @@ class EC2Client(baseDriver.BaseDriver):
             insts.extend(self._getInstancesFromReservation(reservation))
         return insts
 
-    def getImages(self, imageIds):
-        if self.client is None:
-            raise errors.MissingCredentials()
-        return self.drvGetImages(imageIds)
-
     def drvGetImages(self, imageIds):
         rs = self.client.get_all_images(image_ids = imageIds)
         # avoid returning amazon kernel images.

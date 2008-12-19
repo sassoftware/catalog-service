@@ -118,8 +118,7 @@ class BaseDriver(object):
 
     def getImages(self, imageIds):
         if self.client is None:
-            # XXX We may have to raise an exception here (MissingCredentials?)
-            return images.BaseImages()
+            raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetImages(imageIds)
 
     def getAllInstances(self):
@@ -127,8 +126,7 @@ class BaseDriver(object):
 
     def getInstances(self, instanceIds):
         if self.client is None:
-            # XXX We may have to raise an exception here (MissingCredentials?)
-            return instances.BaseInstances()
+            raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetInstances(instanceIds)
 
     def drvGetCloudCredentialsForUser(self):
