@@ -79,7 +79,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>useDeploymentDaemon</name>
       <descriptions>
-        <desc>Use the deployment daemon?</desc>
+        <desc>Will you be using the deployment daemon?</desc>
       </descriptions>
       <required>true</required>
       <enumeratedType>
@@ -102,7 +102,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>deploymentDaemonPort</name>
       <descriptions>
-        <desc>Port</desc>
+        <desc>Deployment Daemon Port</desc>
       </descriptions>
       <required>true</required>
       <type>int</type>
