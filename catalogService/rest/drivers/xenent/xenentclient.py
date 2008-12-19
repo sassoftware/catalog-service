@@ -76,6 +76,50 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <help href='configuration/description.html'/>
     </field>
+    <field>
+      <name>useDeploymentDaemon</name>
+      <descriptions>
+        <desc>Use the deployment daemon?</desc>
+      </descriptions>
+      <required>true</required>
+      <enumeratedType>
+        <describedValue>
+          <descriptions>
+            <desc>Yes</desc>
+          </descriptions>
+          <key>yes</key>
+        </describedValue>
+        <describedValue>
+          <descriptions>
+            <desc>No</desc>
+          </descriptions>
+          <key>no</key>
+        </describedValue>
+      </enumeratedType>
+      <default>yes</default>
+      <help href='configuration/useDeploymentDaemon.html'/>
+    </field>
+    <field>
+      <name>deploymentDaemonPort</name>
+      <descriptions>
+        <desc>Port</desc>
+      </descriptions>
+      <required>true</required>
+      <type>int</type>
+      <constraints>
+        <range>
+          <min>1025</min>
+          <max>16000</max>
+        </range>
+      </constraints>
+      <default>12123</default>
+      <conditional>
+        <fieldName>useDeploymentDaemon</fieldName>
+        <operator>eq</operator>
+        <value>yes</value>
+      </conditional>
+      <help href='configuration/deploymentDaemonPort.html'/>
+    </field>
   </dataFields>
 </descriptor>"""
 
