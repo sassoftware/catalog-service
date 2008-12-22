@@ -376,6 +376,16 @@ class EC2Client(baseDriver.BaseDriver):
             ec2LaunchUsers = launchUsers,
             ec2LaunchGroups = launchGroups)
         dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
+        # Validate credentials
+        creds = {
+           'awsPublicAccessKeyId' : dataDict['ec2PublicKey'],
+           'awsSecretAccessKey' : dataDict['ec2PrivateKey']}
+        cli = self.drvCreateCloudClient(creds)
+        # Do a call to force cred validation
+        try:
+            cli.get_all_regions()
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, e.message, e.body)
         try:
             self._mintClient.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
