@@ -209,6 +209,19 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         self._instanceStore = self._getInstanceStore(keyPrefix)
         return sess
 
+    def drvVerifyCloudConfiguration(self, config):
+        if config['useDeploymentDaemon'] == 'no':
+            return
+        # Can we talk to the deployment daemon?
+        try:
+            # The username and the password do not matter
+            self._getRestClient('username', 'password',
+                config['deploymentDaemonPort'])
+        except socket.error, e:
+            raise errors.ParameterError(message =
+                "Unable to contact deployment daemon on port %s" %
+                    config['deploymentDaemonPort'])
+
     @classmethod
     def _getCloudNameFromConfig(cls, config):
         return config['name']
@@ -231,11 +244,22 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         client = self.client
         getField = descriptorData.getField
 
+        cloudConfig = self.drvGetCloudConfiguration()
+
         imageId = os.path.basename(getField('imageId'))
 
         image = self.getImages([imageId])[0]
         if not image:
             raise errors.HttpNotFound()
+
+        if not image.getIsDeployed():
+            # Validate that we can talk to the helper daemon
+            try:
+                cli = self.getRestClient()
+            except socket.error, e:
+                raise errors.PermissionDenied(
+                    "Unable to contact deployment daemon on port %s" %
+                    cloudConfig['deploymentDaemonPort'])
 
         instanceName = getField('instanceName')
         instanceDescription = getField('instanceDescription')
@@ -462,6 +486,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _launchInstance(self, instanceId, image, instanceType, srUuid,
             instanceName, instanceDescription):
+        cloudConfig = self.drvGetCloudConfiguration()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
         try:
@@ -591,8 +616,12 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getRestClient(self):
         creds = self.credentials
         username, password = creds['username'], creds['password']
-        cli = RestClient('http://%s:%s@%s:%d' %
-            (username, password, self.cloudName, 12321))
+        deploymentDaemonPort = self.drvGetCloudConfiguration()['deploymentDaemonPort']
+        return self._getRestClient(username, password, deploymentDaemonPort)
+
+    def _getRestClient(self, username, password, deploymentDaemonPort):
+        cli = RestClient('http://%s:%s@%s:%s' %
+            (username, password, self.cloudName, deploymentDaemonPort))
         cli.connect()
         return cli
 

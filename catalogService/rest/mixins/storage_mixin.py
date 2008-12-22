@@ -96,11 +96,15 @@ class StorageMixin(object):
         cloudName = self._getCloudNameFromDescriptorData(descriptorData)
         config = dict((k.getName(), k.getValue())
             for k in descriptorData.getFields())
+        self.drvVerifyCloudConfiguration(config)
         store = self._getConfigurationDataStore()
         if store.exists(cloudName):
             raise errors.CloudExists()
         self.configureCloud(store, config)
         return self._createCloudNode(config)
+
+    def drvVerifyCloudConfiguration(self, config):
+        pass
 
     def drvSetUserCredentials(self, fields):
         valid = self.drvValidateCredentials(fields)
