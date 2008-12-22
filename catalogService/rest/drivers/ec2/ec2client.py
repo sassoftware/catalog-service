@@ -348,6 +348,12 @@ class EC2Client(baseDriver.BaseDriver):
         except TargetMissing:
             pass
 
+    @classmethod
+    def _strip(cls, obj):
+        if not isinstance(obj, basestring):
+            return None
+        return obj.strip()
+
     def drvCreateCloud(self, descriptorData):
         store = self._getConfigurationDataStore()
         if store.get('enabled'):
@@ -369,6 +375,7 @@ class EC2Client(baseDriver.BaseDriver):
             ec2CertificateKey = getField('certificateKeyData'),
             ec2LaunchUsers = launchUsers,
             ec2LaunchGroups = launchGroups)
+        dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
         try:
             self._mintClient.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
