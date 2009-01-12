@@ -1,11 +1,13 @@
 
 # vim: set fileencoding=utf-8 :
 
+import base64
 import os
 import sys
 import urllib
 from boto.ec2.connection import EC2Connection
-from boto.exception import EC2ResponseError
+from boto.s3.connection import S3Connection
+from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 
 from mint import helperfuncs
 from mint.mint_error import EC2Exception as MintEC2Exception
@@ -354,12 +356,66 @@ class EC2Client(baseDriver.BaseDriver):
             return None
         return obj.strip()
 
+    def _getS3Connection(self, publicAccessKeyId, secretAccessKey):
+        proxyUrl = self._mintClient._cfg.proxy.get('https')
+        if proxyUrl:
+            splitUrl = helperfuncs.urlSplit(proxyUrl)
+            proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
+        else:
+            proxyUser, proxyPass, proxy, proxyPort = None, None, None, None
+        return S3Connection(publicAccessKeyId, secretAccessKey,
+                            proxy_user = proxyUser,
+                            proxy_pass = proxyPass,
+                            proxy = proxy,
+                            proxy_port = proxyPort)
+
+    def _createRandomKey(self):
+        return base64.b64encode(file("/dev/urandom").read(8))
+
+    def _validateS3Bucket(self, publicAccessKeyId, secretAccessKey, bucket):
+        conn = self._getS3Connection(publicAccessKeyId, secretAccessKey)
+
+        try:
+            conn.create_bucket(bucket)
+        except S3CreateError:
+            # Bucket already exists
+            pass
+        except S3ResponseError, e:
+            # Bad auth data
+            raise errors.ResponseError(e.status, e.reason, e.body)
+        else:
+            return True
+
+        # Can we still write to it?
+        try:
+            bucket = conn.get_bucket(bucket)
+        except S3ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
+
+        keyName = self._createRandomKey()
+        key = bucket.new_key(keyName)
+        try:
+            key.set_contents_from_string("")
+        except S3ResponseError, e:
+            raise errors.ResponseError(e.status, e.reason, e.body)
+        else:
+            # Clean up
+            bucket.delete_key(keyName)
+        return True
+
     def drvCreateCloud(self, descriptorData):
         store = self._getConfigurationDataStore()
         if store.get('enabled'):
             raise errors.CloudExists()
-        # Nothing fancy, just reenable the cloud
+
         getField = descriptorData.getField
+
+        ec2PublicKey = getField('publicAccessKeyId')
+        ec2PrivateKey = getField('secretAccessKey')
+        ec2S3Bucket = getField('s3Bucket')
+        self._validateS3Bucket(ec2PublicKey, ec2PrivateKey, ec2S3Bucket)
+
+        # Nothing fancy, just reenable the cloud
         launchUsers = getField('launchUsers')
         if launchUsers:
             launchUsers = [ x.strip() for x in launchUsers.split(',') ]
@@ -368,9 +424,9 @@ class EC2Client(baseDriver.BaseDriver):
             launchGroups = [ x.strip() for x in launchGroups.split(',') ]
         dataDict = dict(
             ec2AccountId = getField('accountId'),
-            ec2PublicKey = getField('publicAccessKeyId'),
-            ec2PrivateKey = getField('secretAccessKey'),
-            ec2S3Bucket = getField('s3Bucket'),
+            ec2PublicKey = ec2PublicKey,
+            ec2PrivateKey = ec2PrivateKey,
+            ec2S3Bucket = ec2S3Bucket,
             ec2Certificate = getField('certificateData'),
             ec2CertificateKey = getField('certificateKeyData'),
             ec2LaunchUsers = launchUsers,
