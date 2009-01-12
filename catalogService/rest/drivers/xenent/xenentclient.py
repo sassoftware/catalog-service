@@ -216,7 +216,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         try:
             # The username and the password do not matter
             self._getRestClient('username', 'password',
-                config['deploymentDaemonPort'])
+                config['name'], config['deploymentDaemonPort'])
         except socket.error, e:
             raise errors.ParameterError(message =
                 "Unable to contact deployment daemon on port %s" %
@@ -616,12 +616,16 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def getRestClient(self):
         creds = self.credentials
         username, password = creds['username'], creds['password']
-        deploymentDaemonPort = self.drvGetCloudConfiguration()['deploymentDaemonPort']
-        return self._getRestClient(username, password, deploymentDaemonPort)
+        cloudConfig = self.drvGetCloudConfiguration()
+        deploymentDaemonPort = cloudConfig['deploymentDaemonPort']
+        cloudName = cloudConfig['name']
+        return self._getRestClient(username, password, cloudName,
+                                   deploymentDaemonPort)
 
-    def _getRestClient(self, username, password, deploymentDaemonPort):
+    def _getRestClient(self, username, password, cloudName,
+                       deploymentDaemonPort):
         cli = RestClient('http://%s:%s@%s:%s' %
-            (username, password, self.cloudName, deploymentDaemonPort))
+            (username, password, cloudName, deploymentDaemonPort))
         cli.connect()
         return cli
 
