@@ -410,9 +410,9 @@ class EC2Client(baseDriver.BaseDriver):
 
         getField = descriptorData.getField
 
-        ec2PublicKey = getField('publicAccessKeyId')
-        ec2PrivateKey = getField('secretAccessKey')
-        ec2S3Bucket = getField('s3Bucket')
+        ec2PublicKey = self._strip(getField('publicAccessKeyId'))
+        ec2PrivateKey = self._strip(getField('secretAccessKey'))
+        ec2S3Bucket = self._strip(getField('s3Bucket'))
         self._validateS3Bucket(ec2PublicKey, ec2PrivateKey, ec2S3Bucket)
 
         # Nothing fancy, just reenable the cloud
