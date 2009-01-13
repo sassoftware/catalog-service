@@ -377,9 +377,11 @@ class EC2Client(baseDriver.BaseDriver):
 
         try:
             conn.create_bucket(bucket)
-        except S3CreateError:
+        except S3CreateError, e:
             # Bucket already exists
-            pass
+            errStatus = e.status
+            errReason = e.reason
+            errBody = e.body
         except S3ResponseError, e:
             # Bad auth data
             raise errors.ResponseError(e.status, e.reason, e.body)
@@ -389,15 +391,15 @@ class EC2Client(baseDriver.BaseDriver):
         # Can we still write to it?
         try:
             bucket = conn.get_bucket(bucket)
-        except S3ResponseError, e:
-            raise errors.ResponseError(e.status, e.reason, e.body)
+        except S3ResponseError:
+            raise errors.ResponseError(errStatus, errReason, errBody)
 
         keyName = self._createRandomKey()
         key = bucket.new_key(keyName)
         try:
             key.set_contents_from_string("")
-        except S3ResponseError, e:
-            raise errors.ResponseError(e.status, e.reason, e.body)
+        except S3ResponseError:
+            raise errors.ResponseError(errStatus, errReason, errBody)
         else:
             # Clean up
             bucket.delete_key(keyName)
