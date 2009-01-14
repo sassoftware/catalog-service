@@ -380,11 +380,11 @@ class EC2Client(baseDriver.BaseDriver):
         except S3CreateError, e:
             # Bucket already exists
             errStatus = e.status
-            errReason = e.reason
+            errMessage = e.message
             errBody = e.body
         except S3ResponseError, e:
             # Bad auth data
-            raise errors.ResponseError(e.status, e.reason, e.body)
+            raise errors.ResponseError(e.status, e.message, e.body)
         else:
             return True
 
@@ -392,14 +392,14 @@ class EC2Client(baseDriver.BaseDriver):
         try:
             bucket = conn.get_bucket(bucket)
         except S3ResponseError:
-            raise errors.ResponseError(errStatus, errReason, errBody)
+            raise errors.ResponseError(errStatus, errMessage, errBody)
 
         keyName = self._createRandomKey()
         key = bucket.new_key(keyName)
         try:
             key.set_contents_from_string("")
         except S3ResponseError:
-            raise errors.ResponseError(errStatus, errReason, errBody)
+            raise errors.ResponseError(errStatus, errMessage, errBody)
         else:
             # Clean up
             bucket.delete_key(keyName)
