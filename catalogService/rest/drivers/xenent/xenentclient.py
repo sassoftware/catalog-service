@@ -300,7 +300,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             if len(x.getInstanceId()) == 36 ]
 
         for instId in realInstIds:
-            client.xenapi.VM.clean_shutdown(instId)
+            instRef = self.client.xenapi.VM.get_by_uuid(instId)
+            client.xenapi.VM.clean_shutdown(instRef)
 
         self._killRunningProcessesForInstances(synthesizedInstIds)
 
