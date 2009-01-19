@@ -3,6 +3,7 @@
 # Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
 #
 
+import operator
 import os
 import signal
 import time
@@ -278,10 +279,10 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                ('launch/dataCenter.html', None)
                            ],
                            type = descriptor.EnumeratedType(
-            descriptor.ValueWithDescription(x.properties['name'],
+            descriptor.ValueWithDescription(x.obj,
                                             descriptions=x.properties['name'])
             for x in dataCenters),
-                           default = dataCenters[0].properties['name'],
+                           default = dataCenters[0].obj,
                            readonly = True
                            )
         crToDc = {}
@@ -289,7 +290,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             crs = dc.getComputeResources()
             for cr in crs:
                 crToDc[cr] = dc
-            descr.addDataField('cr-%s' %dc.properties['name'],
+            descr.addDataField('cr-%s' %dc.obj,
                                descriptions = 'Compute Resource',
                                required = True,
                                help = [
@@ -297,13 +298,13 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                ],
                                type = descriptor.EnumeratedType(
                 descriptor.ValueWithDescription(
-                x.properties['name'], descriptions=x.properties['name'])
+                x.obj, descriptions=x.properties['name'])
                 for x in crs),
-                               default = crs[0].properties['name'],
+                               default = crs[0].obj,
                                conditional = descriptor.Conditional(
                 fieldName='dataCenter',
                 operator='eq',
-                value=dc.properties['name'])
+                value=dc.obj)
                                )
         for cr in crToDc.keys():
             cfg = cr.configTarget
@@ -314,9 +315,10 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 dsInfo = ds.get_element_datastore()
                 free = dsInfo.get_element_freeSpace()
                 dsDesc = '%s - %s free' %(name, formatSize(free))
-                dataStores.append((name, dsDesc))
+                dsMor = ds.get_element_datastore().get_element_datastore()
+                dataStores.append((dsMor, dsDesc))
             dc = crToDc[cr]
-            descr.addDataField('dataStore-%s' %cr.properties['name'],
+            descr.addDataField('dataStore-%s' %cr.obj,
                                descriptions = 'Data Store',
                                required = True,
                                help = [
@@ -327,9 +329,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 for x in dataStores),
                                default = dataStores[0][0],
                                conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.properties['name'],
+                fieldName='cr-%s' %dc.obj,
                 operator='eq',
-                value=cr.properties['name'])
+                value=cr.obj)
                                )
             # FIXME: add (descriptor.Conditional(
             #fieldName='dataCenter',
@@ -337,22 +339,26 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             #    value=dc.obj),
 
         for cr in crToDc.keys():
-            rps = [ x['name'] for x in cr.resourcePools.itervalues() ]
-            descr.addDataField('resourcePool-%s' %cr.properties['name'],
+            # sort a list of mor, name tuples based on name
+            # and use the first tuple's mor as the default resource pool
+            defaultRp = sorted(((x[0], x[1]['name'])
+                                for x in cr.resourcePools.iteritems()),
+                               key=operator.itemgetter(1))[0][0]
+            descr.addDataField('resourcePool-%s' %cr.obj,
                                descriptions = 'Resource Pool',
                                required = True,
                                help = [
                                    ('launch/resourcePool.html', None)
                                ],
                                type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
-                                                descriptions=x)
-                for x in rps),
-                               default = rps[0],
+                descriptor.ValueWithDescription(str(x[0]),
+                                                descriptions=x[1]['name'])
+                for x in cr.resourcePools.iteritems()),
+                               default = defaultRp,
                                conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.properties['name'],
+                fieldName='cr-%s' %dc.obj,
                 operator='eq',
-                value=cr.properties['name'])
+                value=cr.obj)
                                )
 
         return descr
@@ -555,6 +561,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                   ds=self.vicfg.getMOR(dataStore),
                                   rp=self.vicfg.getMOR(resourcePool),
                                   newuuid=uuid)
+        # FIXME: error handle on ret
 
     def _downloadImage(self, image, tmpDir):
         # FIXME: copied from VWS driver

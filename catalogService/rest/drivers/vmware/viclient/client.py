@@ -61,7 +61,7 @@ class VIConfig:
 
     def updateNamemap(self, names):
         self.namemap.update(names)
-        self.mormap.update(dict((x[1], x[0]) for x in names.iteritems()))
+        self.mormap.update(dict((str(x), x) for x in names.iterkeys()))
 
     def getDatacenters(self):
         return self.datacenters
@@ -75,8 +75,8 @@ class VIConfig:
     def getName(self, mor):
         return self.namemap[mor]
 
-    def getMOR(self, name):
-        return self.mormap[name]
+    def getMOR(self, morid):
+        return self.mormap[morid]
 
     def setProperties(self, props):
         self.props = props
