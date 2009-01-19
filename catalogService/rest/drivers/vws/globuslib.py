@@ -300,7 +300,7 @@ class WorkspaceCloudClient(object):
 
         env = os.environ.copy()
         # XXX Hack
-        javaHome = env.get('JAVA_HOME', '/usr/lib64/jvm/sun-java-6u5/jre')
+        javaHome = env.get('JAVA_HOME', '/usr/lib64/jvm/sun-java-6u11/jre')
         env['JAVA_HOME'] = javaHome
         env['PATH'] = env['PATH'] + ':%s/bin' % javaHome
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
