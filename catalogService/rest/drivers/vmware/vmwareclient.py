@@ -229,6 +229,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         instanceId = uuidgen()
         self._instanceStore.setImageId(instanceId, imageId)
+        # FIXME - should not be using internal _set method
+        self._instanceStore._set(instanceId, 'instanceName', instanceName)
         self._instanceStore.setState(instanceId, 'Creating')
 
         self._daemonize(self._launchInstance, instanceId, image,
@@ -435,7 +437,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 continue
             image = imagesL[0]
 
-            instanceName = self._getInstanceNameFromImage(image)
+            # FIXME: should not be using internal method
+            instanceName = self._instanceStore._get(storeKey, 'instanceName')
             instanceDescription = self._getInstanceDescriptionFromImage(image) \
                 or instanceName
 
@@ -551,9 +554,12 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _cloneTemplate(self, imageId, instanceName, instanceDescription,
                        uuid, dataCenter, computeResource, dataStore,
-                       resourcePool):
-        templateUuid = os.path.basename(imageId)
-        ret = self.client.cloneVM(uuid=templateUuid,
+                       resourcePool, vm=None):
+        templateUuid = None
+        if not vm:
+            templateUuid = os.path.basename(imageId)
+        ret = self.client.cloneVM(mor=vm,
+                                  uuid=templateUuid,
                                   name=instanceName,
                                   annotation=instanceDescription,
                                   dc=self.vicfg.getMOR(dataCenter),
@@ -578,37 +584,9 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         util.copyfileobj(uobj, file(downloadFilePath, 'w'))
         return downloadFilePath
 
-    def _deployImage(self, instanceId, image, dataCenter, dataStore,
-                     computeResource, resourcePool):
-        downloadUrl = image.getDownloadUrl()
-        imageId = image.getImageId()
-
-        baseFileName = image.getBaseFileName()
-        templateName = 'template-' + baseFileName
-        dc = self.vicfg.getDatacenter(dataCenter)
-
-        # unfortunately registering a vm as a template
-        # still requires a host.  That host needs to be
-        # able to access the requested datastore.
-        cr = dc.getComputeResource(computeResource)
-        ds = self.vicfg.getMOR(dataStore)
-        rp = self.vicfg.getMOR(resourcePool)
-        props = self.vicfg.getProperties()
-        # find a host that can access the datastore
-        hosts = [ x for x in cr.properties['host'] if ds in props[x]['datastore'] ]
-        if not hosts:
-            raise RuntimeError('no host can access the requested datastore')
-        host = hosts[0]
-
-        vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
-        inventoryPrefix = '/%s/%s/' %(dataCenter, vmFolder)
-
-        self._setState(instanceId, 'Downloading image')
-        tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
-        path = self._downloadImage(image, tmpDir)
-
+    def _findUniqueName(self, inventoryPrefix, startName):
         # make sure that the vm name is not used in the inventory
-        testName = templateName
+        testName = startName
         x = 0
         while True:
             ret = self.client.findVMByInventoryPath(inventoryPrefix + testName)
@@ -617,9 +595,35 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 break
             x += 1
             # add a suffix to make it unique
-            testName = templateName + '-%d' %x
-        templateName = testName
+            testName = startName + '-%d' %x
+        return testName
 
+    def _deployImage(self, instanceId, image, dataCenter, dataStore,
+                     computeResource, resourcePool, vmName, uuid):
+        downloadUrl = image.getDownloadUrl()
+
+        dc = self.vicfg.getDatacenter(dataCenter)
+        dcName = dc.properties['name']
+
+        cr = dc.getComputeResource(computeResource)
+        ds = self.vicfg.getMOR(dataStore)
+        dsInfo = self.client.getDynamicProperty(ds, 'summary')
+        dsName = dsInfo.get_element_name()
+        rp = self.vicfg.getMOR(resourcePool)
+        props = self.vicfg.getProperties()
+        # find a host that can access the datastore
+        hosts = [ x for x in cr.properties['host'] if ds in props[x]['datastore'] ]
+        if not hosts:
+            raise RuntimeError('no host can access the requested datastore')
+        host = hosts[0]
+
+        self._setState(instanceId, 'Downloading image')
+        tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
+        path = self._downloadImage(image, tmpDir)
+
+        vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
+        inventoryPrefix = '/%s/%s/' %(dcName, vmFolder)
+        vmName = self._findUniqueName(inventoryPrefix, vmName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
@@ -638,21 +642,21 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
             p.wait()
             self._setState(instanceId, 'Uploading image to VMware')
+            vmFiles = os.path.join(workdir, image.getBaseFileName())
             vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                                 os.path.join(workdir, baseFileName),
-                                                 templateName,
-                                                 dataCenter=dataCenter,
-                                                 dataStore=dataStore)
+                                                 vmFiles,
+                                                 vmName,
+                                                 dataCenter=dcName,
+                                                 dataStore=dsName)
             try:
                 vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
-                                            templateName, asTemplate=False,
+                                            vmName, asTemplate=False,
                                             host=host, pool=rp)
+                self.client.reconfigVM(vm, {'uuid': uuid})
             except viclient.Error, e:
-                raise RuntimeError('An error occurred when registering the VM '
-                                   'template: %s' %str(e))
-            # set the template uuid to the imageId
-            self.client.reconfigVM(vm, {'uuid': imageId})
-            self.client.markAsTemplate(vm)
+                raise RuntimeError('An error occurred when registering the '
+                                   'VM: %s' %str(e))
+            return vm
         finally:
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
@@ -660,19 +664,36 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _launchInstance(self, instanceId, image, dataCenter,
                         computeResource, dataStore, resourcePool,
                         instanceName, instanceDescription):
+        vm = None
+        self._instanceStore.setPid(instanceId)
         try:
-            self._instanceStore.setPid(instanceId)
+            useTemplate = not self.client.isESX()
             if not image.getIsDeployed():
-                self._deployImage(instanceId, image, dataCenter, dataStore,
-                                  computeResource, resourcePool)
+                if useTemplate:
+                    # if we can use a template, deploy the image
+                    # as a template with the imageId as the uuid
+                    vmName = 'template-' + image.getBaseFileName()
+                    uuid = image.getImageId()
+                else:
+                    # otherwise, we'll use the instance name and instace
+                    # uuid for deployment
+                    vmName = instanceName
+                    uuid = instanceId
+                vm = self._deployImage(instanceId, image, dataCenter,
+                                       dataStore, computeResource,
+                                       resourcePool, vmName, uuid)
+                if useTemplate:
+                    self.client.markAsTemplate(vm=vm)
 
-            imageId = image.getImageId()
-
-            self._setState(instanceId, 'Cloning template')
-            self._cloneTemplate(imageId, instanceName,
-                                instanceDescription, instanceId,
-                                dataCenter, computeResource,
-                                dataStore, resourcePool)
+            if useTemplate:
+                # mark the VM as a template, clone, and launch it
+                self._setState(instanceId, 'Cloning template')
+                self._cloneTemplate(image.getImageId(), instanceName,
+                                    instanceDescription, instanceId,
+                                    dataCenter, computeResource,
+                                    dataStore, resourcePool, vm=vm)
+            else:
+                self.client.startVM(uuid=instanceId)
             self._setState(instanceId, 'Launching')
         finally:
             self._instanceStore.deletePid(instanceId)

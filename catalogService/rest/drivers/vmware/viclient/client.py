@@ -43,9 +43,9 @@ class Datacenter:
     def getComputeResources(self):
         return self.crs
 
-    def getComputeResource(self, name):
+    def getComputeResource(self, objref):
         for cr in self.crs:
-            if cr.properties['name'] == name:
+            if str(cr.obj) == objref:
                 return cr
         return None
 
@@ -66,9 +66,9 @@ class VIConfig:
     def getDatacenters(self):
         return self.datacenters
 
-    def getDatacenter(self, name):
+    def getDatacenter(self, objref):
         for dc in self.datacenters:
-            if dc.properties['name'] == name:
+            if str(dc.obj) == objref:
                 return dc
         return None
 
@@ -121,6 +121,9 @@ class VimService(object):
         req.set_element_locale(locale)
         ret = self._service.Login(req)
         self._loggedIn = True
+
+    def isESX(self):
+        return self._sic.get_element_about().get_element_productLineId() == 'esx'
 
     def getUrlBase(self):
         return self.baseUrl
@@ -702,6 +705,10 @@ class VimService(object):
         for datum in data:
             mor = datum.get_element_obj()
             props = {}
+            ret[mor] = props
+            if not hasattr(datum, '_propSet'):
+                # not sure how this happens, but it does
+                continue
             for prop in datum.get_element_propSet():
                 name = prop.get_element_name()
                 val = prop.get_element_val()
@@ -716,7 +723,6 @@ class VimService(object):
                             d[holder.get_element_key()] = holder.get_element_value()
                             val = d
                 props[name] = val
-            ret[mor] = props
         return ret
 
     def getDatacenters(self):
@@ -859,9 +865,10 @@ class VimService(object):
         task = ret.get_element_returnval()
         return self.waitForTask(task)
 
-    def markAsTemplate(self, vm):
+    def markAsTemplate(self, vm=None, uuid=None):
+        mor = self._getVM(mor=vm, uuid=uuid)
         req = MarkAsTemplateRequestMsg()
-        req.set_element__this(vm)
+        req.set_element__this(mor)
         self._service.MarkAsTemplate(req)
 
     def getVIConfig(self):
@@ -1002,6 +1009,16 @@ class VimService(object):
                 res = self.waitForTask(task)
                 if res.lower() != 'success':
                     raise RuntimeError(res)
+
+    def startVM(self, mor=None, uuid=None):
+        mor = self._getVM(mor=mor, uuid=uuid)
+        req = PowerOnVM_TaskRequestMsg()
+        req.set_element__this(mor)
+        ret = self._service.PowerOnVM_Task(req)
+        task = ret.get_element_returnval()
+        res = self.waitForTask(task)
+        if res.lower() != 'success':
+            raise RuntimeError(res)
 
     def logout(self):
         req = LogoutRequestMsg()
