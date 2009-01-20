@@ -70,6 +70,8 @@ class WorkspaceCloudClient(object):
         r"\[ (.+) \]$")
     _timeFormat = "%a %b %d %H:%M:%S %Z %Y"
 
+    _javaHome = None
+
     def __init__(self, properties, caCert, userCert, userKey, sshPubKey,
                  cloudAlias):
         self._properties = properties
@@ -292,6 +294,23 @@ class WorkspaceCloudClient(object):
         return csubj, ciss, chash
 
     @classmethod
+    def _getJavaHome(cls):
+        if cls._javaHome is not None:
+            return cls._javaHome
+        p = subprocess.Popen("/bin/bash -l -c 'echo $CVS_RSH'",
+            stdout = subprocess.PIPE,
+            shell = True)
+        stdout, stderr = p.communicate()
+        arr = stdout.splitlines()
+        if arr:
+            javaHome = arr[0]
+        else:
+            # Fall back to some default that is hopefully correct
+            javaHome = '/usr/lib64/jvm/sun-java-6u11/jre'
+        cls._javaHome = javaHome
+        return javaHome
+
+    @classmethod
     def _execCmdBackend(cls, cmdline, withStdin = False):
         if withStdin:
             stdin = subprocess.PIPE
@@ -299,9 +318,11 @@ class WorkspaceCloudClient(object):
             stdin = file(os.devnull)
 
         env = os.environ.copy()
-        # XXX Hack
-        javaHome = env.get('JAVA_HOME', '/usr/lib64/jvm/sun-java-6u11/jre')
-        env['JAVA_HOME'] = javaHome
+
+        javaHome = env.get('JAVA_HOME')
+        if javaHome is None:
+            javaJome = self._getJavaHome()
+            env['JAVA_HOME'] = javaHome
         env['PATH'] = env['PATH'] + ':%s/bin' % javaHome
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
             stderr = subprocess.PIPE, stdin = stdin, env = env)
