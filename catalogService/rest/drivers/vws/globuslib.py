@@ -302,7 +302,7 @@ class WorkspaceCloudClient(object):
             shell = True)
         stdout, stderr = p.communicate()
         arr = stdout.splitlines()
-        if arr:
+        if arr and arr[0]:
             javaHome = arr[0]
         else:
             # Fall back to some default that is hopefully correct
@@ -321,7 +321,7 @@ class WorkspaceCloudClient(object):
 
         javaHome = env.get('JAVA_HOME')
         if javaHome is None:
-            javaJome = self._getJavaHome()
+            javaHome = cls._getJavaHome()
             env['JAVA_HOME'] = javaHome
         env['PATH'] = env['PATH'] + ':%s/bin' % javaHome
         p = subprocess.Popen(cmdline, stdout = subprocess.PIPE,
