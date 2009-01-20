@@ -523,8 +523,9 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 self._deleteVirtualMachine(templRef)
                 self._setVmState(vmRef, None)
                 image.setImageId(uuid)
+                image.setInternalTargetId(uuid)
 
-            imageId = image.getImageId()
+            imageId = image.getInternalTargetId()
 
             self._setState(instanceId, 'Cloning template')
             realId = self.cloneTemplate(imageId, instanceName,
@@ -559,6 +560,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                     longName = vm['name_label'],
                     buildDescription = vm['name_description'],
                     cloudName = self.cloudName,
+                    internalTargetId = vm['uuid'],
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
