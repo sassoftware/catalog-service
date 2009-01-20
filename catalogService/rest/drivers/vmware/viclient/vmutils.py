@@ -64,6 +64,10 @@ def _putFile(inPath, outUrl, session=None):
         else:
             raise RuntimeError('PUT failed')
     resp = r.getresponse()
+    if resp.status not in (200, 201):
+        # if we didn't create a file, something went wrong
+        raise RuntimeError('PUT failed: %d - %s' %(resp.status,
+                                                   resp.reason))
     r.close()
 
 def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
