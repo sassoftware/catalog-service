@@ -297,7 +297,7 @@ class WorkspaceCloudClient(object):
     def _getJavaHome(cls):
         if cls._javaHome is not None:
             return cls._javaHome
-        p = subprocess.Popen("/bin/bash -l -c 'echo $CVS_RSH'",
+        p = subprocess.Popen("/bin/bash -l -c 'echo $JAVA_HOME'",
             stdout = subprocess.PIPE,
             shell = True)
         stdout, stderr = p.communicate()
