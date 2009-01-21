@@ -123,7 +123,8 @@ class VimService(object):
         self._loggedIn = True
 
     def isESX(self):
-        return self._sic.get_element_about().get_element_productLineId() == 'esx'
+        prodLine = self._sic.get_element_about().get_element_productLineId()
+        return 'esx' in prodLine.lower()
 
     def getUrlBase(self):
         return self.baseUrl
