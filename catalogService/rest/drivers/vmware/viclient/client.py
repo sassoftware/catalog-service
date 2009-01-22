@@ -873,6 +873,7 @@ class VimService(object):
         self._service.MarkAsTemplate(req)
 
     def getVIConfig(self):
+        # get properties for interesting objects
         props = self.getProperties({'Datacenter': [ 'name',
                                                     'hostFolder',
                                                     'vmFolder',
@@ -895,7 +896,8 @@ class VimService(object):
         hostFolderToDataCenter = {}
         rps = {}
         childRps = {}
-        nameMap = dict((x[0], x[1]['name']) for x in props.iteritems())
+        nameMap = dict((x[0], x[1].get('name', None))
+                       for x in props.iteritems())
 
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
@@ -915,15 +917,32 @@ class VimService(object):
 
         vicfg = VIConfig()
         for cr in crs:
+            # for each compute resource, we need to get the config
+            # target.  This lets us build up the options for deploying
+            # VMs
             configTarget = self.getConfigTarget(cr)
             for ds in configTarget.get_element_datastore():
+                # first go through all the datastores and record
+                # their names.
                 ds = ds.get_element_datastore()
                 nameMap[ds.get_element_datastore()] = ds.get_element_name()
+            # grab the previously retreived properties for this
+            # compute resource
             crProps = props[cr]
+            # get the top level resource pool for the compute resource
             crRp = crProps['resourcePool']
-            crRpsMors = childRps[crRp]
-            crRps = dict(x for x in props.iteritems() if x[0] in rps)
-            crRps[crRp] = props[crRp]
+
+            # pull out the list of child resource pool objects for this
+            # toplevel compute resource (if any exist)
+            crRpMors = [ crRp ]
+            if crRp in childRps:
+                # extend the list of compute resource objects with
+                # any included child objects
+                crRpMors.extend(childRps[crRp])
+            # now create a properties dictionary keyed off the
+            # resource pool objects
+            crRps = dict(x for x in props.iteritems() if x[0] in crRpMors)
+            # nowe we can create some objects that are easier to deal with
             cr = ComputeResource(cr, crProps, configTarget, crRps)
             dc = hostFolderToDataCenter[crProps['parent']]
             dc.addComputeResource(cr)
