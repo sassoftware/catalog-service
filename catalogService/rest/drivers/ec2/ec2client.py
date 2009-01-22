@@ -1,4 +1,3 @@
-
 # vim: set fileencoding=utf-8 :
 
 import base64
@@ -412,8 +411,8 @@ class EC2Client(baseDriver.BaseDriver):
 
         getField = descriptorData.getField
 
-        ec2PublicKey = self._strip(getField('publicAccessKeyId'))
-        ec2PrivateKey = self._strip(getField('secretAccessKey'))
+        ec2PublicKey = str(self._strip(getField('publicAccessKeyId')))
+        ec2PrivateKey = str(self._strip(getField('secretAccessKey')))
         ec2S3Bucket = self._strip(getField('s3Bucket'))
         self._validateS3Bucket(ec2PublicKey, ec2PrivateKey, ec2S3Bucket)
 
