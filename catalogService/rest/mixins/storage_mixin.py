@@ -4,6 +4,7 @@
 #
 
 import os
+import sys
 
 from conary.lib import util
 
@@ -171,7 +172,12 @@ class StorageMixin(object):
                 os.chdir('/')
                 function(*args, **kw)
             except Exception:
-                os._exit(1)
+                try:
+                    ei = sys.exc_info()
+                    self.log_error('Daemonized process exception',
+                                   exc_info = ei)
+                finally:
+                    os._exit(1)
         finally:
             os._exit(0)
 
