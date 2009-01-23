@@ -489,12 +489,12 @@ class EC2Client(baseDriver.BaseDriver):
     def drvLaunchInstance(self, descriptorData, requestIPAddress):
         getField = descriptorData.getField
         remoteIp = getField('remoteIp')
-        if remoteIp:
-            requestIPAddress = remoteIp
-        if CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
+        # If the UI did not send us an IP, don't try to guess, it's going to
+        # be wrong anyway.
+        if remoteIp and CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
             # Create/update the default security group that opens TCP
             # ports 80, 443, and 8003 for traffic from the requesting IP address
-            self._updateCatalogDefaultSecurityGroup(requestIPAddress)
+            self._updateCatalogDefaultSecurityGroup(remoteIp)
 
         imageId = os.path.basename(getField('imageId'))
         try:

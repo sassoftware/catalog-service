@@ -5,7 +5,7 @@ class LogRecord(logging.LogRecord):
     Custom log record that can handle client addresses
     """
     def __init__(self, address, *args, **kwargs):
-        logging.LogRecord.__init__(self, *args, **kwargs)
+        logging.LogRecord.__init__(self, *args[:8], **kwargs)
         self.address = address
 
 class Logger(logging.Logger):
@@ -16,6 +16,9 @@ class Logger(logging.Logger):
         self.address = address
 
     def makeRecord(self, *args, **kwargs):
+        # Strip out the 'extra' argument of makeRecord (python 2.6)
+        kwargs.pop('extra', None)
+        args = args[:8]
         address = getattr(self, 'address', '')
         return LogRecord(address, *args, **kwargs)
 
