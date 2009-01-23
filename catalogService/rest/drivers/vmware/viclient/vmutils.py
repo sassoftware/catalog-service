@@ -76,7 +76,6 @@ def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
         raise RuntimeError('no .vmx file found in %s' %path)
     if len(vmx) != 1:
         raise RuntimeError('more than one .vmx file found in %s' %path)
-    f = open(vmx[0])
 
     # steal cookies from the binding's cookiejar
     session = v.getSessionUUID()
