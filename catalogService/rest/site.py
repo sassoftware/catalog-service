@@ -36,6 +36,7 @@ class CatalogServiceController(RestController):
     def serviceinfo(self, request):
         responseId = "%s/serviceinfo" % request.baseUrl
         # TODO:  Get proper version/type in here.  See RBL-4191.
+        # For type, client needs "full", "limited", or "disabled"
         response = serviceInfo.ServiceInfo(id = responseId,
             version = "1",
             type = "full")
