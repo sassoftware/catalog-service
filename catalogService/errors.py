@@ -7,7 +7,7 @@ from catalogService.rest.response import XmlStringResponse
 from catalogService import http_codes
 
 class CatalogErrorResponse(XmlStringResponse):
-    def __init__(self, status, message, tracebackData='', envelopeStatus=None,
+    def __init__(self, status, message, tracebackData='', productCodeData=None, envelopeStatus=None,
                  *args, **kw):
         # See RBL-3818 - flex does not expose the content of a non-200
         # response, so we have to tunnel faults through 200.
@@ -23,6 +23,12 @@ class CatalogErrorResponse(XmlStringResponse):
         if tracebackData:
             node = etree.Element("traceback")
             node.text = tracebackData
+            faultNode.append(node)
+        
+        if productCodeData:
+            node = etree.Element("productCode")
+            for k, v in productCodeData.iteritems():
+                node.set(k, v)
             faultNode.append(node)
 
         content = etree.tostring(faultNode, pretty_print = True,
@@ -44,6 +50,7 @@ class CatalogError(Exception):
         self.status = status
         self.message = message
         self.tracebackData = kw.get('tracebackData', None)
+        self.productCodeData = kw.get('productCodeData', None)
 
     def __str__(self):
         return self.message
@@ -70,11 +77,11 @@ class ResponseError(CatalogError):
     """Response error from remote cloud service"""
     status = http_codes.HTTP_BAD_REQUEST
     # XXX flex's httpd stack requires we pass a 200 or it will junk the content
-    def __init__(self, status, message, body):
+    def __init__(self, status, message, body, productCodeData=None):
         # strip any xml tags
         if body.strip().startswith('<?xml'):
             body = ''.join(body.splitlines(True)[1:])
-        CatalogError.__init__(self, message, status = status, tracebackData = body)
+        CatalogError.__init__(self, message, status = status, tracebackData = body, productCodeData = productCodeData)
 
 class CloudExists(CatalogError):
     """Target already exists"""
@@ -99,7 +106,8 @@ class ErrorMessageCallback(object):
             return CatalogErrorResponse(status=exception.status,
                                         message=exception.message,
                                         envelopeStatus = envelopeStatus,
-                                        tracebackData = exception.tracebackData)
+                                        tracebackData = exception.tracebackData,
+                                        productCodeData = exception.productCodeData)
         from restlib.http import handler
         response = handler.ExceptionCallback().processException(request,
             excClass, exception, tb)
