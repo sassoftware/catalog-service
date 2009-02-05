@@ -20,7 +20,8 @@ class BaseImage(xmlNode.BaseNode):
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
                   '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
-                        is_rBuilderImage = bool, isDeployed = bool)
+                        is_rBuilderImage = bool, isDeployed = bool,
+                        productCodes = list,)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 
