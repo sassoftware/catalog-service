@@ -704,7 +704,8 @@ class EC2Client(baseDriver.BaseDriver):
                                            ownerId=image.ownerId,
                                            longName=image.location,
                                            state=image.state,
-                                           isPublic=image.is_public)
+                                           isPublic=image.is_public,
+                                           productCodes=image.product_codes)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:

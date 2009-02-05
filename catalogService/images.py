@@ -13,7 +13,7 @@ class BaseImage(xmlNode.BaseNode):
                   'state', 'isPublic', 'buildDescription',
                   'productName', 'role', 'publisher',
                   'awsAccountNumber', 'buildName',
-                  'isPrivate_rBuilder', 'productDescription',
+                  'isPrivate_rBuilder', 'productCodes', 'productDescription',
                   'is_rBuilderImage', 'cloudName', 'cloudType',
                   'cloudAlias', 'isDeployed', 'buildId',
                   'internalTargetId',
