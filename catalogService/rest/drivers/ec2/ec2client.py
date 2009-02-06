@@ -3,6 +3,7 @@
 import base64
 import os
 import sys
+import time
 import urllib
 from boto.ec2.connection import EC2Connection
 from boto.s3.connection import S3Connection
@@ -691,8 +692,14 @@ class EC2Client(baseDriver.BaseDriver):
         instanceName = self._getInstanceNameFromImage(imageNode)
         instanceDescription = self._getInstanceDescriptionFromImage(imageNode) \
             or instanceName
+        
         properties['instanceName'] = instanceName
         properties['instanceDescription'] = instanceDescription
+        if properties['launchTime']:
+            timeTuple = time.strptime(properties['launchTime'], 
+                           "%Y-%m-%dT%H:%M:%S.000Z")
+            properties['launchTime'] = int(time.mktime(timeTuple))
+            
         i = self._nodeFactory.newInstance(id=instance.id,
                                           instanceId=instance.id,
                                           **properties)
