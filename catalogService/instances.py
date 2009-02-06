@@ -16,7 +16,8 @@ class BaseInstance(xmlNode.BaseNode):
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
-                  '_xmlNodeHash', 'launchTime', 'productCodes' ]
+                  '_xmlNodeHash', 'launchTime', 'productCodes',
+                  'placement' ]
     _slotTypeMap = dict(productCodes = list,)
 
 
