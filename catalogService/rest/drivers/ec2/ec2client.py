@@ -274,6 +274,7 @@ class EC2Client(baseDriver.BaseDriver):
                 launchTime = 'launch_time',
                 placement = 'placement',
                 previousState = 'previous_state',
+                productCodes = 'product_codes',
                 privateDnsName = 'private_dns_name',
                 publicDnsName = 'public_dns_name',
                 ramdisk = 'ramdisk',
