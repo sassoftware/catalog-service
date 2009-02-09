@@ -17,12 +17,13 @@ class BaseInstance(xmlNode.BaseNode):
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
                   'updateStatus', 
-                  '_xmlNodeHash' ]
+                  '_xmlNodeHash', 'launchTime', 'productCodes',
+                  'placement' ]
+    _slotTypeMap = dict(productCodes = list,)
 
 class BaseInstanceUpdateStatus(xmlNode.BaseNode):
     tag = 'updateStatus'
     __slots__ = [ 'state', 'time' ]
-
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"

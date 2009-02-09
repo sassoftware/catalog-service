@@ -3,6 +3,7 @@
 import base64
 import os
 import sys
+import time
 import urllib
 from boto.ec2.connection import EC2Connection
 from boto.s3.connection import S3Connection
@@ -274,6 +275,7 @@ class EC2Client(baseDriver.BaseDriver):
                 launchTime = 'launch_time',
                 placement = 'placement',
                 previousState = 'previous_state',
+                productCodes = 'product_codes',
                 privateDnsName = 'private_dns_name',
                 publicDnsName = 'public_dns_name',
                 ramdisk = 'ramdisk',
@@ -690,8 +692,14 @@ class EC2Client(baseDriver.BaseDriver):
         instanceName = self._getInstanceNameFromImage(imageNode)
         instanceDescription = self._getInstanceDescriptionFromImage(imageNode) \
             or instanceName
+        
         properties['instanceName'] = instanceName
         properties['instanceDescription'] = instanceDescription
+        if properties['launchTime']:
+            timeTuple = time.strptime(properties['launchTime'], 
+                           "%Y-%m-%dT%H:%M:%S.000Z")
+            properties['launchTime'] = int(time.mktime(timeTuple))
+            
         i = self._nodeFactory.newInstance(id=instance.id,
                                           instanceId=instance.id,
                                           **properties)
@@ -704,7 +712,8 @@ class EC2Client(baseDriver.BaseDriver):
                                            ownerId=image.ownerId,
                                            longName=image.location,
                                            state=image.state,
-                                           isPublic=image.is_public)
+                                           isPublic=image.is_public,
+                                           productCodes=image.product_codes)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:
