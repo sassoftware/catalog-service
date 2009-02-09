@@ -379,7 +379,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return self.terminateInstances([instanceId])
 
     def updateInstances(self, instanceIds):
-        import epdb; epdb.serve()  
         insts = []
         for id in instanceIds:
             insts.append(self.getInstance(id))
