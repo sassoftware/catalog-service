@@ -14,6 +14,7 @@ import subprocess
 
 from conary.lib import util, sha1helper
 
+from catalogService import cimupdater
 from catalogService import clouds
 from catalogService import descriptor
 from catalogService import errors
@@ -207,7 +208,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _daemonize(self, *args, **kw):
         self._cloudClient = None
-        return storage_mixin.StorageMixin._daemonize(self, *args, **kw)
+        return baseDriver.BaseDriver._daemonize(self, *args, **kw)
 
     def drvLaunchInstance(self, descriptorData, requestIPAddress):
         getField = descriptorData.getField
@@ -376,6 +377,31 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def terminateInstance(self, instanceId):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
+
+    def updateInstances(self, instanceIds):
+        insts = self.getInstances(instanceIds)
+        instancesForUpdate = []
+        instanceList = instances.BaseInstances()
+        for inst in insts:
+            if inst.instanceId.getText() in instanceIds:
+                instancesForUpdate.append(inst)
+
+        for instance in instancesForUpdate:
+            instanceList.append(instance)
+            self._daemonize(self._updateInstance, instance)
+
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
+        return instanceList
+
+    def updateInstance(self, instanceId):
+        return self.updateInstances([instanceId])
+
+    def _updateInstance(self, instance):
+        host = 'https://%s' % instance.publicDnsName.getText()
+        updater = cimupdater.CIMUpdater(host)
+        # inst.setState("Applying System Updates")
+        # self._setState(instanceId, "Applying System Updates")
+        updater.checkAndApplyUpdate()
 
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images

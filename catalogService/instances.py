@@ -16,7 +16,12 @@ class BaseInstance(xmlNode.BaseNode):
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
+                  'updateStatus', 
                   '_xmlNodeHash' ]
+
+class BaseInstanceUpdateStatus(xmlNode.BaseNode):
+    tag = 'updateStatus'
+    __slots__ = [ 'state', 'time' ]
 
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
@@ -34,12 +39,14 @@ class InstanceTypes(xmlNode.BaseNodeCollection):
 
 class Handler(xmllib.DataBinder):
     instanceClass = BaseInstance
+    instanceUpdateStatusClass = BaseInstanceUpdateStatus
     instancesClass = BaseInstances
     launchIndexClass = IntegerNode
     instanceTypeClass = InstanceType
     instanceTypesClass = InstanceTypes
     def __init__(self):
         xmllib.DataBinder.__init__(self)
+        self.instanceClass.addChild(self.instanceUpdateStatusClass)
         self.registerType(self.launchIndexClass, 'launchIndex')
         self.registerType(self.instanceClass, self.instanceClass.tag)
         self.registerType(self.instancesClass, self.instancesClass.tag)

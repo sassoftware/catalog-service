@@ -13,7 +13,7 @@ class NodeFactory(object):
         'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'environmentCloudFactory', 'environmentFactory',
-        'imageFactory', 'instanceFactory',
+        'imageFactory', 'instanceFactory', 'instanceUpdateStatusFactory',
         'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName', 'userId']
 
@@ -95,6 +95,7 @@ class NodeFactory(object):
         node = self.instanceFactory(*args, **kwargs)
         node.setId(self.getInstanceUrl(node))
         node.setCloudType(self.cloudType)
+        node.setUpdateStatus(self.instanceUpdateStatusFactory())
         return node
 
     def newEnvironment(self, *args, **kwargs):

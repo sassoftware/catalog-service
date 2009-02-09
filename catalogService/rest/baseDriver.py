@@ -1,3 +1,5 @@
+import os
+
 from catalogService import errors
 from catalogService import nodeFactory
 from catalogService import descriptor
@@ -15,6 +17,7 @@ class BaseDriver(object):
     CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
+    InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
     Environment      = environment.BaseEnvironment
     EnvironmentCloud = environment.BaseCloud
@@ -82,6 +85,7 @@ class BaseDriver(object):
             credentialsFieldsFactory = self.CredentialsFields,
             imageFactory = self.Image,
             instanceFactory = self.Instance,
+            instanceUpdateStatusFactory = self.InstanceUpdateStatus,
             instanceTypeFactory = self.InstanceType,
             environmentFactory = self.Environment,
             environmentCloudFactory = self.EnvironmentCloud,
@@ -128,6 +132,9 @@ class BaseDriver(object):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetInstances(instanceIds)
+
+    def getInstance(self, instanceId):
+        return self.getInstances([instanceId,])
 
     def drvGetCloudCredentialsForUser(self):
         """
@@ -289,3 +296,37 @@ class BaseDriver(object):
             if val is not None:
                 return val
         return None
+
+    def _daemonize(self, function, *args, **kw):
+        pid = os.fork()
+        if pid:
+            os.waitpid(pid, 0)
+            return
+        try:
+            try:
+                pid = os.fork()
+                if pid:
+                    # The first child exits and is waited by the parent
+                    # the finally part will do the os._exit
+                    return
+                # Redirect stdin, stdout, stderr
+                fd = os.open(os.devnull, os.O_RDWR)
+                #os.dup2(fd, 0)
+                #os.dup2(fd, 1)
+                #os.dup2(fd, 2)
+                os.close(fd)
+                # Create new process group
+                #os.setsid()
+
+                os.chdir('/')
+                function(*args, **kw)
+            except Exception:
+                try:
+                    ei = sys.exc_info()
+                    self.log_error('Daemonized process exception',
+                                   exc_info = ei)
+                finally:
+                    os._exit(1)
+        finally:
+            os._exit(0)
+
