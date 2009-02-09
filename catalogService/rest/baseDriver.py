@@ -134,7 +134,9 @@ class BaseDriver(object):
         return self.drvGetInstances(instanceIds)
 
     def getInstance(self, instanceId):
-        return self.getInstances([instanceId,])
+        if self.client is None:
+            raise errors.MissingCredentials("Target credentials not set for user")
+        return self.drvGetInstance(instanceId)
 
     def drvGetCloudCredentialsForUser(self):
         """

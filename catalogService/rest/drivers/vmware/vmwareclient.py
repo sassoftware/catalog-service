@@ -379,7 +379,11 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return self.terminateInstances([instanceId])
 
     def updateInstances(self, instanceIds):
-        insts = self.getInstances(instanceIds)
+        import epdb; epdb.serve()  
+        insts = []
+        for id in instanceIds:
+            insts.append(self.getInstance(id))
+
         instancesForUpdate = []
         instanceList = instances.BaseInstances()
         for inst in insts:
@@ -442,6 +446,49 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self.drvGetCloudConfiguration()
         return cloudConfig['alias']
 
+    def _buildInstanceList(self, instMap):
+        cloudAlias = self.getCloudAlias()
+        instanceList = instances.BaseInstances()
+        for mor, vminfo in instMap.iteritems():
+            if vminfo.get('config.template', False):
+                continue
+            if not 'config.uuid' in vminfo:
+                continue
+            launchTime = None
+            if 'runtime.bootTime' in vminfo:
+                dt = datetime.datetime(*vminfo['runtime.bootTime'][:7])
+                launchTime = dt.strftime('%a %b %d %H:%M:%S UTC-0000 %Y')
+            inst = self._nodeFactory.newInstance(
+                id = vminfo['config.uuid'],
+                instanceName = vminfo['name'],
+                instanceDescription = vminfo['config.annotation'],
+                instanceId = vminfo['config.uuid'],
+                reservationId = vminfo['config.uuid'],
+                dnsName = vminfo.get('guest.ipAddress', None),
+                publicDnsName = vminfo.get('guest.ipAddress', None),
+                state = vminfo['runtime.powerState'],
+                launchTime = launchTime,
+                cloudName = self.cloudName,
+                cloudAlias = cloudAlias)
+            instanceList.append(inst)
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
+
+        return instanceList
+
+    def drvGetInstance(self, instanceId):
+        uuidRef = self.client.findVMByUUID(instanceId)
+        instMap = self.client.getVirtualMachines([ 'name',
+                                                   'config.annotation',
+                                                   'config.template',
+                                                   'runtime.powerState',
+                                                   'runtime.bootTime',
+                                                   'config.uuid',
+                                                   'config.extraConfig',
+                                                   'guest.ipAddress' ],
+                                                  uuidRef)
+        
+        return self._buildInstanceList(instMap)[0]
+
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
@@ -491,30 +538,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                                    'config.uuid',
                                                    'config.extraConfig',
                                                    'guest.ipAddress' ])
-        for mor, vminfo in instMap.iteritems():
-            if vminfo.get('config.template', False):
-                continue
-            if not 'config.uuid' in vminfo:
-                continue
-            launchTime = None
-            if 'runtime.bootTime' in vminfo:
-                dt = datetime.datetime(*vminfo['runtime.bootTime'][:7])
-                launchTime = dt.strftime('%a %b %d %H:%M:%S UTC-0000 %Y')
-            inst = self._nodeFactory.newInstance(
-                id = vminfo['config.uuid'],
-                instanceName = vminfo['name'],
-                instanceDescription = vminfo['config.annotation'],
-                instanceId = vminfo['config.uuid'],
-                reservationId = vminfo['config.uuid'],
-                dnsName = vminfo.get('guest.ipAddress', None),
-                publicDnsName = vminfo.get('guest.ipAddress', None),
-                state = vminfo['runtime.powerState'],
-                launchTime = launchTime,
-                cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
-            instanceList.append(inst)
-        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
+        return self._buildInstanceList(instMap)
 
     def _addMintDataToImageList(self, imageList):
         # FIXME: duplicate code
