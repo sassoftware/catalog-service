@@ -537,33 +537,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                                    'config.uuid',
                                                    'config.extraConfig',
                                                    'guest.ipAddress' ])
-<<<<<<< local
         return self._buildInstanceList(instMap)
-=======
-        for mor, vminfo in instMap.iteritems():
-            if vminfo.get('config.template', False):
-                continue
-            if not 'config.uuid' in vminfo:
-                continue
-            launchTime = None
-            if 'runtime.bootTime' in vminfo:
-                launchTime = int(time.mktime(vminfo['runtime.bootTime']))
-            inst = self._nodeFactory.newInstance(
-                id = vminfo['config.uuid'],
-                instanceName = vminfo['name'],
-                instanceDescription = vminfo['config.annotation'],
-                instanceId = vminfo['config.uuid'],
-                reservationId = vminfo['config.uuid'],
-                dnsName = vminfo.get('guest.ipAddress', None),
-                publicDnsName = vminfo.get('guest.ipAddress', None),
-                state = vminfo['runtime.powerState'],
-                launchTime = launchTime,
-                cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
-            instanceList.append(inst)
-        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
->>>>>>> other
 
     def _addMintDataToImageList(self, imageList):
         # FIXME: duplicate code
