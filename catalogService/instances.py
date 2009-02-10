@@ -47,7 +47,6 @@ class Handler(xmllib.DataBinder):
     instanceTypesClass = InstanceTypes
     def __init__(self):
         xmllib.DataBinder.__init__(self)
-        self.instanceClass.addChild(self.instanceUpdateStatusClass)
         self.registerType(self.launchIndexClass, 'launchIndex')
         self.registerType(self.instanceClass, self.instanceClass.tag)
         self.registerType(self.instancesClass, self.instancesClass.tag)
