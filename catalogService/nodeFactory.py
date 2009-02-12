@@ -95,7 +95,10 @@ class NodeFactory(object):
         node = self.instanceFactory(*args, **kwargs)
         node.setId(self.getInstanceUrl(node))
         node.setCloudType(self.cloudType)
-        node.setUpdateStatus(self.instanceUpdateStatusFactory())
+        updateStatus = self.instanceUpdateStatusFactory()
+        updateStatus.setState('')
+        updateStatus.setTime('')
+        node.setUpdateStatus(updateStatus)
         return node
 
     def newEnvironment(self, *args, **kwargs):
