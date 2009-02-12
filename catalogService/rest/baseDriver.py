@@ -27,6 +27,9 @@ class BaseDriver(object):
     _credNameMap = []
     cloudType = None
 
+    updateStatusStateUpdating = 'updating'
+    updateStatusStateDone = 'done'
+
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, mintClient=None, userId = None):
         self.userId = userId
