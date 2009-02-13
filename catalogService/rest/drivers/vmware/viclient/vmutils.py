@@ -80,7 +80,7 @@ def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
     # steal cookies from the binding's cookiejar
     session = v.getSessionUUID()
     urlBase = v.getUrlBase()
-    urlPattern = '%sfolder/%s/%%s?dcPath=%s&dsName=%s' %(
+    urlPattern = '%sfolder/%s/@FILENAME@?dcPath=%s&dsName=%s' %(
         urlBase, urllib.quote(vmName), urllib.quote(dataCenter),
         urllib.quote(dataStore))
 
@@ -91,6 +91,7 @@ def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
 
     for fn in os.listdir(path):
         fn = urllib.quote(fn)
-        _putFile(os.path.join(path, fn), urlPattern % fn, session)
+        _putFile(os.path.join(path, fn), urlPattern.replace('@FILENAME@', fn),
+                 session)
     vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0]))
     return vmx
