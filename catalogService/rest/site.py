@@ -27,14 +27,14 @@ class CatalogServiceController(RestController):
         return self.urls[url]
 
     def userinfo(self, request):
-        responseId = "%s/userinfo" % request.baseUrl
+        responseId = self.url(request, "userinfo")
         response = userInfo.UserInfo(id = responseId,
             username = request.mintAuth.username,
             isAdmin = bool(request.mintAuth.admin))
         return XmlResponse(response)
     
     def serviceinfo(self, request):
-        responseId = "%s/serviceinfo" % request.baseUrl
+        responseId = self.url(request, "serviceinfo")
         # TODO:  Get proper version/type in here.  See RBL-4191.
         # For type, client needs "full", "limited", or "disabled"
         response = serviceInfo.ServiceInfo(id = responseId,

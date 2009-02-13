@@ -139,6 +139,9 @@ class NodeFactory(object):
     @classmethod
     def join(cls, *args):
         """Join the arguments into a URL"""
+        if args[0][-1] == '/':
+            args = list(args)
+            args[0] = args[0][:-1]
         return '/'.join(args)
 
     def getCloudUrl(self, node):

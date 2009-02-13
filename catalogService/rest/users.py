@@ -39,7 +39,7 @@ class UsersController(BaseController):
 
         store = self._getUserDataStore(request)
         store.set(key, data)
-        data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (self.url(request, '%s/%s' % (userId, key)))
+        data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (self.url(request, 'users', '%s/%s' % (userId, key)))
         return XmlStringResponse(data)
 
     def get(self, request, userId):
@@ -47,8 +47,7 @@ class UsersController(BaseController):
             raise Exception("XXX 1", userId, request.auth[0])
         keyPath = request.unparsedPath
         key = self._sanitizeKey(keyPath)
-
-        prefix = self.url(request, '%s/' % (userId))
+        prefix = self.url(request, 'users', '%s/' % (userId))
         store = self._getUserDataStore(request)
 
         xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -90,7 +89,7 @@ class UsersController(BaseController):
 
         key = self._sanitizeKey(key)
         store.delete(key)
-        url = self.url(request, '%s/%s' % (userId, key))
+        url = self.url(request, 'users', '%s/%s' % (userId, key))
         data = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (url)
         return XmlStringResponse(data)
 
@@ -109,6 +108,6 @@ class UsersController(BaseController):
         keyPrefix = self._sanitizeKey(key)
 
         newId = store.store(data, keyPrefix = keyPrefix)
-        url = self.url(request, '%s/%s' % (userId, newId) )
+        url = self.url(request, 'users', '%s/%s' % (userId, newId) )
         txt = '<?xml version="1.0" encoding="UTF-8"?><id>%s</id>' % (url)
         return XmlStringResponse(txt)
