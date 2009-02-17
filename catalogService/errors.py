@@ -48,12 +48,12 @@ class CatalogError(Exception):
         if not status:
             status = self.status
         self.status = status
-        self.message = message
+        self.msg = message
         self.tracebackData = kw.get('tracebackData', None)
         self.productCodeData = kw.get('productCodeData', None)
 
     def __str__(self):
-        return self.message
+        return self.msg
 
 class InvalidCloudName(CatalogError):
     """Cloud name is not valid"""
@@ -104,7 +104,7 @@ class ErrorMessageCallback(object):
         envelopeStatus = self._getEnvelopeStatus(request)
         if isinstance(exception, CatalogError):
             return CatalogErrorResponse(status=exception.status,
-                                        message=exception.message,
+                                        message=exception.msg,
                                         envelopeStatus = envelopeStatus,
                                         tracebackData = exception.tracebackData,
                                         productCodeData = exception.productCodeData)
