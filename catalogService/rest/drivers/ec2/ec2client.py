@@ -36,7 +36,7 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
 
 EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
 
-EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode="
+EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode=%s"
 
 class EC2_Image(images.BaseImage):
     "EC2 Image"
@@ -708,12 +708,14 @@ class EC2Client(baseDriver.BaseDriver):
     def _getImagesFromResult(self, results):
         imageList = images.BaseImages()
         for image in results:
+            productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
+                for x in image.product_codes ]
             i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
                                            ownerId=image.ownerId,
                                            longName=image.location,
                                            state=image.state,
                                            isPublic=image.is_public,
-                                           productCodes=image.product_codes)
+                                           productCode=productCodes)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:
@@ -796,7 +798,7 @@ class EC2Client(baseDriver.BaseDriver):
         parts = message.strip().split(' ')
         if parts and len(parts) >= 3:
             code = parts[3]
-            url = EC2_DEVPAY_OFFERING_BASE_URL + code
+            url = EC2_DEVPAY_OFFERING_BASE_URL % code
             map = {'code': code, 'url': url}
         
         return map

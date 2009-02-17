@@ -49,7 +49,7 @@ class InstanceType(xmlNode.BaseNode):
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
 
-class Handler(xmllib.DataBinder):
+class Handler(xmlNode.Handler):
     instanceClass = BaseInstance
     instanceUpdateStatusClass = BaseInstanceUpdateStatus
     instanceUpdateStatusStateClass = BaseInstanceUpdateStatusState

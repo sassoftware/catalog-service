@@ -2,6 +2,7 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import inspect
 import sha
 
 import urllib
@@ -66,6 +67,9 @@ class BaseNode(xmllib.BaseNode):
             if hasattr(fVal, "getElementTree"):
                 subelementsFound = True
                 yield fVal
+            if isinstance(fVal, MultiItemList):
+                for fv in fVal:
+                    yield fv
         # We don't allow for mixed content
         if not sublementsFound:
             text = self.getText()
@@ -83,7 +87,10 @@ class BaseNode(xmllib.BaseNode):
     def addChild(self, node):
         nodeName = node.getName()
         if nodeName in self.__slots__:
-            setattr(self, nodeName, node)
+            if self._setMultiItem(nodeName, node):
+                return
+            else:
+                setattr(self, nodeName, node)
 
     def getElementTree(self, *args, **kwargs):
         eltree = xmllib.BaseNode.getElementTree(self, *args, **kwargs)
@@ -138,10 +145,33 @@ class BaseNode(xmllib.BaseNode):
                 for x in value)
             setattr(self, key, coll)
             return self
+        elif self._setMultiItem(key, value):
+            return self
         else:
             cls = xmllib.GenericNode
         setattr(self, key, cls().setName(key).characters(value))
         return self
+
+    def _setMultiItem(self, key, value):
+        slotType = self._slotTypeMap.get(key)
+        if not (inspect.isclass(slotType) and
+                        issubclass(slotType, BaseNode) and
+                        getattr(slotType, 'multiple', None)):
+            return False
+        currentVal = getattr(self, key, None)
+        if currentVal is None:
+            currentVal = MultiItemList()
+            setattr(self, key, currentVal)
+        if value is None:
+            return True
+        if not isinstance(value, list):
+            value = [ value ]
+        for v in value:
+            if isinstance(v, slotType):
+                currentVal.append(v)
+            else:
+                currentVal.append(slotType(None, self.getNamespaceMap(), v))
+        return True
 
     def _get(self, key):
         val = getattr(self, key)
@@ -192,5 +222,18 @@ class BaseNodeCollection(xmllib.SerializableList):
     addChild = xmllib.SerializableList.append
     getName = xmllib.SerializableList._getName
 
+class MultiItemList(list):
+    """
+    List containing items that get serialized without a wrapping parent node
+    """
+
 class Handler(xmllib.DataBinder):
     "Base xml handler"
+
+    def registerType(self, typeClass, *args, **kwargs):
+        xmllib.DataBinder.registerType(self, typeClass, *args, **kwargs)
+        if not hasattr(typeClass, '_slotTypeMap'):
+            return
+        for name, valType in typeClass._slotTypeMap.items():
+            if issubclass(valType, BaseNode):
+                xmllib.DataBinder.registerType(self, valType, valType.tag)
