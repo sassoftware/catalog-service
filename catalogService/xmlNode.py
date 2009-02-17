@@ -3,11 +3,11 @@
 #
 
 import inspect
-import sha
 
 import urllib
 
 from rpath_common import xmllib
+from conary.lib import digestlib
 
 class BaseNode(xmllib.BaseNode):
     tag = None
@@ -97,7 +97,7 @@ class BaseNode(xmllib.BaseNode):
         if '_xmlNodeHash' not in self.__slots__ or self._xmlNodeHash is not None:
             return eltree
         # Compute the checksum
-        csum = sha.new()
+        csum = digestlib.sha1()
         csum.update(xmllib.etree.tostring(eltree, pretty_print = False,
                     xml_declaration = False, encoding = 'UTF-8'))
         self._xmlNodeHash = csum.hexdigest()
