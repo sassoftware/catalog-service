@@ -7,24 +7,6 @@ from rpath_common import xmllib
 import xmlNode
 from catalogService import instances
 
-class _ProductCode(xmlNode.BaseNode):
-    tag = "productCode"
-    __slots__ = ['code', 'url']
-    multiple = True
-
-    def __init__(self, attrs = None, nsMap = None, item = None):
-        xmlNode.BaseNode.__init__(self, attrs, nsMap = nsMap)
-        if item is None:
-            self.code = None
-            self.url = None
-            return
-        code, url = item[:2]
-        self.code = xmllib.GenericNode().setName("code").characters(code)
-        self.url = xmllib.GenericNode().setName("url").characters(url)
-
-    def getId(self):
-        return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
-
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'
     __slots__ = [ 'id', 'imageId', 'ownerId', 'longName', 'shortName',
@@ -39,7 +21,7 @@ class BaseImage(xmlNode.BaseNode):
                   '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
                         is_rBuilderImage = bool, isDeployed = bool,
-                        productCode = _ProductCode)
+                        productCode = instances._ProductCode)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 

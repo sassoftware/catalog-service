@@ -699,7 +699,11 @@ class EC2Client(baseDriver.BaseDriver):
             timeTuple = time.strptime(properties['launchTime'], 
                            "%Y-%m-%dT%H:%M:%S.000Z")
             properties['launchTime'] = int(time.mktime(timeTuple))
-            
+
+        productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
+            for x in instance.product_codes ]
+        properties['productCode'] = productCodes
+
         i = self._nodeFactory.newInstance(id=instance.id,
                                           instanceId=instance.id,
                                           **properties)

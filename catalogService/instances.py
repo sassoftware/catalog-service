@@ -20,6 +20,24 @@ class BaseInstanceUpdateStatus(xmlNode.BaseNode):
     _slotTypeMap = dict(state = BaseInstanceUpdateStatusState,
                         time = BaseInstanceUpdateStatusTime)
 
+class _ProductCode(xmlNode.BaseNode):
+    tag = "productCode"
+    __slots__ = ['code', 'url']
+    multiple = True
+
+    def __init__(self, attrs = None, nsMap = None, item = None):
+        xmlNode.BaseNode.__init__(self, attrs, nsMap = nsMap)
+        if item is None:
+            self.code = None
+            self.url = None
+            return
+        code, url = item[:2]
+        self.code = xmllib.GenericNode().setName("code").characters(code)
+        self.url = xmllib.GenericNode().setName("url").characters(url)
+
+    def getId(self):
+        return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -31,10 +49,10 @@ class BaseInstance(xmlNode.BaseNode):
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
                   'updateStatus', 
-                  '_xmlNodeHash', 'launchTime', 'productCodes',
+                  '_xmlNodeHash', 'launchTime', 'productCode',
                   'placement' ]
-    _slotTypeMap = dict(productCodes = list,
-                        updateStatus = BaseInstanceUpdateStatus)
+    _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
+                        productCode = _ProductCode)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
