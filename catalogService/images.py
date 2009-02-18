@@ -13,14 +13,15 @@ class BaseImage(xmlNode.BaseNode):
                   'state', 'isPublic', 'buildDescription',
                   'productName', 'role', 'publisher',
                   'awsAccountNumber', 'buildName',
-                  'isPrivate_rBuilder', 'productDescription',
+                  'isPrivate_rBuilder', 'productCodes', 'productDescription',
                   'is_rBuilderImage', 'cloudName', 'cloudType',
                   'cloudAlias', 'isDeployed', 'buildId',
                   'internalTargetId',
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
                   '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
-                        is_rBuilderImage = bool, isDeployed = bool)
+                        is_rBuilderImage = bool, isDeployed = bool,
+                        productCodes = list,)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 
