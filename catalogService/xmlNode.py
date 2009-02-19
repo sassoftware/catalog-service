@@ -131,6 +131,13 @@ class BaseNode(xmllib.BaseNode):
         elif slotType == int or isinstance(value, int):
             cls = xmllib.IntegerNode
             value = str(value)
+        elif slotType == list:
+            coll = BaseNodeCollection()
+            coll.tag = key
+            coll.extend(xmllib.GenericNode().setName("item").characters(x)
+                for x in value)
+            setattr(self, key, coll)
+            return self
         else:
             cls = xmllib.GenericNode
         setattr(self, key, cls().setName(key).characters(value))
@@ -143,6 +150,8 @@ class BaseNode(xmllib.BaseNode):
         slotType = self._slotTypeMap.get(key)
         if slotType == bool:
             return xmllib.BooleanNode.fromString(val.getText())
+        if slotType == list:
+            return [ x.getText() for x in val.iterChildren()]
         if isinstance(val, xmllib.IntegerNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:

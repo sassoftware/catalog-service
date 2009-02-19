@@ -35,6 +35,8 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
 
 EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
 
+EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode="
+
 class EC2_Image(images.BaseImage):
     "EC2 Image"
 
@@ -272,6 +274,7 @@ class EC2Client(baseDriver.BaseDriver):
                 launchTime = 'launch_time',
                 placement = 'placement',
                 previousState = 'previous_state',
+                productCodes = 'product_codes',
                 privateDnsName = 'private_dns_name',
                 publicDnsName = 'public_dns_name',
                 ramdisk = 'ramdisk',
@@ -506,8 +509,9 @@ class EC2Client(baseDriver.BaseDriver):
                     user_data=getField('userData'),
                     instance_type=getField('instanceType'))
         except EC2ResponseError, e:
-            # Pass the original stack trace in
-            raise errors.ResponseError, (e.status, e.message, e.body), sys.exc_info()[2]
+            # is this a product code error?
+            pcData = self._processProductCodeError(e.message)
+            raise errors.ResponseError, (e.status, e.message, e.body, pcData), sys.exc_info()[2]
         return self._getInstancesFromReservation(reservation)
 
     def terminateInstances(self, instanceIds):
@@ -701,7 +705,8 @@ class EC2Client(baseDriver.BaseDriver):
                                            ownerId=image.ownerId,
                                            longName=image.location,
                                            state=image.state,
-                                           isPublic=image.is_public)
+                                           isPublic=image.is_public,
+                                           productCodes=image.product_codes)
             imageList.append(i)
         imageDataDict = self._mintClient.getAllAMIBuilds()
         for image in imageList:
@@ -767,4 +772,25 @@ class EC2Client(baseDriver.BaseDriver):
             self.cloudType, 'aws')
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
+    
+    def _processProductCodeError(self, message):
+        if "subscription to productcode" in message.lower():
+            return self._getProductCodeData(message)
+        else:
+            return None
+                
+    def _getProductCodeData(self, message):
+        """
+        Get the proper product code entry based on the message
+        @return: a dict in the form of {'code': <code>, 'url': <url'}
+        """
+        # get the product code from the message
+        map = None
+        parts = message.strip().split(' ')
+        if parts and len(parts) >= 3:
+            code = parts[3]
+            url = EC2_DEVPAY_OFFERING_BASE_URL + code
+            map = {'code': code, 'url': url}
+        
+        return map
 
