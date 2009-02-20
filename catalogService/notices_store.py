@@ -225,3 +225,7 @@ def mergeTwo(list1, list2, key = None):
             yield elem2
             hasElem2 = False
 
+def createStore(storagePath):
+    globalStorePath = os.path.join(storagePath, "global")
+    userStorePath = os.path.join(storagePath, "user")
+    return Storage(globalStorePath, userStorePath)
