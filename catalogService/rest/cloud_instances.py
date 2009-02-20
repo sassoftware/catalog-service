@@ -9,7 +9,7 @@ import urllib
 from catalogService import credentials
 from catalogService.errors import InvalidCloudName
 
-from catalogService.rest.base_cloud import BaseCloudController
+from catalogService.rest.base import BaseCloudController
 from catalogService.rest.response import XmlResponse, XmlStringResponse
 
 class ImagesController(BaseCloudController):

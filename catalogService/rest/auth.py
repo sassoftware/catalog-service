@@ -6,6 +6,11 @@ import mint.client
 import mint.config
 import mint.shimclient
 
+# Decorator for public (unauthenticated) methods/functions
+def public(deco):
+    deco.public = True
+    return deco
+
 class AuthenticationCallback(object):
 
     def __init__(self, cfg):
@@ -20,18 +25,27 @@ class AuthenticationCallback(object):
 
     def processRequest(self, request):
         auth = self.getAuth(request)
-        if not auth:
-            # require authentication
-            return response.Response(status=403)
         request.auth = auth
         response = self.setMintClient(request, auth)
         # will be None if successful
         return response
 
+    def processMethod(self, request, viewMethod, args, kwargs):
+        if getattr(viewMethod, 'public', None) or request.mintAuth is not None:
+            return
+        return response.Response(status=403)
+
     def getMintConfig(self):
         return mint.config.getConfig()
 
     def setMintClient(self, request, auth):
+        request.mintClient = None
+        request.mintAuth = None
+
+        if auth is None:
+            # Not authenticated
+            return
+
         if self.cfg.rBuilderUrl:
             mintClient = mint.client.MintClient(
                             self.cfg.rBuilderUrl % tuple(auth[:2]))
@@ -41,6 +55,7 @@ class AuthenticationCallback(object):
                                                         auth)
         mintAuth = mintClient.checkAuth()
         if not mintAuth.authorized:
-            return response.Response(status=403)
+            # Bad auth info
+            return
         request.mintClient = mintClient
         request.mintAuth = mintAuth

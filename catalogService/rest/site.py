@@ -2,22 +2,23 @@ import mint.client
 import mint.config
 import mint.shimclient
 
-from restlib.controller import RestController
-
 from catalogService import userInfo
 from catalogService import serviceInfo
 from catalogService.rest.response import XmlResponse, XmlStringResponse
+from catalogService.rest import base
+from catalogService.rest import notices
 from catalogService.rest import users
 from catalogService.rest import clouds
 
-class CatalogServiceController(RestController):
+class CatalogServiceController(base.BaseController):
     urls = {'clouds' : clouds.AllCloudController,
+            'notices' : notices.NoticesController,
             'users' : users.UsersController,
             'userinfo' : 'userinfo',
             'serviceinfo' : 'serviceinfo'}
 
     def __init__(self, cfg):
-        RestController.__init__(self, None, None, [cfg])
+        base.BaseController.__init__(self, None, None, cfg)
         self.loadCloudTypes()
 
     def loadCloudTypes(self):
