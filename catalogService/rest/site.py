@@ -2,6 +2,8 @@ import mint.client
 import mint.config
 import mint.shimclient
 
+from catalogService import userInfo
+from catalogService import serviceInfo
 from catalogService.rest.response import XmlResponse, XmlStringResponse
 from catalogService.rest import base
 from catalogService.rest import notices
