@@ -108,12 +108,18 @@ class Storage(object):
 
     @classmethod
     def _storeNotice(cls, store, keyPrefix, data, modified):
-        if modified is None:
-            modified = time.time()
-        newColl = store.newCollection(keyPrefix = keyPrefix)
-        store.set((newColl, "content"), data)
-        store.set((newColl, "modified"), "%.3f" % modified)
-        return Notice(newColl, data, modified)
+        if isinstance(data, Notice):
+            noticeId = data.id
+            if modified is None:
+                modified = data.modified
+            data = data.content
+        else:
+            if modified is None:
+                modified = time.time()
+            noticeId = store.newCollection(keyPrefix = keyPrefix)
+        store.set((noticeId, "content"), data)
+        store.set((noticeId, "modified"), "%.3f" % modified)
+        return Notice(noticeId, data, modified)
 
     @classmethod
     def _getNotice(cls, store, keyId):

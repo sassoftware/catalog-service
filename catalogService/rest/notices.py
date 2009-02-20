@@ -7,6 +7,7 @@ from lxml.builder import E
 from lxml import etree as ET
 import os
 
+from restlib.response import Response
 from catalogService.rest import auth
 from catalogService.rest.base import BaseController
 from catalogService.rest.response import XmlStringResponse, XmlResponse
@@ -19,8 +20,35 @@ class NoticesContextController(BaseController):
 
     @auth.public
     def get(self, req, context = None):
+        if context != "default" and req.mintAuth is None:
+            # We only allow unauthenticated users to fetch the default context
+            return Response(status = 403)
         rss = RssHelper(self.cfg.storagePath, title = "Notices for context %s" % context)
         return rss.serialize(rss.store.enumerateStoreGlobal("default"))
+
+    def process(self, req, context = None):
+        # Only admins are allowed to push notices
+        if not req.mintAuth.admin:
+            return Response(status = 403)
+        data = req.read()
+        # Parse the data that was sent our way
+        try:
+            elem = ET.fromstring(data)
+        except ET.XMLSchemaError:
+            # XXX
+            return Response(status = 1001)
+        # Remove any existing guid
+        guids = elem.findall('guid')
+        for guid in guids:
+            elem.remove(guid)
+        rss = RssHelper(self.cfg.storagePath)
+        notice = rss.store.storeGlobal(context, "")
+
+        guid = "%s%s/%s" % (req.baseUrl, "notices/contexts", notice.id)
+        elem.append(E.guid(guid))
+        notice.content = ET.tostring(elem, xml_declaration = False, encoding = 'UTF-8')
+        rss.store.storeGlobal(None, notice)
+        return XmlStringResponse(notice.content)
 
 class NoticesAggregationController(BaseController):
     modelName = None
