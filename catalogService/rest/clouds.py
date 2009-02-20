@@ -1,13 +1,11 @@
 from restlib import controller
 
-from base import BaseController
-
 from catalogService import cloud_types
 
 from catalogService.rest import cloud_help
 from catalogService.rest import cloud_instances
 from catalogService.rest import descriptor_controllers
-from catalogService.rest.base_cloud import BaseCloudController
+from catalogService.rest.base import BaseController, BaseCloudController
 from catalogService.rest.response import XmlResponse
 
 class CloudTypeController(BaseCloudController):
