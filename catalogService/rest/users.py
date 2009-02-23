@@ -15,7 +15,7 @@ class UserNoticesAggregationController(notices.NoticesAggregationController):
         title = "Notices for user %s" % userId
         rss = notices.RssHelper(self.cfg.storagePath, title = title,
             userId = userId)
-        return rss.serialize(rss.store.enumerateAllUserStore())
+        return rss.serialize(rss.store.enumerateAllStore())
 
 class UserNoticesContextController(notices.NoticesContextController):
     def get(self, req, userId = None, context = None):
