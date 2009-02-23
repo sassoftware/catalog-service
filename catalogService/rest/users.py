@@ -52,6 +52,10 @@ class UserNoticesContextController(notices.NoticesContextController):
         return "%s%s/%s" % (req.baseUrl,
             "users/%s/notices/contexts" % req.auth[0], noticeId)
 
+    def getSourceUrl(self, req, context):
+        return "%s%s/%s/%s/%s" % (req.baseUrl, "users", req.auth[0],
+                                  "notices/contexts", context)
+
 class UserNoticesController(BaseController):
     urls = dict(aggregation = UserNoticesAggregationController,
                 contexts = UserNoticesContextController)

@@ -59,6 +59,7 @@ class NoticesContextController(BaseController):
 
         guid = self.getNoticesUrl(req, notice.id)
         elem.append(E.guid(guid))
+        elem.append(E.source(url = self.getSourceUrl(req, context)))
         notice.content = ET.tostring(elem, xml_declaration = False, encoding = 'UTF-8')
         self.storeNotice(rss, notice, None)
         return XmlStringResponse(notice.content)
@@ -88,6 +89,9 @@ class NoticesContextController(BaseController):
 
     def getNoticesUrl(self, req, noticeId):
         return "%s%s/%s" % (req.baseUrl, "notices/contexts", noticeId)
+
+    def getSourceUrl(self, req, context):
+        return "%s%s/%s" % (req.baseUrl, "notices/contexts", context)
 
 class NoticesAggregationController(BaseController):
     modelName = None
