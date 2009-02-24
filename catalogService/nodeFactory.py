@@ -13,7 +13,7 @@ class NodeFactory(object):
         'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'environmentCloudFactory', 'environmentFactory',
-        'imageFactory', 'instanceFactory',
+        'imageFactory', 'instanceFactory', 'instanceUpdateStatusFactory',
         'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName', 'userId']
 
@@ -95,6 +95,10 @@ class NodeFactory(object):
         node = self.instanceFactory(*args, **kwargs)
         node.setId(self.getInstanceUrl(node))
         node.setCloudType(self.cloudType)
+        updateStatus = self.instanceUpdateStatusFactory()
+        updateStatus.setState('')
+        updateStatus.setTime('')
+        node.setUpdateStatus(updateStatus)
         return node
 
     def newEnvironment(self, *args, **kwargs):
@@ -135,6 +139,9 @@ class NodeFactory(object):
     @classmethod
     def join(cls, *args):
         """Join the arguments into a URL"""
+        if args[0][-1] == '/':
+            args = list(args)
+            args[0] = args[0][:-1]
         return '/'.join(args)
 
     def getCloudUrl(self, node):

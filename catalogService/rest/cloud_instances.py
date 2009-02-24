@@ -9,7 +9,7 @@ import urllib
 from catalogService import credentials
 from catalogService.errors import InvalidCloudName
 
-from catalogService.rest.base_cloud import BaseCloudController
+from catalogService.rest.base import BaseCloudController
 from catalogService.rest.response import XmlResponse, XmlStringResponse
 
 class ImagesController(BaseCloudController):
@@ -19,7 +19,17 @@ class ImagesController(BaseCloudController):
         imgNodes = self.driver(request, cloudName).getAllImages()
         return XmlResponse(imgNodes)
 
+class InstancesUpdateController(BaseCloudController):
+    modelName = 'instanceUpdateId'
+
+    def create(self, request, cloudName, instanceId):
+        insts = self.driver(request, cloudName).updateInstance(instanceId)
+        return XmlResponse(insts)
+
+
 class InstancesController(BaseCloudController):
+    urls = dict(updates=InstancesUpdateController)
+
     modelName = 'instanceId'
     def index(self, request, cloudName):
         insts = self.driver(request, cloudName).getAllInstances()
@@ -40,6 +50,7 @@ class InstancesController(BaseCloudController):
     def destroy(self, request, cloudName, instanceId):
         insts = self.driver(request, cloudName).terminateInstance(instanceId)
         return XmlResponse(insts)
+
 
 class InstanceTypesController(BaseCloudController):
     modelName = 'instanceTypeId'

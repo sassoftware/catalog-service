@@ -7,7 +7,7 @@ import os
 import urllib
 
 from catalogService import errors
-from catalogService.rest.base_cloud import BaseCloudController
+from catalogService.rest.base import BaseCloudController
 from catalogService.rest.response import HtmlFileResponse
 
 class CloudHelpController(BaseCloudController):

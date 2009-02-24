@@ -13,6 +13,7 @@
 # full details.
 #
 
+import collections
 import os
 import sys
 
@@ -89,11 +90,31 @@ class BaseStorage(object):
             return default
         return self.__getitem__(key)
 
+    def newCollection(self, key = None, keyPrefix = None, keyLength = None):
+        """Create collection"""
+        if key is None:
+            key = self.newKey(keyPrefix = keyPrefix, keyLength = keyLength)
+        else:
+            key = self._sanitizeKey(key)
+        self._real_new_collection(key)
+        return key
+
     def enumerate(self, keyPrefix = None):
         """Enumerate keys"""
         if keyPrefix is not None:
             keyPrefix = self._sanitizeKey(keyPrefix)
         return self._real_enumerate(keyPrefix)
+
+    def enumerateAll(self, keyPrefix = None):
+        """Enumerate all keys"""
+        stack = collections.deque()
+        stack.extend(self.enumerate(keyPrefix = keyPrefix))
+        while stack:
+            key = stack.popleft()
+            if not self.isCollection(key):
+                yield key
+                continue
+            stack.extendleft(self.enumerate(keyPrefix = key))
 
     def exists(self, key):
         """Check for a key's existance
@@ -112,10 +133,14 @@ class BaseStorage(object):
     def newKey(self, keyPrefix = None, keyLength = None):
         if keyLength is None:
             keyLength = self.keyLength
+        if isinstance(keyPrefix, tuple):
+            keyPrefix = list(keyPrefix)
+        elif keyPrefix is not None:
+            keyPrefix = [ keyPrefix ]
         for i in range(5):
             newKey = self._generateString(keyLength)
-            if keyPrefix:
-                key = self.separator.join([keyPrefix, newKey])
+            if keyPrefix is not None:
+                key = self.separator.join(keyPrefix +  [newKey])
             else:
                 key = newKey
             if not self.exists(key):
@@ -185,6 +210,9 @@ class BaseStorage(object):
     def _real_delete(self, key):
         raise NotImplementedError()
 
+    def _real_new_collection(self, key):
+        raise NotImplementedError()
+
     def _real_delete_collection(self, key):
         raise NotImplementedError()
 
@@ -207,12 +235,20 @@ class DiskStorage(BaseStorage):
         self.cfg = cfg
 
     def _sanitizeKey(self, key):
+        key = self._collapsePrefixes(key)
         nkey = os.path.normpath(key)
         if key != nkey:
             raise InvalidKeyError(key)
         if key[0] == self.separator:
             raise InvalidKeyError(key)
         return key
+
+    def _collapsePrefixes(self, prefixes):
+        # Recursively join prefixes using the separator
+        if not isinstance(prefixes, tuple):
+            return prefixes
+        return self.separator.join(
+            self._collapsePrefixes(x) for x in prefixes)
 
     def _real_get(self, key):
         fpath = self._getFileForKey(key)
@@ -221,6 +257,7 @@ class DiskStorage(BaseStorage):
     def _real_set(self, key, val):
         fpath = self._getFileForKey(key, createDirs = True)
         file(fpath, "w").write(str(val))
+        return fpath
 
     def _real_exists(self, key):
         fpath = self._getFileForKey(key)
@@ -230,6 +267,11 @@ class DiskStorage(BaseStorage):
         fpath = self._getFileForKey(key)
         if os.path.exists(fpath):
             os.unlink(fpath)
+
+    def _real_new_collection(self, key):
+        fpath = self._getFileForKey(key)
+        util.mkdirChain(fpath)
+        return fpath
 
     def _real_delete_collection(self, key):
         fpath = self._getFileForKey(key)
@@ -247,7 +289,7 @@ class DiskStorage(BaseStorage):
         dirContents = sorted(os.listdir(collection))
         if keyPrefix is None:
             return dirContents
-        return [ self.separator.join([keyPrefix, x]) for x in dirContents ]
+        return sorted([ self.separator.join([keyPrefix, x]) for x in dirContents ])
 
     def _real_is_collection(self, key):
         collection = self.separator.join([self.cfg.storagePath, key])

@@ -13,14 +13,15 @@ class BaseImage(xmlNode.BaseNode):
                   'state', 'isPublic', 'buildDescription',
                   'productName', 'role', 'publisher',
                   'awsAccountNumber', 'buildName',
-                  'isPrivate_rBuilder', 'productDescription',
+                  'isPrivate_rBuilder', 'productCode', 'productDescription',
                   'is_rBuilderImage', 'cloudName', 'cloudType',
                   'cloudAlias', 'isDeployed', 'buildId',
                   'internalTargetId',
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
                   '_xmlNodeHash' ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
-                        is_rBuilderImage = bool, isDeployed = bool)
+                        is_rBuilderImage = bool, isDeployed = bool,
+                        productCode = instances._ProductCode)
 
     def __init__(self, attrs = None, nsMap = None, **kwargs):
 
@@ -45,12 +46,10 @@ class BaseImageType(xmlNode.BaseNode):
     tag = "imageType"
     __slots__ = [ 'label', 'description' ]
 
-
-
 class BaseImageTypes(xmlNode.BaseNodeCollection):
     tag = "imageTypes"
 
-class Handler(xmllib.DataBinder):
+class Handler(xmlNode.Handler):
     imageClass = BaseImage
     imagesClass = BaseImages
     def __init__(self):

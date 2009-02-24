@@ -2,11 +2,12 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
-import sha
+import inspect
 
 import urllib
 
 from rpath_common import xmllib
+from conary.lib import digestlib
 
 class BaseNode(xmllib.BaseNode):
     tag = None
@@ -66,6 +67,9 @@ class BaseNode(xmllib.BaseNode):
             if hasattr(fVal, "getElementTree"):
                 subelementsFound = True
                 yield fVal
+            if isinstance(fVal, MultiItemList):
+                for fv in fVal:
+                    yield fv
         # We don't allow for mixed content
         if not sublementsFound:
             text = self.getText()
@@ -83,14 +87,17 @@ class BaseNode(xmllib.BaseNode):
     def addChild(self, node):
         nodeName = node.getName()
         if nodeName in self.__slots__:
-            setattr(self, nodeName, node)
+            if self._setMultiItem(nodeName, node):
+                return
+            else:
+                setattr(self, nodeName, node)
 
     def getElementTree(self, *args, **kwargs):
         eltree = xmllib.BaseNode.getElementTree(self, *args, **kwargs)
         if '_xmlNodeHash' not in self.__slots__ or self._xmlNodeHash is not None:
             return eltree
         # Compute the checksum
-        csum = sha.new()
+        csum = digestlib.sha1()
         csum.update(xmllib.etree.tostring(eltree, pretty_print = False,
                     xml_declaration = False, encoding = 'UTF-8'))
         self._xmlNodeHash = csum.hexdigest()
@@ -131,10 +138,40 @@ class BaseNode(xmllib.BaseNode):
         elif slotType == int or isinstance(value, int):
             cls = xmllib.IntegerNode
             value = str(value)
+        elif slotType == list:
+            coll = BaseNodeCollection()
+            coll.tag = key
+            coll.extend(xmllib.GenericNode().setName("item").characters(x)
+                for x in value)
+            setattr(self, key, coll)
+            return self
+        elif self._setMultiItem(key, value):
+            return self
         else:
             cls = xmllib.GenericNode
         setattr(self, key, cls().setName(key).characters(value))
         return self
+
+    def _setMultiItem(self, key, value):
+        slotType = self._slotTypeMap.get(key)
+        if not (inspect.isclass(slotType) and
+                        issubclass(slotType, BaseNode) and
+                        getattr(slotType, 'multiple', None)):
+            return False
+        currentVal = getattr(self, key, None)
+        if currentVal is None:
+            currentVal = MultiItemList()
+            setattr(self, key, currentVal)
+        if value is None:
+            return True
+        if not isinstance(value, list):
+            value = [ value ]
+        for v in value:
+            if isinstance(v, slotType):
+                currentVal.append(v)
+            else:
+                currentVal.append(slotType(None, self.getNamespaceMap(), v))
+        return True
 
     def _get(self, key):
         val = getattr(self, key)
@@ -143,6 +180,8 @@ class BaseNode(xmllib.BaseNode):
         slotType = self._slotTypeMap.get(key)
         if slotType == bool:
             return xmllib.BooleanNode.fromString(val.getText())
+        if slotType == list:
+            return [ x.getText() for x in val.iterChildren()]
         if isinstance(val, xmllib.IntegerNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:
@@ -183,5 +222,18 @@ class BaseNodeCollection(xmllib.SerializableList):
     addChild = xmllib.SerializableList.append
     getName = xmllib.SerializableList._getName
 
+class MultiItemList(list):
+    """
+    List containing items that get serialized without a wrapping parent node
+    """
+
 class Handler(xmllib.DataBinder):
     "Base xml handler"
+
+    def registerType(self, typeClass, *args, **kwargs):
+        xmllib.DataBinder.registerType(self, typeClass, *args, **kwargs)
+        if not hasattr(typeClass, '_slotTypeMap'):
+            return
+        for name, valType in typeClass._slotTypeMap.items():
+            if issubclass(valType, BaseNode):
+                xmllib.DataBinder.registerType(self, valType, valType.tag)

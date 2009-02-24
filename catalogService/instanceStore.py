@@ -43,6 +43,18 @@ class InstanceStore(object):
     def setId(self, instanceId, realId):
         return self._set(instanceId, 'id', realId)
 
+    def setUpdateStatusState(self, instanceId, state):
+        return self._set(instanceId, 'updateStatusState', state)
+
+    def setUpdateStatusTime(self, instanceId, time):
+        return self._set(instanceId, 'updateStatusTime', time)
+
+    def getUpdateStatusState(self, instanceId, default = None):
+        return self._get(instanceId, 'updateStatusState', default = default)
+
+    def getUpdateStatusTime(self, instanceId, default = None):
+        return self._get(instanceId, 'updateStatusTime', default = default)
+
     def getState(self, instanceId, default = None):
         return self._get(instanceId, 'state', default = default)
 

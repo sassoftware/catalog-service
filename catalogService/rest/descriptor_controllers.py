@@ -1,5 +1,5 @@
 
-from catalogService.rest.base_cloud import BaseCloudController
+from catalogService.rest.base import BaseCloudController
 from catalogService.rest.response import XmlResponse
 
 class CredentialsDescriptorController(BaseCloudController):

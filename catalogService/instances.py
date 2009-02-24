@@ -6,6 +6,38 @@ from rpath_common import xmllib
 
 import xmlNode
 
+class BaseInstanceUpdateStatusState(xmlNode.BaseNode):
+    tag = 'updateState'
+    __slots__ = ['id', 'state']
+
+class BaseInstanceUpdateStatusTime(xmlNode.BaseNode):
+    tag = 'time'
+    __slots__ = ['id', 'time']
+
+class BaseInstanceUpdateStatus(xmlNode.BaseNode):
+    tag = 'updateStatus'
+    __slots__ = [ 'id', 'state', 'time' ]
+    _slotTypeMap = dict(state = BaseInstanceUpdateStatusState,
+                        time = BaseInstanceUpdateStatusTime)
+
+class _ProductCode(xmlNode.BaseNode):
+    tag = "productCode"
+    __slots__ = ['code', 'url']
+    multiple = True
+
+    def __init__(self, attrs = None, nsMap = None, item = None):
+        xmlNode.BaseNode.__init__(self, attrs, nsMap = nsMap)
+        if item is None:
+            self.code = None
+            self.url = None
+            return
+        code, url = item[:2]
+        self.code = xmllib.GenericNode().setName("code").characters(code)
+        self.url = xmllib.GenericNode().setName("url").characters(url)
+
+    def getId(self):
+        return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -16,8 +48,11 @@ class BaseInstance(xmlNode.BaseNode):
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
-                  '_xmlNodeHash' ]
-
+                  'updateStatus', 
+                  '_xmlNodeHash', 'launchTime', 'productCode',
+                  'placement' ]
+    _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
+                        productCode = _ProductCode)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -32,8 +67,11 @@ class InstanceType(xmlNode.BaseNode):
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
 
-class Handler(xmllib.DataBinder):
+class Handler(xmlNode.Handler):
     instanceClass = BaseInstance
+    instanceUpdateStatusClass = BaseInstanceUpdateStatus
+    instanceUpdateStatusStateClass = BaseInstanceUpdateStatusState
+    instanceUpdateStatusTimeClass = BaseInstanceUpdateStatusTime
     instancesClass = BaseInstances
     launchIndexClass = IntegerNode
     instanceTypeClass = InstanceType
@@ -45,3 +83,9 @@ class Handler(xmllib.DataBinder):
         self.registerType(self.instancesClass, self.instancesClass.tag)
         self.registerType(self.instanceTypeClass, self.instanceTypeClass.tag)
         self.registerType(self.instanceTypesClass, self.instanceTypesClass.tag)
+        self.registerType(self.instanceUpdateStatusClass,
+                          self.instanceUpdateStatusClass.tag)
+        self.registerType(self.instanceUpdateStatusStateClass,
+                          self.instanceUpdateStatusStateClass.tag)
+        self.registerType(self.instanceUpdateStatusTimeClass,
+                          self.instanceUpdateStatusTimeClass.tag)

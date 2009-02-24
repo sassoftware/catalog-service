@@ -8,12 +8,13 @@ import os
 import signal
 import time
 import urllib
-import datetime
+import time
 import tempfile
 import subprocess
 
 from conary.lib import util, sha1helper
 
+from catalogService import cimupdater
 from catalogService import clouds
 from catalogService import descriptor
 from catalogService import errors
@@ -207,7 +208,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def _daemonize(self, *args, **kw):
         self._cloudClient = None
-        return storage_mixin.StorageMixin._daemonize(self, *args, **kw)
+        return baseDriver.BaseDriver._daemonize(self, *args, **kw)
 
     def drvLaunchInstance(self, descriptorData, requestIPAddress):
         getField = descriptorData.getField
@@ -377,6 +378,42 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
 
+    def updateInstances(self, instanceIds):
+        instanceList = instances.BaseInstances()
+        for id in instanceIds:
+            instanceList.append(self.getInstance(id))
+
+        for instance in instanceList:
+            newState = self.updateStatusStateUpdating
+            newTime = int(time.time())
+            self._setInstanceUpdateStatus(newState, newTime)
+
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
+        return instanceList
+
+    def updateInstance(self, instanceId):
+        return self.updateInstances([instanceId])
+
+    def _updateInstance(self, instance):
+        host = 'https://%s' % instance.publicDnsName.getText()
+        updater = cimupdater.CIMUpdater(host)
+        updater.checkAndApplyUpdate()
+
+        # Mark the update status as done.
+        newState = self.updateStatusStateDone
+        newTime = int(time.time())
+        self._setInstanceUpdateStatus(newState, newTime)
+
+    def _setInstanceUpdateStatus(self, newState, newTime):
+        instance.getUpdateStatus().setState(newState)
+        instance.getUpdateStatus().setTime(newTime)
+        # Save the update status in the instance store
+        self._instanceStore.setUpdateStatusState(instance.getId(), newState)
+        self._instanceStore.setUpdateStatusTime(instance.getId(), newTime)
+        # Set the expiration to 3 hours for now.
+        self._instanceStore.setExpiration(instance.getId(), newTime+10800)
+        self._daemonize(self._updateInstance, instance)
+
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory()
@@ -416,6 +453,58 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self.drvGetCloudConfiguration()
         return cloudConfig['alias']
 
+    def _buildInstanceList(self, instMap):
+        cloudAlias = self.getCloudAlias()
+        instanceList = instances.BaseInstances()
+        for mor, vminfo in instMap.iteritems():
+            if vminfo.get('config.template', False):
+                continue
+            if not 'config.uuid' in vminfo:
+                continue
+            launchTime = None
+            if 'runtime.bootTime' in vminfo:
+                launchTime = int(time.mktime(vminfo['runtime.bootTime']))
+            inst = self._nodeFactory.newInstance(
+                id = vminfo['config.uuid'],
+                instanceName = vminfo['name'],
+                instanceDescription = vminfo['config.annotation'],
+                instanceId = vminfo['config.uuid'],
+                reservationId = vminfo['config.uuid'],
+                dnsName = vminfo.get('guest.ipAddress', None),
+                publicDnsName = vminfo.get('guest.ipAddress', None),
+                state = vminfo['runtime.powerState'],
+                launchTime = launchTime,
+                cloudName = self.cloudName,
+                cloudAlias = cloudAlias)
+
+            # Check instance store for updating status, and if it's present,
+            # set the data on the instance object.
+            updateStatusState = self._instanceStore.getUpdateStatusState(inst.getId(), None)
+            updateStatusTime = self._instanceStore.getUpdateStatusTime(inst.getId(), None)
+            if updateStatusState:
+                inst.getUpdateStatus().setState(updateStatusState)
+            if updateStatusTime:
+                inst.getUpdateStatus().setTime(updateStatusTime)
+
+            instanceList.append(inst)
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
+
+        return instanceList
+
+    def drvGetInstance(self, instanceId):
+        uuidRef = self.client.findVMByUUID(instanceId)
+        instMap = self.client.getVirtualMachines([ 'name',
+                                                   'config.annotation',
+                                                   'config.template',
+                                                   'runtime.powerState',
+                                                   'runtime.bootTime',
+                                                   'config.uuid',
+                                                   'config.extraConfig',
+                                                   'guest.ipAddress' ],
+                                                  uuidRef)
+        
+        return self._buildInstanceList(instMap)[0]
+
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
@@ -430,8 +519,15 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 self._instanceStore.delete(storeKey)
                 continue
             imageId = self._instanceStore.getImageId(storeKey)
+            updateData = self._instanceStore.getUpdateStatusState(storeKey)
             imagesL = self.getImages([imageId])
-            if not imagesL:
+
+            # If there were no images read from the instance store, but there
+            # was update data present, just continue, so that the update data
+            # doesn't get deleted from the store.
+            if not imagesL and updateData:
+                continue
+            elif not imagesL:
                 # We no longer have this image. Junk the instance
                 self._instanceStore.delete(storeKey)
                 continue
@@ -465,30 +561,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                                    'config.uuid',
                                                    'config.extraConfig',
                                                    'guest.ipAddress' ])
-        for mor, vminfo in instMap.iteritems():
-            if vminfo.get('config.template', False):
-                continue
-            if not 'config.uuid' in vminfo:
-                continue
-            launchTime = None
-            if 'runtime.bootTime' in vminfo:
-                dt = datetime.datetime(*vminfo['runtime.bootTime'][:7])
-                launchTime = dt.strftime('%a %b %d %H:%M:%S UTC-0000 %Y')
-            inst = self._nodeFactory.newInstance(
-                id = vminfo['config.uuid'],
-                instanceName = vminfo['name'],
-                instanceDescription = vminfo['config.annotation'],
-                instanceId = vminfo['config.uuid'],
-                reservationId = vminfo['config.uuid'],
-                dnsName = vminfo.get('guest.ipAddress', None),
-                publicDnsName = vminfo.get('guest.ipAddress', None),
-                state = vminfo['runtime.powerState'],
-                launchTime = launchTime,
-                cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
-            instanceList.append(inst)
-        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
+        return self._buildInstanceList(instMap)
 
     def _addMintDataToImageList(self, imageList):
         # FIXME: duplicate code

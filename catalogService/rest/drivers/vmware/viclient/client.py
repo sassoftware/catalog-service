@@ -730,9 +730,9 @@ class VimService(object):
         propsWanted = {'Datacenter': ['name']}
         return self.getProperties(propsWanted)
 
-    def getVirtualMachines(self, propertyList):
+    def getVirtualMachines(self, propertyList, root=None):
         propsWanted = {'VirtualMachine': propertyList}
-        return self.getProperties(propsWanted)
+        return self.getProperties(propsWanted, root)
 
     def createVM(self, dcName, vmName, dataStore=None,
                  annotation=None, memory=512, cpus=1,
