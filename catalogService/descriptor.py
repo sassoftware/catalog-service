@@ -309,16 +309,34 @@ class DescriptorData(_BaseClass):
                 errorList.extend(e.args[0])
 
         # next, look for missing fields
-        missingRequiredFields = [ x.name
+        missingRequiredFields = [ x
             for x in self._descriptor.getDataFields()
             if x.name not in self._fieldsMap
                 and x.required ]
+        # A required field may be missing if:
+        # the conditional is eq and the field is missing or the field value is
+        # not what the conditional specified
+        # the conditional is noteq and the field is present and its value is
+        # what the conditional specified
+        missingRequiredFields = [ x
+            for x in missingRequiredFields
+                if self._filterEqConditionals(x) ]
 
-        for fieldName in missingRequiredFields:
-            errorList.append("Missing field: '%s'" % fieldName)
+        for field in missingRequiredFields:
+            errorList.append("Missing field: '%s'" % field.name)
 
         if errorList:
             raise errors.ConstraintsValidationError(errorList)
+
+    def _filterEqConditionals(self, field):
+        # Filter eq conditionals that are not satisfied
+        if field.conditional is None:
+            return True
+        condFieldName = field.conditional.fieldName
+        if condFieldName not in self._fieldsMap:
+            return True
+        return (self._fieldsMap[condFieldName].getValue() ==
+                field.conditional.value)
 
     def _cleanseValue(self, fieldDescription, value):
         if not isinstance(value, basestring):
@@ -400,7 +418,7 @@ class EnumeratedType(list):
 class PresentationField(object):
     __slots__ = [ 'name', 'descriptions', 'help', 'type', 'multiple', 'default',
                   'constraints', 'constraintsDescriptions', 'required',
-                  'hidden', 'password', ]
+                  'hidden', 'password', 'conditional' ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
@@ -425,6 +443,12 @@ class PresentationField(object):
             self.constraintsDescriptions = node.constraints.getDescriptions()
         else:
             self.constraints = []
+        self.conditional = None
+        if node.conditional:
+            self.conditional = Conditional(
+                fieldName = node.conditional.fieldName,
+                operator = node.conditional.operator,
+                value = node.conditional.value)
 
 class Conditional(object):
     __slots__ = [ 'fieldName', 'operator', 'value' ]
