@@ -4,15 +4,13 @@ import mint.shimclient
 
 from catalogService import userInfo
 from catalogService import serviceInfo
-from catalogService.rest.response import XmlResponse, XmlStringResponse
+from catalogService.rest.response import XmlResponse
 from catalogService.rest import base
-from catalogService.rest import notices
 from catalogService.rest import users
 from catalogService.rest import clouds
 
 class CatalogServiceController(base.BaseController):
     urls = {'clouds' : clouds.AllCloudController,
-            'notices' : notices.NoticesController,
             'users' : users.UsersController,
             'userinfo' : 'userinfo',
             'serviceinfo' : 'serviceinfo'}
