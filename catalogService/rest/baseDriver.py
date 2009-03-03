@@ -352,7 +352,7 @@ class BaseDriver(object):
             # We should not get HTML content out of rbuilder - most likely
             # a private project to which we don't have access
             raise errors.DownloadError("Unable to download file")
-        util.copyfileobj(uobj, file(destFile, 'w'))
+        util.copyfileobj(resp, file(destFile, 'w'))
 
     def _downloadImage(self, image, tmpDir):
         imageId = image.getImageId()
