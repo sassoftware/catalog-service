@@ -33,7 +33,7 @@ class BaseNode(xmllib.BaseNode):
             setattr(self, slot, None)
 
         kwargs.update(self._constructorOverrides)
-        for k in self.__slots__:
+        for k in set(self.__slots__):
             if k.startswith('_'):
                 # Private variable, do not set
                 continue
@@ -58,7 +58,7 @@ class BaseNode(xmllib.BaseNode):
 
     def _iterChildren(self):
         sublementsFound = False
-        for fName in self.__slots__:
+        for fName in set(self.__slots__):
             if fName.startswith('_'):
                 continue
             if fName in self._slotAttributes:
