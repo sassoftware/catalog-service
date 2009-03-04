@@ -54,6 +54,10 @@ class BaseDriver(object):
         if self._logger:
             return self._logger.error(*args, **kwargs)
 
+    def log_exception(self, *args, **kwargs):
+        if self._logger:
+            return self._logger.exception(*args, **kwargs)
+
     def isValidCloudName(self, cloudName):
         raise NotImplementedError
 
@@ -280,6 +284,27 @@ class BaseDriver(object):
                 return val
         return None
 
+    @classmethod
+    def downloadFile(self, url, destFile, headers = None):
+        """Download the contents of the url into a file"""
+        req = urllib2.Request(url, headers = headers or {})
+        resp = urllib2.urlopen(req)
+        if resp.headers['Content-Type'].startswith("text/html"):
+            # We should not get HTML content out of rbuilder - most likely
+            # a private project to which we don't have access
+            raise errors.DownloadError("Unable to download file")
+        util.copyfileobj(uobj, file(destFile, 'w'))
+
+    def _downloadImage(self, image, tmpDir):
+        imageId = image.getImageId()
+        build = self._mintClient.getBuild(image.getBuildId())
+
+        downloadUrl = image.getDownloadUrl()
+        imageId = os.path.basename(image.getId())
+        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
+
+        self.downloadFile(downloadUrl, downloadFilePath)
+        return downloadFilePath
     def _getInstanceDescriptionFromImage(self, imageNode):
         if imageNode is None:
             return None

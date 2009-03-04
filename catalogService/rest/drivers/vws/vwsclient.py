@@ -495,23 +495,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         finally:
             self._instanceStore.deletePid(instanceId)
 
-    def _downloadImage(self, image, imageExtraData):
-        imageId = image.getImageId()
-        # Get rid of the trailing .gz
-        assert(imageId.endswith('.gz'))
-        imageSha1 = imageId[:-3]
-        build = self._mintClient.getBuild(image.getBuildId())
-
-        downloadUrl = imageExtraData['downloadUrl']
-
-        # XXX follow redirects
-        uobj = urllib.urlopen(downloadUrl)
-        # Create temp file
-        downloadFilePath = os.path.join(self.cloudClient._tmpDir,
-            '%s.tgz' % imageSha1)
-        util.copyfileobj(uobj, file(downloadFilePath, "w"))
-        return downloadFilePath
-
     def _prepareImage(self, downloadFilePath):
         retfile = self.client._repackageImage(downloadFilePath)
         os.unlink(downloadFilePath)

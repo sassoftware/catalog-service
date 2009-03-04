@@ -7,7 +7,6 @@ import operator
 import os
 import signal
 import time
-import urllib
 import datetime
 import tempfile
 import subprocess
@@ -569,21 +568,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                                   newuuid=uuid)
         # FIXME: error handle on ret
 
-    def _downloadImage(self, image, tmpDir):
-        # FIXME: copied from VWS driver
-        imageId = image.getImageId()
-        build = self._mintClient.getBuild(image.getBuildId())
-
-        downloadUrl = image.getDownloadUrl()
-        imageId = os.path.basename(image.getId())
-
-        # XXX follow redirects
-        uobj = urllib.urlopen(downloadUrl)
-        # Create temp file
-        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
-        util.copyfileobj(uobj, file(downloadFilePath, 'w'))
-        return downloadFilePath
-
     def _findUniqueName(self, inventoryPrefix, startName):
         # make sure that the vm name is not used in the inventory
         testName = startName
@@ -619,7 +603,11 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         self._setState(instanceId, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
-        path = self._downloadImage(image, tmpDir)
+        try:
+            path = self._downloadImage(image, tmpDir)
+        except errors.CatalogError, e:
+            self._setState(instanceId, 'Error')
+            raise
 
         vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
         inventoryPrefix = '/%s/%s/' %(dcName, vmFolder)
