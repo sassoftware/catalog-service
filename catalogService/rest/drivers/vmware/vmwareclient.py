@@ -9,7 +9,6 @@ import signal
 import time
 import datetime
 import tempfile
-import subprocess
 
 from conary.lib import util, sha1helper
 
@@ -617,18 +616,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         self._setState(instanceId, 'Extracting image')
         try:
-            if path.endswith('.zip'):
-                workdir = path[:-4]
-                util.mkdirChain(workdir)
-                cmd = 'unzip -d %s %s' % (workdir, path)
-            elif path.endswith('.tgz'):
-                workdir = path[:-4]
-                util.mkdirChain(workdir)
-                cmd = 'tar zxSf %s -C %s' % (path, workdir)
-            else:
-                raise RuntimeError('unsupported rBuilder image archive format')
-            p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
-            p.wait()
+            workdir = self.extractImage(path)
             self._setState(instanceId, 'Uploading image to VMware')
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             vmx = viclient.vmutils.uploadVMFiles(self.client,

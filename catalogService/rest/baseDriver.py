@@ -1,3 +1,9 @@
+import os
+import subprocess
+import urllib2
+
+from conary.lib import util
+
 from catalogService import errors
 from catalogService import nodeFactory
 from catalogService import descriptor
@@ -284,8 +290,23 @@ class BaseDriver(object):
                 return val
         return None
 
+    def extractImage(self, path):
+        if path.endswith('.zip'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'unzip -d %s %s' % (workdir, path)
+        elif path.endswith('.tgz'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'tar zxSf %s -C %s' % (path, workdir)
+        else:
+            raise errors.CatalogError('unsupported rBuilder image archive format')
+        p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
+        p.wait()
+        return workdir
+
     @classmethod
-    def downloadFile(self, url, destFile, headers = None):
+    def downloadFile(cls, url, destFile, headers = None):
         """Download the contents of the url into a file"""
         req = urllib2.Request(url, headers = headers or {})
         resp = urllib2.urlopen(req)
