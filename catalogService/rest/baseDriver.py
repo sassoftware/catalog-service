@@ -276,6 +276,8 @@ class BaseDriver(object):
 
         cloudConfig = self.drvGetCloudConfiguration(isAdmin = True)
         for k, v in sorted(cloudConfig.items()):
+            if k not in descr._dataFieldsHash:
+                continue
             descrData.addField(k, value = v)
         descrData.checkConstraints()
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
