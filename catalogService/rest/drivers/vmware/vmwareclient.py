@@ -15,7 +15,6 @@ from catalogService import cimupdater
 from catalogService import clouds
 from catalogService import descriptor
 from catalogService import errors
-from catalogService import environment
 from catalogService import images
 from catalogService import instances
 from catalogService import storage
@@ -432,14 +431,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 continue
             newImageList.append(imagesById[imageId])
         return newImageList
-
-    def getEnvironment(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloud = self._nodeFactory.newEnvironmentCloud(
-            cloudName = self.cloudName, cloudAlias = self.getCloudAlias())
-        env = self._nodeFactory.newEnvironment()
-        env.append(cloud)
-        return env
 
     def getInstanceTypes(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)

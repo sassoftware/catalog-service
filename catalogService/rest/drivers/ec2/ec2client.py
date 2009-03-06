@@ -15,7 +15,6 @@ from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
 
 from catalogService import clouds
 from catalogService import descriptor
-from catalogService import environment
 from catalogService import errors
 from catalogService import instances
 from catalogService import images
@@ -56,10 +55,6 @@ class EC2_Cloud(clouds.BaseCloud):
 
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
     _constructorOverrides['description'] = EC2_DESCRIPTION
-
-class EC2_EnvironmentCloud(environment.BaseCloud):
-    "EC2 Environment Cloud"
-    _constructorOverrides = EC2_Image._constructorOverrides.copy()
 
 class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
@@ -262,7 +257,6 @@ class EC2Client(baseDriver.BaseDriver):
     cloudType = 'ec2'
 
     Cloud = EC2_Cloud
-    EnvironmentCloud = EC2_EnvironmentCloud
     Image = EC2_Image
     Instance = EC2_Instance
 
@@ -607,19 +601,6 @@ class EC2Client(baseDriver.BaseDriver):
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
         return descr
-
-    def getEnvironment(self):
-        instTypeNodes = self._getInstanceTypes()
-        keyPairNodes = self._getKeyPairs()
-        securityGroupNodes = self._getSecurityGroups()
-
-        cloud = self._nodeFactory.newEnvironmentCloud(
-            instanceTypes = instTypeNodes, keyPairs = keyPairNodes,
-            securityGroups = securityGroupNodes)
-
-        env = self._nodeFactory.newEnvironment()
-        env.append(cloud)
-        return env
 
     def getInstanceTypes(self):
         return self._getInstanceTypes()

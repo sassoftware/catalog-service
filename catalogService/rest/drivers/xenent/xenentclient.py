@@ -13,7 +13,6 @@ from conary.lib import util
 from catalogService import clouds
 from catalogService import errors
 from catalogService import descriptor
-from catalogService import environment
 from catalogService import images
 from catalogService import instances
 from catalogService import instanceStore
@@ -381,13 +380,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             )
 
         return descr
-
-    def getEnvironment(self):
-        cloud = self._nodeFactory.newEnvironmentCloud(
-            cloudName = self.cloudName, cloudAlias = self.getCloudAlias())
-        env = self._nodeFactory.newEnvironment()
-        env.append(cloud)
-        return env
 
     def getInstanceTypes(self):
         return self._getInstanceTypes()

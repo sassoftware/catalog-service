@@ -9,7 +9,7 @@ from catalogService import errors
 from catalogService import nodeFactory
 from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
-from catalogService import environment, keypairs, securityGroups
+from catalogService import keypairs, securityGroups
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -24,8 +24,6 @@ class BaseDriver(object):
     Instance         = instances.BaseInstance
     InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
-    Environment      = environment.BaseEnvironment
-    EnvironmentCloud = environment.BaseCloud
     KeyPair          = keypairs.BaseKeyPair
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
@@ -99,8 +97,6 @@ class BaseDriver(object):
             instanceFactory = self.Instance,
             instanceUpdateStatusFactory = self.InstanceUpdateStatus,
             instanceTypeFactory = self.InstanceType,
-            environmentFactory = self.Environment,
-            environmentCloudFactory = self.EnvironmentCloud,
             keyPairFactory = self.KeyPair,
             securityGroupFactory = self.SecurityGroup,
         )

@@ -8,7 +8,6 @@ from conary.lib import util
 
 from catalogService import clouds
 from catalogService import descriptor
-from catalogService import environment
 from catalogService import errors
 from catalogService import images
 from catalogService import instances
@@ -28,10 +27,6 @@ class VWS_Image(images.BaseImage):
 class VWS_Instance(instances.BaseInstance):
     "Globus Virtual Workspaces Instance"
     _constructorOverrides = VWS_Cloud._constructorOverrides.copy()
-
-class VWS_EnvironmentCloud(environment.BaseCloud):
-    "Globus Virtual Workspaces Environment Cloud"
-    _constructorOverrides = VWS_Image._constructorOverrides.copy()
 
 class VWS_InstanceTypes(instances.InstanceTypes):
     "Globus Virtual Workspaces Instance Types"
@@ -184,7 +179,6 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 
 class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Cloud = VWS_Cloud
-    EnvironmentCloud = VWS_EnvironmentCloud
     Image = VWS_Image
     Instance = VWS_Instance
 
@@ -358,16 +352,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def getImage(self, imageId):
         return self.getImages([imageId])[0]
-
-    def getEnvironment(self):
-        instTypeNodes = self._getInstanceTypes()
-
-        cloud = self._nodeFactory.newEnvironmentCloud(
-            instanceTypes = instTypeNodes, cloudName = self.cloudName)
-
-        env = self._nodeFactory.newEnvironment()
-        env.append(cloud)
-        return env
 
     def getInstanceTypes(self):
         return self._getInstanceTypes()

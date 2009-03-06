@@ -105,12 +105,6 @@ class NodeFactory(object):
         node = self.environmentFactory(*args, **kwargs)
         return node
 
-    def newEnvironmentCloud(self, *args, **kwargs):
-        node = self.environmentCloudFactory(*args, **kwargs)
-        node.setId(self.getCloudUrl(node))
-        node.setCloudType(self.cloudType)
-        return node
-
     def newInstanceType(self, *args, **kwargs):
         node = self.instanceTypeFactory(*args, **kwargs)
         node.setId(self.getInstanceTypeUrl(node))
