@@ -325,16 +325,17 @@ class BaseDriver(object):
             raise errors.DownloadError("Unable to download file")
         util.copyfileobj(resp, file(destFile, 'w'))
 
-    def _downloadImage(self, image, tmpDir):
+    def _downloadImage(self, image, tmpDir, extension = '.tgz'):
         imageId = image.getImageId()
         build = self._mintClient.getBuild(image.getBuildId())
 
         downloadUrl = image.getDownloadUrl()
         imageId = os.path.basename(image.getId())
-        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
+        downloadFilePath = os.path.join(tmpDir, '%s%s' % (imageId, extension))
 
         self.downloadFile(downloadUrl, downloadFilePath)
         return downloadFilePath
+
     def _getInstanceDescriptionFromImage(self, imageNode):
         if imageNode is None:
             return None

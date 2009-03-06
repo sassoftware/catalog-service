@@ -525,9 +525,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         vmUuid = self.client.xenapi.VM.get_uuid(vmRef)
         return vmRef, vmUuid
 
-    def _importImage(self, image, workDir, srUuid):
+    def _importImage(self, image, vmFile, srUuid):
         checksum = image.getImageId()
-        vmFile = os.path.join(workDir, image.getBaseFileName())
         taskRef = self.client.xenapi.task.create("Import of %s" % checksum,
             "Import of %s" % checksum)
         vmRef, vmUuid = self._putImage(vmFile, srUuid, taskRef)
@@ -542,13 +541,10 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 checksum = image.getImageId()
 
                 self._setState(instanceId, 'Downloading image')
-                path = self._downloadImage(image, tmpDir)
-
-                self._setState(instanceId, 'Extracting image')
-                workDir = self.extractImage(path)
+                path = self._downloadImage(image, tmpDir, extension = '.xva')
 
                 self._setState(instanceId, 'Importing image')
-                templRef, templUuid = self._importImage(image, workDir, srUuid)
+                templRef, templUuid = self._importImage(image, path, srUuid)
 
                 image.setImageId(templUuid)
                 image.setInternalTargetId(templUuid)
