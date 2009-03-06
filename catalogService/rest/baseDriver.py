@@ -378,25 +378,3 @@ class BaseDriver(object):
                     os._exit(1)
         finally:
             os._exit(0)
-
-    @classmethod
-    def downloadFile(self, url, destFile, headers = None):
-        """Download the contents of the url into a file"""
-        req = urllib2.Request(url, headers = headers or {})
-        resp = urllib2.urlopen(req)
-        if resp.headers['Content-Type'].startswith("text/html"):
-            # We should not get HTML content out of rbuilder - most likely
-            # a private project to which we don't have access
-            raise errors.DownloadError("Unable to download file")
-        util.copyfileobj(resp, file(destFile, 'w'))
-
-    def _downloadImage(self, image, tmpDir):
-        imageId = image.getImageId()
-        build = self._mintClient.getBuild(image.getBuildId())
-
-        downloadUrl = image.getDownloadUrl()
-        imageId = os.path.basename(image.getId())
-        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
-
-        self.downloadFile(downloadUrl, downloadFilePath)
-        return downloadFilePath
