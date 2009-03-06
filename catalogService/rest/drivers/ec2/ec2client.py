@@ -702,9 +702,12 @@ class EC2Client(baseDriver.BaseDriver):
                                            isPublic=image.is_public,
                                            productCode=productCodes)
             imageList.append(i)
-        imageDataDict = self._mintClient.getAllAMIBuilds()
+
+        mintImageList = self._mintClient.getAllBuildsByType('AMI')
+        mintImageDict = dict((x.get('amiId'), x) for x in mintImageList)
+
         for image in imageList:
-            imageData = imageDataDict.get(image.imageId.getText(), {})
+            imageData = mintImageDict.get(image.imageId.getText(), {})
             image.setIs_rBuilderImage(bool(imageData))
             for key, methodName in images.buildToNodeFieldMap.iteritems():
                 getattr(image, methodName)(imageData.get(key))

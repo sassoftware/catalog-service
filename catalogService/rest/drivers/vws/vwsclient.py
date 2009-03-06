@@ -508,14 +508,14 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _addMintDataToImageList(self, imageList):
         cloudAlias = self.client.getCloudAlias()
 
-        imageDataLookup = self._mintClient.getAllVwsBuilds()
+        mintImageList = self._mintClient.getAllBuildsByType('VWS')
         # Convert the images coming from rbuilder to .gz, to match what we're
         # storing in globus
-        imageDataLookup = dict((x + '.gz', y)
-            for x, y in imageDataLookup.iteritems())
+        mintImageDict = dict((x.get('sha1') + '.gz', x) for x in mintImageList)
+
         for image in imageList:
             imageId = image.getImageId()
-            mintImageData = imageDataLookup.pop(imageId, {})
+            mintImageData = mintImageDict.pop(imageId, {})
             image.setIs_rBuilderImage(bool(mintImageData))
             image.setIsDeployed(True)
             if not mintImageData:
@@ -524,7 +524,7 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 images.buildToNodeFieldMap)
 
         # Add the rest of the images coming from mint
-        for imageId, mintImageData in sorted(imageDataLookup.iteritems()):
+        for imageId, mintImageData in sorted(mintImageDict.iteritems()):
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = False,
                     is_rBuilderImage = True,
