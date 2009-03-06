@@ -396,6 +396,24 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         cloudConfig = self.drvGetCloudConfiguration()
         return cloudConfig['alias']
 
+    def _getInstanceLaunchTime(self, vmRef, vm):
+        if vm['power_state'] != 'Running' or vm['is_control_domain']:
+            # Control domains always report 0
+            return None
+        vmMetricsRef = vm['metrics']
+        metrics = self.client.xenapi.VM_metrics.get_record(vmMetricsRef)
+        # Apparently the string sent back is not really XML-RPC conformant, so
+        # we parse the value ourselves
+        startTime = metrics['start_time'].value
+        try:
+            startTime = time.strptime(startTime, "%Y%m%dT%H:%M:%SZ")
+        except ValueError:
+            # We couldn't parse the value.
+            return None
+        # time.mktime will produce a local time out of a Zulu time, so we need
+        # to adjust it with the local timezone offset
+        return int(time.mktime(startTime) - time.timezone)
+
     def drvGetInstances(self, instanceIds):
         instMap  = self.client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
@@ -430,7 +448,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 publicDnsName = 'UNKNOWN',
                 privateDnsName = 'UNKNOWN',
                 state = self._instanceStore.getState(storeKey),
-                launchTime = 1,
+                launchTime = None,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
@@ -461,7 +479,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 publicDnsName = publicIpAddr,
                 privateDnsName = 'UNKNOWN',
                 state = vm['power_state'],
-                launchTime = 1,
+                launchTime = self._getInstanceLaunchTime(opaqueId, vm),
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
