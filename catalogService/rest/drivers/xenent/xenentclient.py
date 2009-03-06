@@ -2,8 +2,11 @@
 import os
 import signal
 import socket
+import tempfile
 import time
 import urllib
+import urllib2
+import httplib
 
 from conary.lib import util
 
@@ -14,7 +17,6 @@ from catalogService import environment
 from catalogService import images
 from catalogService import instances
 from catalogService import instanceStore
-from catalogService import restClient
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
@@ -76,50 +78,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <help href='configuration/description.html'/>
     </field>
-    <field>
-      <name>useDeploymentDaemon</name>
-      <descriptions>
-        <desc>Will you be using the deployment daemon?</desc>
-      </descriptions>
-      <required>true</required>
-      <enumeratedType>
-        <describedValue>
-          <descriptions>
-            <desc>Yes</desc>
-          </descriptions>
-          <key>yes</key>
-        </describedValue>
-        <describedValue>
-          <descriptions>
-            <desc>No</desc>
-          </descriptions>
-          <key>no</key>
-        </describedValue>
-      </enumeratedType>
-      <default>yes</default>
-      <help href='configuration/useDeploymentDaemon.html'/>
-    </field>
-    <field>
-      <name>deploymentDaemonPort</name>
-      <descriptions>
-        <desc>Deployment Daemon Port</desc>
-      </descriptions>
-      <required>true</required>
-      <type>int</type>
-      <constraints>
-        <range>
-          <min>1025</min>
-          <max>16000</max>
-        </range>
-      </constraints>
-      <default>12123</default>
-      <conditional>
-        <fieldName>useDeploymentDaemon</fieldName>
-        <operator>eq</operator>
-        <value>yes</value>
-      </conditional>
-      <help href='configuration/deploymentDaemonPort.html'/>
-    </field>
   </dataFields>
 </descriptor>"""
 
@@ -165,6 +123,81 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
+class StreamingRequestMixIn(object):
+    def _send_request_mix_in(self, parentClass, method, url, body, headers):
+        if not hasattr(body, 'read') and not hasattr(body, 'seek'):
+            # Not a file-like object
+            return parentClass._send_request(self, method, url, body,
+                headers)
+        # Compute body length
+        pos = body.tell()
+        body.seek(0, 2)
+        contentLength = body.tell() - pos
+        body.seek(pos)
+        headers['Content-Length'] = str(contentLength)
+        # Send the request with no body
+        parentClass._send_request(self, method, url, None, headers)
+        # Now stream the body
+        while 1:
+            buf = body.read(16384)
+            if not buf:
+                break
+            self.send(buf)
+
+class HTTPConnection(httplib.HTTPConnection, StreamingRequestMixIn):
+    def _send_request(self, method, url, body, headers):
+        return self._send_request_mix_in(httplib.HTTPConnection,
+            method, url, body, headers)
+
+class HTTPSConnection(httplib.HTTPSConnection, StreamingRequestMixIn):
+    def _send_request(self, method, url, body, headers):
+        return self._send_request_mix_in(httplib.HTTPSConnection,
+            method, url, body, headers)
+
+class HTTPHandler(urllib2.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(HTTPConnection, req)
+
+class HTTPSHandler(urllib2.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(HTTPSConnection, req)
+
+class Request(urllib2.Request):
+    def get_method(self):
+        if self.has_data():
+            return "PUT"
+        else:
+            return "GET"
+
+    def get_host(self):
+        ret = urllib2.Request.get_host(self)
+        userpass, hostport = urllib.splituser(ret)
+        if userpass:
+            userpass = urllib2.base64.b64encode(userpass)
+            self.unredirected_hdrs['Authorization'] = 'Basic %s' % userpass
+
+        return hostport
+
+class UploadClient(object):
+    requestClass = Request
+    def __init__(self, url, headers = None):
+        self.url = url
+        self.headers = headers or {}
+
+    def getOpener(self):
+        return urllib2.build_opener(HTTPHandler, HTTPSHandler)
+
+    def request(self, data, headers = None):
+        headers = self.headers.copy()
+        # Dummy Content-Length
+        headers['Content-Length'] = '0'
+        headers['Content-Type'] = 'application/octet-stream'
+        # Give it a chance to override Content-Type
+        headers.update(headers or {})
+        req = self.requestClass(self.url, data, headers = headers)
+        resp = self.getOpener().open(req)
+        return resp
+
 class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     Image = XenEnt_Image
 
@@ -179,6 +212,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
     XenSessionClass = None
+
+    _XmlRpcWrapper = "<methodResponse><params><param>%s</param></params></methodResponse>"
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
@@ -210,17 +245,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         return sess
 
     def drvVerifyCloudConfiguration(self, config):
-        if config['useDeploymentDaemon'] == 'no':
-            return
-        # Can we talk to the deployment daemon?
-        try:
-            # The username and the password do not matter
-            self._getRestClient('username', 'password',
-                config['name'], config['deploymentDaemonPort'])
-        except socket.error, e:
-            raise errors.ParameterError(message =
-                "Unable to contact deployment daemon on port %s" %
-                    config['deploymentDaemonPort'])
+        return
 
     @classmethod
     def _getCloudNameFromConfig(cls, config):
@@ -251,15 +276,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         image = self.getImages([imageId])[0]
         if not image:
             raise errors.HttpNotFound()
-
-        if not image.getIsDeployed():
-            # Validate that we can talk to the helper daemon
-            try:
-                cli = self.getRestClient()
-            except socket.error, e:
-                raise errors.PermissionDenied(
-                    "Unable to contact deployment daemon on port %s" %
-                    cloudConfig['deploymentDaemonPort'])
 
         instanceName = getField('instanceName')
         instanceDescription = getField('instanceDescription')
@@ -485,6 +501,71 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         finally:
             os._exit(0)
 
+    def _putImage(self, vmFile, srUuid, taskRef):
+        srRef = self.client.xenapi.SR.get_by_uuid(srUuid)
+        urlTemplate = 'http://%s:%s@%s/import?task_id=%s&sr_id=%s'
+
+        cloudConfig = self.drvGetCloudConfiguration()
+        cloudName = cloudConfig['name']
+        creds = self.credentials
+        username, password = creds['username'], creds['password']
+        client = UploadClient(urlTemplate % (username, password, cloudName,
+            taskRef, srRef))
+        resp = client.request(file(vmFile))
+        # The server does not send any useful information back. Close the
+        # request and fetch the status from the task
+        resp.close()
+        task = self.client.xenapi.task.get_record(taskRef)
+        if task.get('status') != 'success':
+            errorInfo = task.get('error_info', '')
+            raise errors.CatalogError("Unable to upload image %s: %s" %
+                vmFile, errorInfo)
+        # Wrap the pseudo-XMLRPC response
+        params = XenAPI.xmlrpclib.loads(self._XmlRpcWrapper %
+            task['result'])[0]
+        reflist = params[0]
+        if len(reflist) < 1:
+            raise errors.CatalogError("Unable to publish image, no results found")
+        vmRef = reflist[0]
+        # Make it a template
+        self.client.xenapi.VM.set_is_a_template(vmRef, True)
+
+        vmUuid = self.client.xenapi.VM.get_uuid(vmRef)
+        return vmRef, vmUuid
+
+    def _importImage(self, image, workDir, srUuid):
+        checksum = image.getImageId()
+        vmFile = os.path.join(workDir, image.getBaseFileName())
+        taskRef = self.client.xenapi.task.create("Import of %s" % checksum,
+            "Import of %s" % checksum)
+        vmRef, vmUuid = self._putImage(vmFile, srUuid, taskRef)
+        self._setVmMetadata(vmRef, checksum = checksum)
+        return vmRef, vmUuid
+
+    def _deployImage(self, instanceId, image, srUuid):
+        tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
+        try:
+            try:
+                downloadUrl = image.getDownloadUrl()
+                checksum = image.getImageId()
+
+                self._setState(instanceId, 'Downloading image')
+                path = self._downloadImage(image, tmpDir)
+
+                self._setState(instanceId, 'Extracting image')
+                workDir = self.extractImage(path)
+
+                self._setState(instanceId, 'Importing image')
+                templRef, templUuid = self._importImage(image, workDir, srUuid)
+
+                image.setImageId(templUuid)
+                image.setInternalTargetId(templUuid)
+            except:
+                self._setState(instanceId, 'Error')
+                raise
+        finally:
+            util.rmtree(tmpDir)
+
     def _launchInstance(self, instanceId, image, instanceType, srUuid,
             instanceName, instanceDescription):
         cloudConfig = self.drvGetCloudConfiguration()
@@ -493,37 +574,7 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         try:
             self._instanceStore.setPid(instanceId)
             if not image.getIsDeployed():
-                cli = self.getRestClient()
-                downloadUrl = image.getDownloadUrl()
-                checksum = image.getImageId()
-                self._setState(instanceId, 'Creating template')
-                vmRef, uuid = self.createVirtualMachineTemplate(cli, checksum,
-                    nameLabel, nameDescription)
-
-                self._setState(instanceId, 'Downloading image')
-                imageHandle = self.downloadImage(cli, downloadUrl)
-                self._setState(instanceId, 'Importing image')
-                self._setVmState(vmRef, "Importing image")
-                templUuid = self.importVirtualMachineTemplate(cli, imageHandle,
-                    srUuid)
-                # These calls should be fast, no reason to update the state
-                # for them
-                templRef = self.client.xenapi.VM.get_by_uuid(templUuid)
-                templRec = self.client.xenapi.VM.get_record(templRef)
-                # Copy some of the params from the imported template into the
-                # one we just created
-                self.copyVmParams(templRec, vmRef)
-                vbdRecs = self.getVBDs(templRec)
-                self.setVDIMetadata(vbdRecs, nameLabel, nameDescription,
-                    metadata = {'cloud-catalog-checksum' : checksum})
-
-                self._setState(instanceId, 'Publishing image')
-                for vbdRec in vbdRecs:
-                    self.cloneDisk(vbdRec, vmRef)
-                self._deleteVirtualMachine(templRef)
-                self._setVmState(vmRef, None)
-                image.setImageId(uuid)
-                image.setInternalTargetId(uuid)
+                self._deployImage(instanceId, image, srUuid)
 
             imageId = image.getInternalTargetId()
 
@@ -532,7 +583,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 instanceDescription)
             self._setState(instanceId, 'Launching')
             self.startVm(realId)
-
         finally:
             self._instanceStore.delete(instanceId)
 
@@ -616,94 +666,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             # At this point the instance doesn't exist anymore
             self._instanceStore.delete(instId)
 
-    def getRestClient(self):
-        creds = self.credentials
-        username, password = creds['username'], creds['password']
-        cloudConfig = self.drvGetCloudConfiguration()
-        deploymentDaemonPort = cloudConfig['deploymentDaemonPort']
-        cloudName = cloudConfig['name']
-        return self._getRestClient(username, password, cloudName,
-                                   deploymentDaemonPort)
-
-    def _getRestClient(self, username, password, cloudName,
-                       deploymentDaemonPort):
-        cli = RestClient('http://%s:%s@%s:%s' %
-            (username, password, cloudName, deploymentDaemonPort))
-        cli.connect()
-        return cli
-
-    def createVirtualMachineTemplate(self, cli, checksum, name, description):
-        cli.path = '/virtual-machines'
-
-        resp = cli.request("POST",
-            "<vm><label>%s</label><description>%s</description></vm>" %
-            (name, description))
-
-        respData = resp.read()
-        uuid = self._extractUuid(respData)
-        vmRef = self.client.xenapi.VM.get_by_uuid(uuid)
-
-        # Mark it as a template
-        self.client.xenapi.VM.set_is_a_template(vmRef, True)
-        # Set state so we can filter out these images, they are not useful yet
-        self._setVmState(vmRef, 'Downloading')
-        self._setVmMetadata(vmRef, checksum = checksum)
-        return vmRef, uuid
-
-    def downloadImage(self, cli, rbuilderUrl):
-        # XXX
-        rbuilderUrl = rbuilderUrl.replace('?id=', '?fileId=')
-        cli.path = '/images'
-        resp = cli.request("POST",
-            "<image><rbuilderUrl>%s</rbuilderUrl></image>" % rbuilderUrl)
-
-        respData = resp.read()
-        return self._extractImage(respData)
-
-    def importVirtualMachineTemplate(self, cli, imageId, srUuid):
-        cli.path = '/virtual-machines-imported'
-        resp = cli.request("POST", "<vm><image>%s</image><sr>%s</sr></vm>" %
-            (imageId, srUuid))
-
-        respData = resp.read()
-        return self._extractUuid(respData)
-
-    def setVDIMetadata(self, vbdRecs, label, description, metadata):
-        for vbd in vbdRecs:
-            vdiRef = vbd['VDI']
-            if vdiRef == 'OpaqueRef:NULL':
-                continue
-            self.client.xenapi.VDI.set_other_config(vdiRef, metadata)
-            self.client.xenapi.VDI.set_name_label(vdiRef, label)
-            self.client.xenapi.VDI.set_name_description(vdiRef, description)
-
-
-    def copyVmParams(self, srcVmRec, vmRef):
-        params = ['PV_bootloader', 'PV_kernel', 'PV_ramdisk', 'PV_args',
-            'PV_bootloader_args', 'PV_legacy_args',
-            'HVM_boot_policy', 'HVM_boot_params']
-        for param in params:
-            method = getattr(self.client.xenapi.VM, "set_" + param)
-            method(vmRef, srcVmRec[param])
-
-    def cloneDisk(self, templateVbd, vmRef, otherConfig = None):
-        fields = [ 'bootable', 'device', 'empty', 'mode',
-            'qos_algorithm_params', 'qos_algorithm_type', 'type',
-            'userdevice', 'VDI', 'other_config']
-        vbdRec = dict((x, templateVbd[x]) for x in fields)
-        # Point it to the right VM
-        vbdRec['VM'] = vmRef
-        if otherConfig:
-            vbdRec['other_config'].update(otherConfig)
-        vbdRef = self.client.xenapi.VBD.create(vbdRec)
-        return vbdRef
-
-    def getVBDs(self, vmRec):
-        ret = []
-        for vbdRef in vmRec['VBDs']:
-            ret.append(self.client.xenapi.VBD.get_record(vbdRef))
-        return ret
-
     def cloneTemplate(self, imageId, instanceName, instanceDescription):
         vmTemplateRef = self.client.xenapi.VM.get_by_uuid(imageId)
         imageId = os.path.basename(imageId)
@@ -746,12 +708,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             if e.details[0] != 'DEVICE_ALREADY_EXISTS':
                 raise
 
-    def _setVmState(self, vmRef, state):
-        key = 'cloud-catalog-state'
-        self._wrapper_remove_from_other_config(vmRef, key)
-        if state:
-            self._wrapper_add_to_other_config(vmRef, key, state)
-
     def _setVmMetadata(self, vmRef, checksum = None,
             templateUuid = None):
         if checksum:
@@ -768,25 +724,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         except XenAPI.Failure, e:
             if e.details[0] != 'MAP_DUPLICATE_KEY':
                 raise
-
-    def _wrapper_remove_from_other_config(self, vmRef, key):
-        self.client.xenapi.VM.remove_from_other_config(vmRef, key)
-
-    def _deleteVirtualMachine(self, vmRef):
-        # Get rid of the imported vm
-        self.client.xenapi.VM.destroy(vmRef)
-
-    @classmethod
-    def _extractUuid(cls, dataString):
-        hndlr = xmlNodes.UuidHandler()
-        node = hndlr.parseString(dataString)
-        return node.getText()
-
-    @classmethod
-    def _extractImage(cls, dataString):
-        hndlr = xmlNodes.ImageHandler()
-        node = hndlr.parseString(dataString)
-        return node.getText()
 
     def _getStorageRepos(self):
         # Get all pools
@@ -829,9 +766,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 label = "%s (%s)" % (srRecNameLabel, srRecType)
             uuidsFound[uuid] = (label, srRec['name_description'])
         return [ (x, uuidsFound[x]) for x in ret if uuidsFound[x] ]
-
-class RestClient(restClient.Client):
-    pass
 
 class LaunchInstanceParameters(object):
     __slots__ = [

@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import urllib2
 
 from conary.lib import util
@@ -286,6 +287,8 @@ class BaseDriver(object):
 
         cloudConfig = self.drvGetCloudConfiguration(isAdmin = True)
         for k, v in sorted(cloudConfig.items()):
+            if k not in descr._dataFieldsHash:
+                continue
             descrData.addField(k, value = v)
         descrData.checkConstraints()
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
@@ -300,6 +303,42 @@ class BaseDriver(object):
                 return val
         return None
 
+    def extractImage(self, path):
+        if path.endswith('.zip'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'unzip -d %s %s' % (workdir, path)
+        elif path.endswith('.tgz'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'tar zxSf %s -C %s' % (path, workdir)
+        else:
+            raise errors.CatalogError('unsupported rBuilder image archive format')
+        p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
+        p.wait()
+        return workdir
+
+    @classmethod
+    def downloadFile(cls, url, destFile, headers = None):
+        """Download the contents of the url into a file"""
+        req = urllib2.Request(url, headers = headers or {})
+        resp = urllib2.urlopen(req)
+        if resp.headers['Content-Type'].startswith("text/html"):
+            # We should not get HTML content out of rbuilder - most likely
+            # a private project to which we don't have access
+            raise errors.DownloadError("Unable to download file")
+        util.copyfileobj(resp, file(destFile, 'w'))
+
+    def _downloadImage(self, image, tmpDir):
+        imageId = image.getImageId()
+        build = self._mintClient.getBuild(image.getBuildId())
+
+        downloadUrl = image.getDownloadUrl()
+        imageId = os.path.basename(image.getId())
+        downloadFilePath = os.path.join(tmpDir, '%s.tgz' % imageId)
+
+        self.downloadFile(downloadUrl, downloadFilePath)
+        return downloadFilePath
     def _getInstanceDescriptionFromImage(self, imageNode):
         if imageNode is None:
             return None
