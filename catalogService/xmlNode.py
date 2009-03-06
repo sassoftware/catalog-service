@@ -58,7 +58,7 @@ class BaseNode(xmllib.BaseNode):
 
     def _iterChildren(self):
         sublementsFound = False
-        for fName in set(self.__slots__):
+        for fName in sorted(set(self.__slots__)):
             if fName.startswith('_'):
                 continue
             if fName in self._slotAttributes:
