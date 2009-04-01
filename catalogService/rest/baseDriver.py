@@ -171,6 +171,10 @@ class BaseDriver(object):
 
     client = property(drvGetCloudClient)
 
+    def getCloudAlias(self):
+        cloudConfig = self.drvGetCloudConfiguration()
+        return cloudConfig['alias']
+
     def _checkAuth(self):
         """rBuilder authentication"""
         self._mintAuth = self._mintClient.checkAuth()
@@ -227,14 +231,64 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
-    def launchInstance(self, xmlString, requestIPAddress):
+    def launchInstance(self, xmlString, requestIPAddress, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
         descr.setRootElement('newInstance')
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
-        return self.drvLaunchInstance(descrData, requestIPAddress)
+        return self.launchInstanceFromDescriptorData(descrData, requestIPAddress, auth)
+
+    def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
+        client = self.client
+        cloudConfig = self.drvGetCloudConfiguration()
+
+        imageId = os.path.basename(descriptorData.getField('imageId'))
+
+        image = self.getImages([imageId])[0]
+        if not image:
+            raise errors.HttpNotFound()
+
+        params = self.getLaunchInstanceParameters(image, descriptorData)
+
+        self.backgroundRun(self.launchInstanceInBackground, image,
+                           **params)
+        newInstanceParams = self.getNewInstanceParameters(image,
+            descriptorData, params)
+        instanceList = instances.BaseInstances()
+        instance = self._nodeFactory.newInstance(**newInstanceParams)
+        instanceList.append(instance)
+        return instanceList
+
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        getField = descriptorData.getField
+        imageId = image.getImageId()
+        instanceName = getField('instanceName')
+        instanceName = instanceName or self.getInstanceNameFromImage(image)
+        instanceDescription = getField('instanceDescription')
+        instanceDescription = (instanceDescription
+                               or self.getInstanceDescriptionFromImage(image)
+                               or instanceName)
+        return dict(
+            imageId = imageId,
+            instanceName = instanceName,
+            instanceDescription = instanceDescription,
+            instanceType = getField('instanceType'),
+        )
+
+    def getNewInstanceParameters(self, image, descriptorData, launchParams):
+        imageId = launchParams['imageId']
+        instanceId = launchParams['instanceId']
+        return dict(
+            id = instanceId,
+            instanceId = instanceId,
+            imageId = imageId,
+            instanceName = launchParams.get('instanceName'),
+            instanceDescription = launchParams.get('instanceDescription'),
+            cloudName = self.cloudName,
+            cloudAlias = self.getCloudAlias(),
+        )
 
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
@@ -289,7 +343,7 @@ class BaseDriver(object):
         descrData.checkConstraints()
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
-    def _getInstanceNameFromImage(self, imageNode):
+    def getInstanceNameFromImage(self, imageNode):
         if imageNode is None:
             return None
         for method in [ imageNode.getBuildName, imageNode.getProductName,
@@ -336,7 +390,7 @@ class BaseDriver(object):
         self.downloadFile(downloadUrl, downloadFilePath)
         return downloadFilePath
 
-    def _getInstanceDescriptionFromImage(self, imageNode):
+    def getInstanceDescriptionFromImage(self, imageNode):
         if imageNode is None:
             return None
         for method in [ imageNode.getBuildDescription,
@@ -346,11 +400,13 @@ class BaseDriver(object):
                 return val
         return None
 
-    def _daemonize(self, function, *args, **kw):
+    def backgroundRun(self, function, *args, **kw):
         pid = os.fork()
         if pid:
             os.waitpid(pid, 0)
             return
+        # Re-open the cloud client in the child
+        self._cloudClient = None
         try:
             try:
                 pid = os.fork()

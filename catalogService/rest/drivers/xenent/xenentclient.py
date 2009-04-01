@@ -197,7 +197,7 @@ class UploadClient(object):
         resp = self.getOpener().open(req)
         return resp
 
-class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
+class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     Image = XenEnt_Image
 
     cloudType = 'xen-enterprise'
@@ -263,45 +263,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                          description = cloudConfig['description'],
                          cloudAlias = cloudConfig['alias'])
         return cld
-
-    def drvLaunchInstance(self, descriptorData, requestIPAddress):
-        client = self.client
-        getField = descriptorData.getField
-
-        cloudConfig = self.drvGetCloudConfiguration()
-
-        imageId = os.path.basename(getField('imageId'))
-
-        image = self.getImages([imageId])[0]
-        if not image:
-            raise errors.HttpNotFound()
-
-        instanceName = getField('instanceName')
-        instanceDescription = getField('instanceDescription')
-
-        instanceName = instanceName or self._getInstanceNameFromImage(image)
-        instanceDescription = instanceDescription or \
-            self._getInstanceDescriptionFromImage(image) or instanceName
-
-        instanceId = self._instanceStore.newKey(imageId = imageId)
-
-        self._daemonize(self._launchInstance,
-                        instanceId, image,
-                        instanceType = getField('instanceType'),
-                        srUuid = getField('storageRepository'),
-                        instanceName = instanceName,
-                        instanceDescription = instanceDescription)
-        cloudAlias = self.getCloudAlias()
-        instanceList = instances.BaseInstances()
-        instance = self._nodeFactory.newInstance(id=instanceId,
-                                        instanceId=instanceId,
-                                        imageId=imageId,
-                                        instanceName=instanceName,
-                                        instanceDescription=instanceDescription,
-                                        cloudName=self.cloudName,
-                                        cloudAlias=cloudAlias)
-        instanceList.append(instance)
-        return instanceList
 
     def terminateInstances(self, instanceIds):
         client = self.client
@@ -381,13 +342,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
         return descr
 
-    def getInstanceTypes(self):
-        return self._getInstanceTypes()
-
-    def getCloudAlias(self):
-        cloudConfig = self.drvGetCloudConfiguration()
-        return cloudConfig['alias']
-
     def _getInstanceLaunchTime(self, vmRef, vm):
         if vm['power_state'] != 'Running' or vm['is_control_domain']:
             # Control domains always report 0
@@ -427,8 +381,8 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 continue
             image = imagesL[0]
 
-            instanceName = self._getInstanceNameFromImage(image)
-            instanceDescription = self._getInstanceDescriptionFromImage(image) \
+            instanceName = self.getInstanceNameFromImage(image)
+            instanceDescription = self.getInstanceDescriptionFromImage(image) \
                 or instanceName
 
             inst = self._nodeFactory.newInstance(id = instanceId,
@@ -482,34 +436,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 if x.getInstanceId() in instanceIds ]
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
-
-    def _daemonize(self, function, *args, **kw):
-        pid = os.fork()
-        if pid:
-            os.waitpid(pid, 0)
-            return
-        try:
-            try:
-                pid = os.fork()
-                if pid:
-                    # The first child exits and is waited by the parent
-                    # the finally part will do the os._exit
-                    return
-                # Redirect stdin, stdout, stderr
-                fd = os.open(os.devnull, os.O_RDWR)
-                os.dup2(fd, 0)
-                os.dup2(fd, 1)
-                os.dup2(fd, 2)
-                os.close(fd)
-                # Create new process group
-                os.setsid()
-
-                os.chdir('/')
-                function(*args, **kw)
-            except Exception:
-                os._exit(1)
-        finally:
-            os._exit(0)
 
     def _putImage(self, vmFile, srUuid, taskRef):
         srRef = self.client.xenapi.SR.get_by_uuid(srUuid)
@@ -572,25 +498,35 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
         finally:
             util.rmtree(tmpDir)
 
-    def _launchInstance(self, instanceId, image, instanceType, srUuid,
-            instanceName, instanceDescription):
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+            image, descriptorData)
+        getField = descriptorData.getField
+        srUuid = getField('storageRepository')
+        params['srUuid'] = srUuid
+        return params
+
+    def launchInstanceProcess(self, image, **launchParams):
+        ppop = launchParams.pop
+        instanceId = ppop('instanceId')
+        srUuid = ppop('srUuid')
+        instanceName = ppop('instanceName')
+        instanceDescription = ppop('instanceDescription')
+
         cloudConfig = self.drvGetCloudConfiguration()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
-        try:
-            self._instanceStore.setPid(instanceId)
-            if not image.getIsDeployed():
-                self._deployImage(instanceId, image, srUuid)
 
-            imageId = image.getInternalTargetId()
+        if not image.getIsDeployed():
+            self._deployImage(instanceId, image, srUuid)
 
-            self._setState(instanceId, 'Cloning template')
-            realId = self.cloneTemplate(imageId, instanceName,
-                instanceDescription)
-            self._setState(instanceId, 'Launching')
-            self.startVm(realId)
-        finally:
-            self._instanceStore.delete(instanceId)
+        imageId = image.getInternalTargetId()
+
+        self._setState(instanceId, 'Cloning template')
+        realId = self.cloneTemplate(imageId, instanceName,
+            instanceDescription)
+        self._setState(instanceId, 'Launching')
+        self.startVm(realId)
 
     def _getImagesFromGrid(self):
         cloudAlias = self.getCloudAlias()
@@ -649,13 +585,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 images.buildToNodeFieldMap)
             imageList.append(image)
         return imageList
-
-    def _getInstanceTypes(self):
-        ret = VWS_InstanceTypes()
-        ret.extend(self._nodeFactory.newInstanceType(
-                id = x, instanceTypeId = x, description = y)
-            for (x, y) in VWS_InstanceTypes.idMap)
-        return ret
 
     def _killRunningProcessesForInstances(self, synthesizedInstIds):
         # For synthesized instances, try to kill the pid
@@ -772,39 +701,6 @@ class XenEntClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 label = "%s (%s)" % (srRecNameLabel, srRecType)
             uuidsFound[uuid] = (label, srRec['name_description'])
         return [ (x, uuidsFound[x]) for x in ret if uuidsFound[x] ]
-
-class LaunchInstanceParameters(object):
-    __slots__ = [
-        'duration', 'imageId', 'instanceType',
-    ]
-
-    def __init__(self, xmlString=None):
-        if xmlString:
-            self.load(xmlString)
-
-    def load(self, xmlString):
-        from catalogService import newInstance
-        node = newInstance.Handler().parseString(xmlString)
-        image = node.getImage()
-        imageId = image.getId()
-        self.imageId = self._extractId(imageId)
-        self.duration = node.getDuration()
-        if self.duration is None:
-            raise errors.ParameterError('duration was not specified')
-
-        instanceType = node.getInstanceType()
-        if instanceType is None:
-            instanceType = 'vws.small'
-        else:
-            instanceType = instanceType.getId() or 'vws.small'
-            instanceType = self._extractId(instanceType)
-        self.instanceType = instanceType
-
-    @staticmethod
-    def _extractId(value):
-        if value is None:
-            return None
-        return urllib.unquote(os.path.basename(value))
 
 class XenEntHostCache(object):
     __slots__ = ['client', 'hostNameMap', 'hostRefMap']

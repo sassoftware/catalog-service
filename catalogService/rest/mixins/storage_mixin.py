@@ -13,7 +13,11 @@ from catalogService import errors
 from catalogService import instanceStore
 from catalogService import storage
 
+from catalogService.rest import baseDriver
+
 class StorageMixin(object):
+    instanceStorageClass = storage.DiskStorage
+
     @classmethod
     def configureCloud(cls, store, config):
         cloudName = cls._sanitizeKey(cls._getCloudNameFromConfig(config))
@@ -46,7 +50,7 @@ class StorageMixin(object):
             self.cloudType)
         cfg = storage.StorageConfig(storagePath = path)
 
-        dstore = storage.DiskStorage(cfg)
+        dstore = self.instanceStorageClass(cfg)
         return instanceStore.InstanceStore(dstore, keyPrefix)
 
     def _getCloudCredentialsForUser(self, cloudName):
@@ -152,3 +156,26 @@ class StorageMixin(object):
         self.log_debug("Instance %s: setting state to `%s'", instanceId, state)
         return self._instanceStore.setState(instanceId, state)
 
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self, image,
+            descriptorData)
+        imageId = params['imageId']
+        instanceName = params['instanceName']
+        instanceId = self._instanceStore.newKey(imageId = imageId)
+        self._instanceStore.setInstanceName(instanceId, instanceName)
+        self._instanceStore.setState(instanceId, 'Creating')
+
+        params['instanceId'] = instanceId
+        return params
+
+    def launchInstanceInBackground(self, image, **params):
+        instanceId = params['instanceId']
+        self._instanceStore.setPid(instanceId)
+        try:
+            self.launchInstanceProcess(image, **params)
+        finally:
+            self._instanceStore.deletePid(instanceId)
+            self.launchInstanceInBackgroundCleanup(image, **params)
+
+    def launchInstanceInBackgroundCleanup(self, image, **params):
+        pass

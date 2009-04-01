@@ -12,7 +12,6 @@ class NodeFactory(object):
         'credentialsDescriptorFactory',
         'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
-        'environmentCloudFactory', 'environmentFactory',
         'imageFactory', 'instanceFactory', 'instanceUpdateStatusFactory',
         'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName', 'userId']
@@ -101,25 +100,6 @@ class NodeFactory(object):
         node.setUpdateStatus(updateStatus)
         return node
 
-    def newEnvironment(self, *args, **kwargs):
-        node = self.environmentFactory(*args, **kwargs)
-        return node
-
-    def newInstanceType(self, *args, **kwargs):
-        node = self.instanceTypeFactory(*args, **kwargs)
-        node.setId(self.getInstanceTypeUrl(node))
-        return node
-
-    def newKeyPair(self, *args, **kwargs):
-        node = self.keyPairFactory(*args, **kwargs)
-        node.setId(self.getKeyPairUrl(node))
-        return node
-
-    def newSecurityGroup(self, *args, **kwargs):
-        node = self.securityGroupFactory(*args, **kwargs)
-        node.setId(self.getSecurityGroupUrl(node))
-        return node
-
     def newLaunchDescriptor(self, descriptor):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
@@ -148,19 +128,6 @@ class NodeFactory(object):
     def getInstanceUrl(self, node):
         return self.join(self.getCloudUrl(node), 'instances',
                         self._quote(node.getId()))
-
-    def getInstanceTypeUrl(self, node):
-        cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'instanceTypes', self._quote(node.getId()))
-
-    def getKeyPairUrl(self, node):
-        cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'keyPairs', self._quote(node.getId()))
-
-    def getSecurityGroupUrl(self, node):
-        cloudUrl = self._getCloudUrlFromParams()
-        return self.join(cloudUrl, 'securityGroups',
-                         self._quote(node.getId()))
 
     def _getCloudTypeUrl(self, cloudType):
         return self.join(self.baseUrl, 'clouds', cloudType)

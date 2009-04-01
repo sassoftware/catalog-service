@@ -177,7 +177,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
+class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     Image = VWS_Image
     Instance = VWS_Instance
@@ -229,37 +229,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                          description = cloudConfig['description'],
                          cloudAlias = cloudConfig['alias'])
         return cld
-
-    def drvLaunchInstance(self, descriptorData, requestIPAddress):
-        client = self.client
-        getField = descriptorData.getField
-
-        imageId = getField('imageId')
-
-        image = self.getImage(imageId)
-        if not image:
-            raise errors.HttpNotFound()
-
-        instanceName = self._getInstanceNameFromImage(image)
-        instanceDescription = self._getInstanceDescriptionFromImage(image) \
-            or instanceName
-
-        instanceId = self._instanceStore.newKey(imageId = imageId)
-        self._daemonize(self._launchInstance,
-                        instanceId, image,
-                        duration=getField('duration'),
-                        instanceType=getField('instanceType'))
-        cloudAlias = client.getCloudAlias()
-        instanceList = instances.BaseInstances()
-        instance = self._nodeFactory.newInstance(id=instanceId,
-                                        instanceId=instanceId,
-                                        instanceName=instanceName,
-                                        instanceDescription=instanceDescription,
-                                        imageId=imageId,
-                                        cloudName=self.cloudName,
-                                        cloudAlias=cloudAlias)
-        instanceList.append(instance)
-        return instanceList
 
     def terminateInstances(self, instanceIds):
         client = self.client
@@ -352,9 +321,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
 
     def getImage(self, imageId):
         return self.getImages([imageId])[0]
-
-    def getInstanceTypes(self):
-        return self._getInstanceTypes()
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.client.getCloudAlias()
@@ -454,30 +420,35 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             instanceList.append(inst)
         return instanceList
 
-    def _launchInstance(self, instanceId, image, duration,
-                        instanceType):
-        try:
-            self._instanceStore.setPid(instanceId)
-            if not image.getIsDeployed():
-                self._setState(instanceId, 'Downloading image')
-                dlImagePath = self._downloadImage(img, imageExtraData)
-                self._setState(instanceId, 'Preparing image')
-                imgFile = self._prepareImage(dlImagePath)
-                self._setState(instanceId, 'Publishing image')
-                self._publishImage(imgFile)
-            imageId = image.getImageId()
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+            image, descriptorData)
+        getField = descriptorData.getField
+        duration = getField('duration')
+        params['duration'] = duration
+        return params
 
-            def callback(realId):
-                self._instanceStore.setId(instanceId, realId)
-                # We no longer manage the state ourselves
-                self._setState(instanceId, None)
-            self._setState(instanceId, 'Launching')
+    def launchInstanceProcess(self, image, **launchParams):
+        instanceId = launchParams.pop('instanceId')
+        duration = launchParams.pop('duration')
+        self._instanceStore.setPid(instanceId)
+        if not image.getIsDeployed():
+            self._setState(instanceId, 'Downloading image')
+            dlImagePath = self._downloadImage(img, imageExtraData)
+            self._setState(instanceId, 'Preparing image')
+            imgFile = self._prepareImage(dlImagePath)
+            self._setState(instanceId, 'Publishing image')
+            self._publishImage(imgFile)
+        imageId = image.getImageId()
 
-            realId = self.client.launchInstances([imageId],
-                duration = duration, callback = callback)
+        def callback(realId):
+            self._instanceStore.setId(instanceId, realId)
+            # We no longer manage the state ourselves
+            self._setState(instanceId, None)
+        self._setState(instanceId, 'Launching')
 
-        finally:
-            self._instanceStore.deletePid(instanceId)
+        realId = self.client.launchInstances([imageId],
+            duration = duration, callback = callback)
 
     def _prepareImage(self, downloadFilePath):
         retfile = self.client._repackageImage(downloadFilePath)
@@ -557,13 +528,6 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def _getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('factory')
 
-    def _getInstanceTypes(self):
-        ret = VWS_InstanceTypes()
-        ret.extend(self._nodeFactory.newInstanceType(
-                id = x, instanceTypeId = x, description = y)
-            for (x, y) in VWS_InstanceTypes.idMap)
-        return ret
-
     def _killRunningProcessesForInstances(self, nonGlobusInstIds):
         # For non-globus instances, try to kill the pid
         for instId in nonGlobusInstIds:
@@ -578,37 +542,3 @@ class VWSClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                         raise
             # At this point the instance doesn't exist anymore
             self._instanceStore.delete(instId)
-
-
-class LaunchInstanceParameters(object):
-    __slots__ = [
-        'duration', 'imageId', 'instanceType',
-    ]
-
-    def __init__(self, xmlString=None):
-        if xmlString:
-            self.load(xmlString)
-
-    def load(self, xmlString):
-        from catalogService import newInstance
-        node = newInstance.Handler().parseString(xmlString)
-        image = node.getImage()
-        imageId = image.getId()
-        self.imageId = self._extractId(imageId)
-        self.duration = node.getDuration()
-        if self.duration is None:
-            raise errors.ParameterError('duration was not specified')
-
-        instanceType = node.getInstanceType()
-        if instanceType is None:
-            instanceType = 'vws.small'
-        else:
-            instanceType = instanceType.getId() or 'vws.small'
-            instanceType = self._extractId(instanceType)
-        self.instanceType = instanceType
-
-    @staticmethod
-    def _extractId(value):
-        if value is None:
-            return None
-        return urllib.unquote(os.path.basename(value))

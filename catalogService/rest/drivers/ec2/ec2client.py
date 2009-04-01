@@ -308,7 +308,7 @@ class EC2Client(baseDriver.BaseDriver):
         store = self._getConfigurationDataStore()
         if not store.get('enabled'):
             return {}
-        ret = dict(name = 'aws', cloudAlias = 'ec2',
+        ret = dict(name = 'aws', alias = 'ec2', cloudAlias = 'ec2',
             fullDescription = EC2_DESCRIPTION,
             )
         if self._mintClient and isAdmin:
@@ -484,7 +484,7 @@ class EC2Client(baseDriver.BaseDriver):
         parameters = CloudParameters(parameters)
         pass
 
-    def drvLaunchInstance(self, descriptorData, requestIPAddress):
+    def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
         getField = descriptorData.getField
         remoteIp = getField('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to
@@ -602,9 +602,6 @@ class EC2Client(baseDriver.BaseDriver):
             constraints = dict(constraintName = 'length', value = 256))
         return descr
 
-    def getInstanceTypes(self):
-        return self._getInstanceTypes()
-
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
         assert(remoteIPAddress)
         # add the security group if it's not present already
@@ -670,8 +667,8 @@ class EC2Client(baseDriver.BaseDriver):
             properties[attr] = getattr(instance, botoAttr, None)
         # come up with a sane name
 
-        instanceName = self._getInstanceNameFromImage(imageNode)
-        instanceDescription = self._getInstanceDescriptionFromImage(imageNode) \
+        instanceName = self.getInstanceNameFromImage(imageNode)
+        instanceDescription = self.getInstanceDescriptionFromImage(imageNode) \
             or instanceName
         
         properties['instanceName'] = instanceName
@@ -713,35 +710,12 @@ class EC2Client(baseDriver.BaseDriver):
                 getattr(image, methodName)(imageData.get(key))
         return imageList
 
-    def _getInstanceTypes(self):
-        ret = EC2_InstanceTypes()
-        ret.extend(self._nodeFactory.newInstanceType(
-                id = x, instanceTypeId = x, description = y)
-            for (x, y) in EC2_InstanceTypes.idMap)
-        return ret
-
-    def _getKeyPairs(self, keynames = None):
-        ret = keypairs.BaseKeyPairs()
-        ret.extend(self._nodeFactory.newKeyPair(id = x[0], keyName = x[0],
-            keyFingerprint = x[1])
-            for x in self._cliGetKeyPairs(keynames))
-        return ret
-
     def _cliGetKeyPairs(self, keynames = None):
         try:
             rs = self.client.get_all_key_pairs(keynames = keynames)
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, e.message, e.body)
         return [ (x.name, x.fingerprint) for x in rs ]
-
-    def _getSecurityGroups(self, groupNames = None):
-        ret = securityGroups.BaseSecurityGroups()
-        for sg in self._cliGetSecurityGroups(groupNames):
-            sgObj = self._nodeFactory.newSecurityGroup(
-                id = sg[0], groupName = sg[0], ownerId = sg[2],
-                description = sg[1])
-            ret.append(sgObj)
-        return ret
 
     def _cliGetSecurityGroups(self, groupNames = None):
         try:

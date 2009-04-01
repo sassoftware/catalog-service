@@ -39,8 +39,12 @@ class InstancesController(BaseCloudController):
         "launch a new instance"
         request.logger.info("User %s: launching instance in %s/%s" % (
             request.auth[0], self.driver.cloudType, cloudName))
+        # We need to pass in authentication information, downloading private
+        # images requires that.
         insts = self.driver(request, cloudName).launchInstance(request.read(),
-                                                               request.host)
+                                                               request.host,
+                                                               request.auth,
+                                                               )
         request.logger.info("User %s: launched instance %s/%s/%s with image %s"
             % ( request.auth[0], self.driver.cloudType, cloudName,
             ','.join([os.path.basename(x.getInstanceId()) for x in insts]),
@@ -51,12 +55,6 @@ class InstancesController(BaseCloudController):
         insts = self.driver(request, cloudName).terminateInstance(instanceId)
         return XmlResponse(insts)
 
-
-class InstanceTypesController(BaseCloudController):
-    modelName = 'instanceTypeId'
-
-    def index(self, request, cloudName):
-        return XmlResponse(self.driver(request, cloudName).getInstanceTypes())
 
 class UserEnvironmentController(BaseCloudController):
     def index(self, request, cloudName, userName):
@@ -105,8 +103,7 @@ class CloudTypeModelController(BaseCloudController):
                 descriptor = DescriptorController,
                 images = ImagesController,
                 instances = InstancesController,
-                users = UsersController,
-                instanceTypes = InstanceTypesController)
+                users = UsersController)
 
     def splitId(self, url):
         cloudName, rest = BaseCloudController.splitId(self, url)

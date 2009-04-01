@@ -123,9 +123,17 @@ def formatSize(size):
         div = div * 1024
     return '%d TiB' %(size / div)
 
-class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
+class InstanceStorage(storage.DiskStorage):
+    """
+    VMware instance ids should look like a UUID
+    """
+    def _generateString(self, length):
+        return uuidgen()
+
+class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     Image = VMwareImage
     cloudType = 'vmware'
+    instanceStorageClass = InstanceStorage
 
     _credNameMap = [
         ('username', 'username'),
@@ -141,6 +149,7 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
+        self._instanceStore = None
 
     @classmethod
     def isDriverFunctional(cls):
@@ -202,49 +211,19 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             cloudAlias = cloudConfig['alias'])
         return cld
 
-    def _daemonize(self, *args, **kw):
-        self._cloudClient = None
-        return baseDriver.BaseDriver._daemonize(self, *args, **kw)
-
-    def drvLaunchInstance(self, descriptorData, requestIPAddress):
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+            image, descriptorData)
         getField = descriptorData.getField
-        imageId = os.path.basename(getField('imageId'))
-        image = self.getImages([imageId])[0]
-        if not image:
-            raise errors.HttpNotFound()
-
-        instanceName = getField('instanceName')
-        instanceName = instanceName or self._getInstanceNameFromImage(image)
-        instanceDescription = getField('instanceDescription')
-        instanceDescription = (instanceDescription
-                               or self._getInstanceDescriptionFromImage(image)
-                               or instanceName)
-        dataCenter = getField('dataCenter')
-        cr = getField('cr-%s' %dataCenter)
-        dataStore = getField('dataStore-%s' %cr)
-        rp = getField('resourcePool-%s' %cr)
-
-        instanceId = uuidgen()
-        self._instanceStore.setImageId(instanceId, imageId)
-        # FIXME - should not be using internal _set method
-        self._instanceStore._set(instanceId, 'instanceName', instanceName)
-        self._instanceStore.setState(instanceId, 'Creating')
-
-        self._daemonize(self._launchInstance, instanceId, image,
-                        dataCenter, cr, dataStore, rp, instanceName,
-                        instanceDescription)
-        cloudAlias = self.getCloudAlias()
-        instanceList = instances.BaseInstances()
-        instance = self._nodeFactory.newInstance(
-            id=instanceId,
-            instanceId=instanceId,
-            imageId=imageId,
-            instanceName=instanceName,
-            instanceDescription=instanceDescription,
-            cloudName=self.cloudName,
-            cloudAlias=cloudAlias)
-        instanceList.append(instance)
-        return instanceList
+        cr = getField('cr-%s' % dataCenter)
+        rp = getField('resourcePool-%s' % cr)
+        params.update(dict(
+            dataCenter = getField('dataCenter'),
+            dataStore = getField('dataStore-%s' % cr),
+            computeResource = cr,
+            resourcePool = rp,
+        ))
+        return params
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName('VMware Launch Parameters')
@@ -431,10 +410,6 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
                 continue
             newImageList.append(imagesById[imageId])
         return newImageList
-
-    def getInstanceTypes(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        return self._getInstanceTypes()
 
     def getCloudAlias(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)
@@ -700,40 +675,44 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
 
-    def _launchInstance(self, instanceId, image, dataCenter,
-                        computeResource, dataStore, resourcePool,
-                        instanceName, instanceDescription):
+    def launchInstanceProcess(self, image, **launchParams):
+        ppop = launchParams.pop
+        imageId = ppop('imageId')
+        instanceId = ppop('instanceId')
+        dataCenter = ppop('dataCenter')
+        computeResource = ppop('computeResource')
+        dataStore = ppop('dataStore')
+        resourcePool= ppop('resourcePool')
+        instanceName = ppop('instanceName')
+        instanceDescription = ppop('instanceDescription')
+
         vm = None
-        self._instanceStore.setPid(instanceId)
-        try:
-            useTemplate = not self.client.isESX()
-            if not image.getIsDeployed():
-                if useTemplate:
-                    # if we can use a template, deploy the image
-                    # as a template with the imageId as the uuid
-                    vmName = 'template-' + image.getBaseFileName()
-                    uuid = image.getImageId()
-                else:
-                    # otherwise, we'll use the instance name and instace
-                    # uuid for deployment
-                    vmName = instanceName
-                    uuid = instanceId
-                vm = self._deployImage(instanceId, image, dataCenter,
-                                       dataStore, computeResource,
-                                       resourcePool, vmName, uuid)
-                if useTemplate:
-                    self.client.markAsTemplate(vm=vm)
 
+        useTemplate = not self.client.isESX()
+        if not image.getIsDeployed():
             if useTemplate:
-                # mark the VM as a template, clone, and launch it
-                self._setState(instanceId, 'Cloning template')
-                self._cloneTemplate(image.getImageId(), instanceName,
-                                    instanceDescription, instanceId,
-                                    dataCenter, computeResource,
-                                    dataStore, resourcePool, vm=vm)
+                # if we can use a template, deploy the image
+                # as a template with the imageId as the uuid
+                vmName = 'template-' + image.getBaseFileName()
+                uuid = image.getImageId()
             else:
-                self.client.startVM(uuid=instanceId)
-            self._setState(instanceId, 'Launching')
-        finally:
-            self._instanceStore.deletePid(instanceId)
+                # otherwise, we'll use the instance name and instace
+                # uuid for deployment
+                vmName = instanceName
+                uuid = instanceId
+            vm = self._deployImage(instanceId, image, dataCenter,
+                                   dataStore, computeResource,
+                                   resourcePool, vmName, uuid)
+            if useTemplate:
+                self.client.markAsTemplate(vm=vm)
 
+        if useTemplate:
+            # mark the VM as a template, clone, and launch it
+            self._setState(instanceId, 'Cloning template')
+            self._cloneTemplate(image.getImageId(), instanceName,
+                                instanceDescription, instanceId,
+                                dataCenter, computeResource,
+                                dataStore, resourcePool, vm=vm)
+        else:
+            self.client.startVM(uuid=instanceId)
+        self._setState(instanceId, 'Launching')
