@@ -246,24 +246,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def drvVerifyCloudConfiguration(self, config):
         return
 
-    @classmethod
-    def _getCloudNameFromConfig(cls, config):
-        return config['name']
-
-    @classmethod
-    def _getCloudNameFromDescriptorData(cls, descriptorData):
-        return descriptorData.getField('name')
-
-    def isValidCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        return bool(cloudConfig)
-
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
-                         description = cloudConfig['description'],
-                         cloudAlias = cloudConfig['alias'])
-        return cld
-
     def terminateInstances(self, instanceIds):
         client = self.client
 
@@ -293,7 +275,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def drvGetImages(self, imageIds):
         imageList = self._getImagesFromGrid()
-        imageList = self._addMintDataToImageList(imageList)
+        imageList = self.addMintDataToImageList(imageList, 'XEN_OVA')
 
         # now that we've grabbed all the images, we can return only the one
         # we want.  This is horribly inefficient, but neither the mint call
@@ -365,40 +347,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
 
-        storeInstanceKeys = self._instanceStore.enumerate()
-        for storeKey in storeInstanceKeys:
-            instanceId = os.path.basename(storeKey)
-            expiration = self._instanceStore.getExpiration(storeKey)
-            if expiration is None or time.time() > float(expiration):
-                # This instance exists only in the store, and expired
-                self._instanceStore.delete(storeKey)
-                continue
-            imageId = self._instanceStore.getImageId(storeKey)
-            imagesL = self.getImages([imageId])
-            if not imagesL:
-                # We no longer have this image. Junk the instance
-                self._instanceStore.delete(storeKey)
-                continue
-            image = imagesL[0]
-
-            instanceName = self.getInstanceNameFromImage(image)
-            instanceDescription = self.getInstanceDescriptionFromImage(image) \
-                or instanceName
-
-            inst = self._nodeFactory.newInstance(id = instanceId,
-                imageId = imageId,
-                instanceId = instanceId,
-                instanceName = instanceName,
-                instanceDescription = instanceDescription,
-                dnsName = 'UNKNOWN',
-                publicDnsName = 'UNKNOWN',
-                privateDnsName = 'UNKNOWN',
-                state = self._instanceStore.getState(storeKey),
-                launchTime = None,
-                cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
-
-            instanceList.append(inst)
+        instanceList.extend(self.getInstancesFromStore())
 
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
@@ -477,26 +426,22 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self._setVmMetadata(vmRef, checksum = checksum)
         return vmRef, vmUuid
 
-    def _deployImage(self, instanceId, image, srUuid):
+    def _deployImage(self, instanceId, image, auth, srUuid):
         tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
         try:
-            try:
-                downloadUrl = image.getDownloadUrl()
-                checksum = image.getImageId()
+            downloadUrl = image.getDownloadUrl()
+            checksum = image.getImageId()
 
-                self._setState(instanceId, 'Downloading image')
-                path = self._downloadImage(image, tmpDir, extension = '.xva')
+            self._setState(instanceId, 'Downloading image')
+            path = self._downloadImage(image, tmpDir, extension = '.xva')
 
-                self._setState(instanceId, 'Importing image')
-                templRef, templUuid = self._importImage(image, path, srUuid)
+            self._setState(instanceId, 'Importing image')
+            templRef, templUuid = self._importImage(image, path, srUuid)
 
-                image.setImageId(templUuid)
-                image.setInternalTargetId(templUuid)
-            except:
-                self._setState(instanceId, 'Error')
-                raise
+            image.setImageId(templUuid)
+            image.setInternalTargetId(templUuid)
         finally:
-            util.rmtree(tmpDir)
+            util.rmtree(tmpDir, ignore_errors = True)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
@@ -506,7 +451,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         params['srUuid'] = srUuid
         return params
 
-    def launchInstanceProcess(self, image, **launchParams):
+    def launchInstanceProcess(self, image, auth, **launchParams):
         ppop = launchParams.pop
         instanceId = ppop('instanceId')
         srUuid = ppop('srUuid')
@@ -518,7 +463,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         nameDescription = image.getBuildDescription()
 
         if not image.getIsDeployed():
-            self._deployImage(instanceId, image, srUuid)
+            self._deployImage(instanceId, image, auth, srUuid)
 
         imageId = image.getInternalTargetId()
 
@@ -557,34 +502,9 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             imageList.append(image)
         return imageList
 
-    def _addMintDataToImageList(self, imageList):
-        cloudAlias = self.getCloudAlias()
-
-        mintImages = self._mintClient.getAllBuildsByType('XEN_OVA')
-        # Convert the list into a map keyed on the sha1
-        mintImages = dict((x['sha1'], x) for x in mintImages)
-
-        for image in imageList:
-            imageId = image.getImageId()
-            mintImageData = mintImages.pop(imageId, {})
-            image.setIs_rBuilderImage(bool(mintImageData))
-            image.setIsDeployed(True)
-            if not mintImageData:
-                continue
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-
-        # Add the rest of the images coming from mint
-        for imgChecksum, mintImageData in sorted(mintImages.iteritems()):
-            image = self._nodeFactory.newImage(id = imgChecksum,
-                    imageId = imgChecksum, isDeployed = False,
-                    is_rBuilderImage = True,
-                    cloudName = self.cloudName,
-                    cloudAlias = cloudAlias)
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-            imageList.append(image)
-        return imageList
+    @classmethod
+    def getImageIdFromMintImage(cls, image):
+        return image.get('sha1')
 
     def _killRunningProcessesForInstances(self, synthesizedInstIds):
         # For synthesized instances, try to kill the pid

@@ -262,7 +262,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def drvGetImages(self, imageIds):
         imageList = self._getImagesFromGrid()
-        imageList = self._addMintDataToImageList(imageList)
+        imageList = self.addMintDataToImageList(imageList, 'VWS')
 
         # now that we've grabbed all the images, we can return only the one
         # we want.  This is horribly inefficient, but neither the mint call
@@ -428,17 +428,22 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         params['duration'] = duration
         return params
 
-    def launchInstanceProcess(self, image, **launchParams):
+    def launchInstanceProcess(self, image, auth, **launchParams):
         instanceId = launchParams.pop('instanceId')
         duration = launchParams.pop('duration')
         self._instanceStore.setPid(instanceId)
         if not image.getIsDeployed():
-            self._setState(instanceId, 'Downloading image')
-            dlImagePath = self._downloadImage(img, imageExtraData)
-            self._setState(instanceId, 'Preparing image')
-            imgFile = self._prepareImage(dlImagePath)
-            self._setState(instanceId, 'Publishing image')
-            self._publishImage(imgFile)
+
+            tmpDir = tempfile.mkdtemp(prefix="vws-download-")
+            try:
+                self._setState(instanceId, 'Downloading image')
+                dlImagePath = self._downloadImage(img, tmpDir, auth = auth)
+                self._setState(instanceId, 'Preparing image')
+                imgFile = self._prepareImage(dlImagePath)
+                self._setState(instanceId, 'Publishing image')
+                self._publishImage(imgFile)
+            finally:
+                util.rmtree(tmpDir, ignore_errors = True)
         imageId = image.getImageId()
 
         def callback(realId):
@@ -476,35 +481,9 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             imageList.append(image)
         return imageList
 
-    def _addMintDataToImageList(self, imageList):
-        cloudAlias = self.client.getCloudAlias()
-
-        mintImageList = self._mintClient.getAllBuildsByType('VWS')
-        # Convert the images coming from rbuilder to .gz, to match what we're
-        # storing in globus
-        mintImageDict = dict((x.get('sha1') + '.gz', x) for x in mintImageList)
-
-        for image in imageList:
-            imageId = image.getImageId()
-            mintImageData = mintImageDict.pop(imageId, {})
-            image.setIs_rBuilderImage(bool(mintImageData))
-            image.setIsDeployed(True)
-            if not mintImageData:
-                continue
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-
-        # Add the rest of the images coming from mint
-        for imageId, mintImageData in sorted(mintImageDict.iteritems()):
-            image = self._nodeFactory.newImage(id = imageId,
-                    imageId = imageId, isDeployed = False,
-                    is_rBuilderImage = True,
-                    cloudName = self.cloudName,
-                    cloudAlias = cloudAlias)
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-            imageList.append(image)
-        return imageList
+    @classmethod
+    def getImageIdFromMintImage(cls, image):
+        return image.get('sha1') + '.gz'
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):

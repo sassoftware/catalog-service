@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+import urllib
 import urllib2
 
 from conary.lib import util
@@ -252,7 +253,7 @@ class BaseDriver(object):
 
         params = self.getLaunchInstanceParameters(image, descriptorData)
 
-        self.backgroundRun(self.launchInstanceInBackground, image,
+        self.backgroundRun(self.launchInstanceInBackground, image, auth,
                            **params)
         newInstanceParams = self.getNewInstanceParameters(image,
             descriptorData, params)
@@ -379,7 +380,7 @@ class BaseDriver(object):
             raise errors.DownloadError("Unable to download file")
         util.copyfileobj(resp, file(destFile, 'w'))
 
-    def _downloadImage(self, image, tmpDir, extension = '.tgz'):
+    def _downloadImage(self, image, tmpDir, auth = None, extension = '.tgz'):
         imageId = image.getImageId()
         build = self._mintClient.getBuild(image.getBuildId())
 
@@ -434,3 +435,80 @@ class BaseDriver(object):
                     os._exit(1)
         finally:
             os._exit(0)
+
+    def addMintDataToImageList(self, imageList, imageType):
+        cloudAlias = self.getCloudAlias()
+
+        mintImages = self._mintClient.getAllBuildsByType(imageType)
+        # Convert the list into a map keyed on the sha1 converted into
+        # uuid format
+        mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
+
+        for image in imageList:
+            imageId = image.getImageId()
+            mintImageData = mintImages.pop(imageId, {})
+            image.setIs_rBuilderImage(bool(mintImageData))
+            image.setIsDeployed(True)
+            if not mintImageData:
+                continue
+            self.addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+
+        # Add the rest of the images coming from mint
+        for uuid, mintImageData in sorted(mintImages.iteritems()):
+            image = self._nodeFactory.newImage(id=uuid,
+                    imageId=uuid, isDeployed=False,
+                    is_rBuilderImage=True,
+                    cloudName=self.cloudName,
+                    cloudAlias=cloudAlias)
+            self.addImageDataFromMintData(image, mintImageData,
+                images.buildToNodeFieldMap)
+            imageList.append(image)
+        return imageList
+
+    @classmethod
+    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        shortName = os.path.basename(mintImageData['baseFileName'])
+        longName = "%s/%s" % (mintImageData['buildId'], shortName)
+        image.setShortName(shortName)
+        image.setLongName(longName)
+        image.setDownloadUrl(mintImageData['downloadUrl'])
+        image.setBuildPageUrl(mintImageData['buildPageUrl'])
+        image.setBaseFileName(mintImageData['baseFileName'])
+        image.setBuildId(mintImageData['buildId'])
+
+        for key, methodName in methodMap.iteritems():
+            getattr(image, methodName)(mintImageData.get(key))
+
+
+class HTTPClient(object):
+    def __init__(self, server, username, password):
+        self.server = server
+        self.username = username
+        self.password = password
+
+        self.opener = urllib2.OpenerDirector()
+        self.opener.add_handler(urllib2.HTTPSHandler())
+        self.opener.add_handler(urllib2.HTTPHandler())
+        self._cookie = None
+
+    def getCookie(self):
+        if self._cookie is not None:
+            return self._cookie
+
+        loginUrl = "https://%s/processLogin" % self.server
+        data = urllib.urlencode([
+            ('username', self.username),
+            ('password', self.password),
+            ('rememberMe', "1"),
+            ('to', urllib.quote('http://%s/' % self.server)),
+        ])
+        req = urllib2.Request(loginUrl, data = data, headers = {})
+        ret = self.opener.open(req)
+        # Junk the response
+        ret.read()
+        cookie = ret.headers.get('set-cookie')
+        if not cookie or not cookie.startswith('pysid'):
+            return None
+        self._cookie = cookie.split(';', 1)[0]
+        return self._cookie

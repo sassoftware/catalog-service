@@ -178,39 +178,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return self._vicfg
     vicfg = property(_getVIConfig)
 
-    @classmethod
-    def _getCloudNameFromConfig(cls, config):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        return config['name']
-
-    @classmethod
-    def _getCloudNameFromDescriptorData(cls, descriptorData):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        return descriptorData.getField('name')
-
-    def _enumerateConfiguredClouds(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        if not self.isDriverFunctional():
-            return []
-        store = self._getConfigurationDataStore()
-        ret = []
-        for cloudName in sorted(store.enumerate()):
-            ret.append(self._getCloudConfiguration(cloudName))
-        return ret
-
-    def isValidCloudName(self, cloudName):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        return bool(cloudConfig)
-
-    def _createCloudNode(self, cloudConfig):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cld = self._nodeFactory.newCloud(
-            cloudName = cloudConfig['name'],
-            description = cloudConfig['description'],
-            cloudAlias = cloudConfig['alias'])
-        return cld
-
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
             image, descriptorData)
@@ -392,7 +359,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory()
-        imageList = self._addMintDataToImageList(imageList)
+        imageList = self.addMintDataToImageList(imageList, 'VMWARE_ESX_IMAGE')
 
         # FIXME: duplicate code
         # now that we've grabbed all the images, we can return only the one
@@ -472,50 +439,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
 
-        # FIXME: duplicate code
-        storeInstanceKeys = self._instanceStore.enumerate()
-        for storeKey in storeInstanceKeys:
-            instanceId = os.path.basename(storeKey)
-            expiration = self._instanceStore.getExpiration(storeKey)
-            if expiration is None or time.time() > float(expiration):
-                # This instance exists only in the store, and expired
-                self._instanceStore.delete(storeKey)
-                continue
-            imageId = self._instanceStore.getImageId(storeKey)
-            updateData = self._instanceStore.getUpdateStatusState(storeKey)
-            imagesL = self.getImages([imageId])
+        instanceList.extend(self.getInstancesFromStore())
 
-            # If there were no images read from the instance store, but there
-            # was update data present, just continue, so that the update data
-            # doesn't get deleted from the store.
-            if not imagesL and updateData:
-                continue
-            elif not imagesL:
-                # We no longer have this image. Junk the instance
-                self._instanceStore.delete(storeKey)
-                continue
-            image = imagesL[0]
-
-            # FIXME: should not be using internal method
-            instanceName = self._instanceStore._get(storeKey, 'instanceName')
-            instanceDescription = self._getInstanceDescriptionFromImage(image) \
-                or instanceName
-
-            inst = self._nodeFactory.newInstance(id = instanceId,
-                imageId = imageId,
-                instanceId = instanceId,
-                instanceName = instanceName,
-                instanceDescription = instanceDescription,
-                dnsName = 'UNKNOWN',
-                publicDnsName = 'UNKNOWN',
-                privateDnsName = 'UNKNOWN',
-                state = self._instanceStore.getState(storeKey),
-                launchTime = 1,
-                cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
-
-            instanceList.append(inst)
-        # END FIXME
         instMap = self.client.getVirtualMachines([ 'name',
                                                    'config.annotation',
                                                    'config.template',
@@ -526,35 +451,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'guest.ipAddress' ])
         return self._buildInstanceList(instMap)
 
-    def _addMintDataToImageList(self, imageList):
-        # FIXME: duplicate code
-        cloudAlias = self.getCloudAlias()
-
-        mintImages = self._mintClient.getAllBuildsByType('VMWARE_ESX_IMAGE')
-        # Convert the list into a map keyed on the sha1 converted into
-        # uuid format
-        mintImages = dict((_uuid(x['sha1']), x) for x in mintImages)
-        for image in imageList:
-            imageId = image.getImageId()
-            mintImageData = mintImages.pop(imageId, {})
-            image.setIs_rBuilderImage(bool(mintImageData))
-            image.setIsDeployed(True)
-            if not mintImageData:
-                continue
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-
-        # Add the rest of the images coming from mint
-        for uuid, mintImageData in sorted(mintImages.iteritems()):
-            image = self._nodeFactory.newImage(id=uuid,
-                    imageId=uuid, isDeployed=False,
-                    is_rBuilderImage=True,
-                    cloudName=self.cloudName,
-                    cloudAlias=cloudAlias)
-            self._addImageDataFromMintData(image, mintImageData,
-                images.buildToNodeFieldMap)
-            imageList.append(image)
-        return imageList
+    @classmethod
+    def getImageIdFromMintImage(cls, image):
+        return _uuid(image.get('sha1'))
 
     def _getTemplatesFromInventory(self):
         """
@@ -619,10 +518,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
-    def _deployImage(self, instanceId, image, dataCenter, dataStore,
+    def _deployImage(self, instanceId, image, auth, dataCenter, dataStore,
                      computeResource, resourcePool, vmName, uuid):
-        downloadUrl = image.getDownloadUrl()
-
         dc = self.vicfg.getDatacenter(dataCenter)
         dcName = dc.properties['name']
 
@@ -643,7 +540,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         try:
             path = self._downloadImage(image, tmpDir)
         except errors.CatalogError, e:
-            self._setState(instanceId, 'Error')
+            util.rmtree(tmpDir, ignore_errors=True)
             raise
 
         vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
@@ -675,7 +572,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
 
-    def launchInstanceProcess(self, image, **launchParams):
+    def launchInstanceProcess(self, image, auth, **launchParams):
         ppop = launchParams.pop
         imageId = ppop('imageId')
         instanceId = ppop('instanceId')
@@ -700,7 +597,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 # uuid for deployment
                 vmName = instanceName
                 uuid = instanceId
-            vm = self._deployImage(instanceId, image, dataCenter,
+            vm = self._deployImage(instanceId, image, auth, dataCenter,
                                    dataStore, computeResource,
                                    resourcePool, vmName, uuid)
             if useTemplate:

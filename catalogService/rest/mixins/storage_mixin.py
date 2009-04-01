@@ -5,6 +5,7 @@
 
 import os
 import sys
+import time
 
 from conary.lib import util
 
@@ -25,6 +26,8 @@ class StorageMixin(object):
             store.set("%s/%s" % (cloudName, k), v)
 
     def _enumerateConfiguredClouds(self):
+        if not self.isDriverFunctional():
+            return []
         store = self._getConfigurationDataStore()
         ret = []
         for cloudName in sorted(store.enumerate()):
@@ -135,20 +138,6 @@ class StorageMixin(object):
         store.delete(self.cloudName)
 
     @classmethod
-    def _addImageDataFromMintData(cls, image, mintImageData, methodMap):
-        shortName = os.path.basename(mintImageData['baseFileName'])
-        longName = "%s/%s" % (mintImageData['buildId'], shortName)
-        image.setShortName(shortName)
-        image.setLongName(longName)
-        image.setDownloadUrl(mintImageData['downloadUrl'])
-        image.setBuildPageUrl(mintImageData['buildPageUrl'])
-        image.setBaseFileName(mintImageData['baseFileName'])
-        image.setBuildId(mintImageData['buildId'])
-
-        for key, methodName in methodMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
-
-    @classmethod
     def _sanitizeKey(cls, key):
         return key.replace('/', '_')
 
@@ -168,14 +157,82 @@ class StorageMixin(object):
         params['instanceId'] = instanceId
         return params
 
-    def launchInstanceInBackground(self, image, **params):
+    def launchInstanceInBackground(self, image, auth, **params):
         instanceId = params['instanceId']
         self._instanceStore.setPid(instanceId)
         try:
-            self.launchInstanceProcess(image, **params)
+            try:
+                self.launchInstanceProcess(image, auth, **params)
+            except:
+                self._setState(instanceId, 'Error')
+                raise
         finally:
             self._instanceStore.deletePid(instanceId)
             self.launchInstanceInBackgroundCleanup(image, **params)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         pass
+
+    def getInstancesFromStore(self):
+        instanceList = []
+        storeInstanceKeys = self._instanceStore.enumerate()
+        for storeKey in storeInstanceKeys:
+            instanceId = os.path.basename(storeKey)
+            expiration = self._instanceStore.getExpiration(storeKey)
+            if expiration is None or time.time() > float(expiration):
+                # This instance exists only in the store, and expired
+                self._instanceStore.delete(storeKey)
+                continue
+            imageId = self._instanceStore.getImageId(storeKey)
+            updateData = self._instanceStore.getUpdateStatusState(storeKey)
+            imagesL = self.getImages([imageId])
+
+            # If there were no images read from the instance store, but there
+            # was update data present, just continue, so that the update data
+            # doesn't get deleted from the store.
+            if not imagesL and updateData:
+                continue
+            elif not imagesL:
+                # We no longer have this image. Junk the instance
+                self._instanceStore.delete(storeKey)
+                continue
+            image = imagesL[0]
+
+            instanceName = self.getInstanceNameFromImage(image)
+            instanceDescription = self.getInstanceDescriptionFromImage(image) \
+                or instanceName
+
+            inst = self._nodeFactory.newInstance(id = instanceId,
+                imageId = imageId,
+                instanceId = instanceId,
+                instanceName = instanceName,
+                instanceDescription = instanceDescription,
+                dnsName = 'UNKNOWN',
+                publicDnsName = 'UNKNOWN',
+                privateDnsName = 'UNKNOWN',
+                state = self._instanceStore.getState(storeKey),
+                launchTime = None,
+                cloudName = self.cloudName,
+                cloudAlias = self.getCloudAlias())
+
+            instanceList.append(inst)
+        return instanceList
+
+    @classmethod
+    def _getCloudNameFromConfig(cls, config):
+        return config['name']
+
+    @classmethod
+    def _getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('name')
+
+    def isValidCloudName(self, cloudName):
+        cloudConfig = self._getCloudConfiguration(cloudName)
+        return bool(cloudConfig)
+
+    def _createCloudNode(self, cloudConfig):
+        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
+                         description = cloudConfig['description'],
+                         cloudAlias = cloudConfig['alias'])
+        return cld
+
