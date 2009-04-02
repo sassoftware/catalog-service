@@ -433,7 +433,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             checksum = image.getImageId()
 
             self._setState(instanceId, 'Downloading image')
-            path = self._downloadImage(image, tmpDir, extension = '.xva')
+            path = self._downloadImage(image, tmpDir, auth = auth, extension = '.xva')
 
             self._setState(instanceId, 'Importing image')
             templRef, templUuid = self._importImage(image, path, srUuid)

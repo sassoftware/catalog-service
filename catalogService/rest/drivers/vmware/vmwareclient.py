@@ -538,7 +538,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self._setState(instanceId, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
-            path = self._downloadImage(image, tmpDir)
+            path = self._downloadImage(image, tmpDir, auth = auth)
         except errors.CatalogError, e:
             util.rmtree(tmpDir, ignore_errors=True)
             raise

@@ -247,9 +247,10 @@ class BaseDriver(object):
 
         imageId = os.path.basename(descriptorData.getField('imageId'))
 
-        image = self.getImages([imageId])[0]
-        if not image:
+        images = self.getImages([imageId])
+        if not images:
             raise errors.HttpNotFound()
+        image = images[0]
 
         params = self.getLaunchInstanceParameters(image, descriptorData)
 
@@ -388,7 +389,17 @@ class BaseDriver(object):
         imageId = os.path.basename(image.getId())
         downloadFilePath = os.path.join(tmpDir, '%s%s' % (imageId, extension))
 
-        self.downloadFile(downloadUrl, downloadFilePath)
+        headers = {}
+        if image.getIsPrivate_rBuilder() and auth:
+            # We need to acquire a pysid cookie
+            netloc = urllib2.urlparse.urlparse(downloadUrl)[1]
+            # XXX we don't allow for weird port numbers
+            host, port = urllib.splitnport(netloc)
+            pysid = CookieClient(host, auth[0], auth[1]).getCookie()
+            if pysid is not None:
+                headers['Cookie'] = pysid
+            # If we could not fetch the pysid, we'll still try to download
+        self.downloadFile(downloadUrl, downloadFilePath, headers = headers)
         return downloadFilePath
 
     def getInstanceDescriptionFromImage(self, imageNode):
@@ -481,7 +492,7 @@ class BaseDriver(object):
             getattr(image, methodName)(mintImageData.get(key))
 
 
-class HTTPClient(object):
+class CookieClient(object):
     def __init__(self, server, username, password):
         self.server = server
         self.username = username
@@ -503,12 +514,16 @@ class HTTPClient(object):
             ('rememberMe', "1"),
             ('to', urllib.quote('http://%s/' % self.server)),
         ])
-        req = urllib2.Request(loginUrl, data = data, headers = {})
-        ret = self.opener.open(req)
-        # Junk the response
-        ret.read()
+        ret = self.makeRequest(loginUrl, data, {})
         cookie = ret.headers.get('set-cookie')
         if not cookie or not cookie.startswith('pysid'):
             return None
         self._cookie = cookie.split(';', 1)[0]
         return self._cookie
+
+    def makeRequest(self, loginUrl, data, headers):
+        req = urllib2.Request(loginUrl, data = data, headers = headers)
+        ret = self.opener.open(req)
+        # Junk the response
+        ret.read()
+        return ret

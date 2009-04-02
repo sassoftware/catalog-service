@@ -93,7 +93,7 @@ class HttpNotFound(CatalogError):
 
 class DownloadError(CatalogError):
     """Error downloading image"""
-    status = 500
+    status = 404
 
 class ErrorMessageCallback(object):
     def processResponse(self, request, response):
