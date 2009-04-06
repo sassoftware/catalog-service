@@ -182,10 +182,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
             image, descriptorData)
         getField = descriptorData.getField
+        dataCenter = getField('dataCenter')
         cr = getField('cr-%s' % dataCenter)
         rp = getField('resourcePool-%s' % cr)
         params.update(dict(
-            dataCenter = getField('dataCenter'),
+            dataCenter = dataCenter,
             dataStore = getField('dataStore-%s' % cr),
             computeResource = cr,
             resourcePool = rp,
