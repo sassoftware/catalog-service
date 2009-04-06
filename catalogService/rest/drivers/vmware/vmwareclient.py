@@ -384,9 +384,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         cloudConfig = self.drvGetCloudConfiguration()
         return cloudConfig['alias']
 
-    def _buildInstanceList(self, instMap):
+    def _buildInstanceList(self, instanceList, instMap):
         cloudAlias = self.getCloudAlias()
-        instanceList = instances.BaseInstances()
         for mor, vminfo in instMap.iteritems():
             if vminfo.get('config.template', False):
                 continue
@@ -434,7 +433,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'guest.ipAddress' ],
                                                   uuidRef)
         
-        return self._buildInstanceList(instMap)[0]
+        return self._buildInstanceList(instanceList, instMap)[0]
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
@@ -450,7 +449,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'config.uuid',
                                                    'config.extraConfig',
                                                    'guest.ipAddress' ])
-        return self._buildInstanceList(instMap)
+        return self._buildInstanceList(instanceList, instMap)
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
