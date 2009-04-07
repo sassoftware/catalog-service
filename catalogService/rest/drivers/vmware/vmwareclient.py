@@ -11,7 +11,6 @@ import tempfile
 
 from conary.lib import util, sha1helper
 
-from catalogService import cimupdater
 from catalogService import clouds
 from catalogService import descriptor
 from catalogService import errors
@@ -166,10 +165,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         except Exception, e:
             # FIXME: better error
             raise errors.PermissionDenied(message = '')
-        # FIXME: refactor this into common code
-        keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
-                               self._sanitizeKey(self.userId))
-        self._instanceStore = self._getInstanceStore(keyPrefix)
         return client
 
     def _getVIConfig(self):
@@ -321,42 +316,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
 
-    def updateInstances(self, instanceIds):
-        instanceList = instances.BaseInstances()
-        for id in instanceIds:
-            instanceList.append(self.getInstance(id))
-
-        for instance in instanceList:
-            newState = self.updateStatusStateUpdating
-            newTime = int(time.time())
-            self._setInstanceUpdateStatus(newState, newTime)
-
-        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
-
-    def updateInstance(self, instanceId):
-        return self.updateInstances([instanceId])
-
-    def _updateInstance(self, instance):
-        host = 'https://%s' % instance.publicDnsName.getText()
-        updater = cimupdater.CIMUpdater(host)
-        updater.checkAndApplyUpdate()
-
-        # Mark the update status as done.
-        newState = self.updateStatusStateDone
-        newTime = int(time.time())
-        self._setInstanceUpdateStatus(newState, newTime)
-
-    def _setInstanceUpdateStatus(self, newState, newTime):
-        instance.getUpdateStatus().setState(newState)
-        instance.getUpdateStatus().setTime(newTime)
-        # Save the update status in the instance store
-        self._instanceStore.setUpdateStatusState(instance.getId(), newState)
-        self._instanceStore.setUpdateStatusTime(instance.getId(), newTime)
-        # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instance.getId(), newTime+10800)
-        self._daemonize(self._updateInstance, instance)
-
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory()
@@ -433,6 +392,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'guest.ipAddress' ],
                                                   uuidRef)
         
+        instanceList = instances.BaseInstances()
         return self._buildInstanceList(instanceList, instMap)[0]
 
     def drvGetInstances(self, instanceIds):

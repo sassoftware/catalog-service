@@ -193,10 +193,6 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
-    def __init__(self, *args, **kwargs):
-        baseDriver.BaseDriver.__init__(self, *args, **kwargs)
-        self._instanceStore = None
-
     @classmethod
     def isDriverFunctional(cls):
         return globuslib.WorkspaceCloudClient.isFunctional()
@@ -215,10 +211,10 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 userCredentials['sshPubKey'], cloudConfig['alias'])
         except globuslib.Error, e:
             raise errors.PermissionDenied(message = str(e))
-        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
-                               cli.userCertHash)
-        self._instanceStore = self._getInstanceStore(keyPrefix)
         return cli
+
+    def _getUserIdForInstanceStore(self):
+        return self._cloudClient.userCertHash
 
     def isValidCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)

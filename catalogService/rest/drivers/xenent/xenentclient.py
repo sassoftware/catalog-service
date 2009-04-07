@@ -214,10 +214,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     _XmlRpcWrapper = "<methodResponse><params><param>%s</param></params></methodResponse>"
 
-    def __init__(self, *args, **kwargs):
-        baseDriver.BaseDriver.__init__(self, *args, **kwargs)
-        self._instanceStore = None
-
     @classmethod
     def isDriverFunctional(cls):
         if not XenAPI or not xenprov:
@@ -238,9 +234,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         except XenAPI.Failure, e:
             raise errors.PermissionDenied(message = "User %s: %s" % (
                 e.details[1], e.details[2]))
-        keyPrefix = "%s/%s" % (self._sanitizeKey(self.cloudName),
-                               self._sanitizeKey(self.userId))
-        self._instanceStore = self._getInstanceStore(keyPrefix)
         return sess
 
     def drvVerifyCloudConfiguration(self, config):

@@ -1,16 +1,24 @@
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
+
 import os
 import sys
 import subprocess
+import time
 import urllib
 import urllib2
 
 from conary.lib import util
 
+from catalogService import cimupdater
 from catalogService import errors
 from catalogService import nodeFactory
 from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
+from catalogService import instanceStore
 from catalogService import keypairs, securityGroups
+from catalogService import storage
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -34,6 +42,8 @@ class BaseDriver(object):
     updateStatusStateUpdating = 'updating'
     updateStatusStateDone = 'done'
 
+    instanceStorageClass = storage.DiskStorage
+
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, mintClient=None, userId = None):
         self.userId = userId
@@ -48,6 +58,24 @@ class BaseDriver(object):
         self._mintClient = mintClient
         self._nodeFactory.userId = userId
         self._logger = None
+        self._instanceStore = None
+
+    def _getInstanceStore(self):
+        keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
+                               self._getUserIdForInstanceStore())
+        path = os.path.join(self._cfg.storagePath, 'instances',
+            self.cloudType)
+        cfg = storage.StorageConfig(storagePath = path)
+
+        dstore = self.instanceStorageClass(cfg)
+        return instanceStore.InstanceStore(dstore, keyPrefix)
+
+    def _getUserIdForInstanceStore(self):
+        return self._sanitizeKey(self.userId)
+
+    @classmethod
+    def _sanitizeKey(cls, key):
+        return key.replace('/', '_')
 
     def setLogger(self, logger):
         self._logger = logger
@@ -168,6 +196,7 @@ class BaseDriver(object):
             if not cred:
                 return None
             self._cloudClient = self.drvCreateCloudClient(cred)
+            self._instanceStore = self._getInstanceStore()
         return self._cloudClient
 
     client = property(drvGetCloudClient)
@@ -411,6 +440,42 @@ class BaseDriver(object):
             if val is not None:
                 return val
         return None
+
+    def updateInstances(self, instanceIds):
+        instanceList = instances.BaseInstances()
+        for id in instanceIds:
+            instanceList.append(self.getInstance(id))
+
+        for instance in instanceList:
+            newState = self.updateStatusStateUpdating
+            newTime = int(time.time())
+            self._setInstanceUpdateStatus(instance, newState, newTime)
+
+        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
+        return instanceList
+
+    def updateInstance(self, instanceId):
+        return self.updateInstances([instanceId])
+
+    def _updateInstance(self, instance):
+        host = 'https://%s' % instance.publicDnsName.getText()
+        updater = cimupdater.CIMUpdater(host)
+        updater.checkAndApplyUpdate()
+
+        # Mark the update status as done.
+        newState = self.updateStatusStateDone
+        newTime = int(time.time())
+        self._setInstanceUpdateStatus(instance, newState, newTime)
+
+    def _setInstanceUpdateStatus(self, instance, newState, newTime):
+        instance.getUpdateStatus().setState(newState)
+        instance.getUpdateStatus().setTime(newTime)
+        # Save the update status in the instance store
+        self._instanceStore.setUpdateStatusState(instance.getId(), newState)
+        self._instanceStore.setUpdateStatusTime(instance.getId(), newTime)
+        # Set the expiration to 3 hours for now.
+        self._instanceStore.setExpiration(instance.getId(), newTime+10800)
+        self.backgroundRun(self._updateInstance, instance)
 
     def backgroundRun(self, function, *args, **kw):
         pid = os.fork()

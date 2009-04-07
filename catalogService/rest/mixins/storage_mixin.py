@@ -17,7 +17,6 @@ from catalogService import storage
 from catalogService.rest import baseDriver
 
 class StorageMixin(object):
-    instanceStorageClass = storage.DiskStorage
 
     @classmethod
     def configureCloud(cls, store, config):
@@ -48,14 +47,6 @@ class StorageMixin(object):
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
 
-    def _getInstanceStore(self, keyPrefix):
-        path = os.path.join(self._cfg.storagePath, 'instances',
-            self.cloudType)
-        cfg = storage.StorageConfig(storagePath = path)
-
-        dstore = self.instanceStorageClass(cfg)
-        return instanceStore.InstanceStore(dstore, keyPrefix)
-
     def _getCloudCredentialsForUser(self, cloudName):
         return self._getCredentialsForCloudName(cloudName)[1]
 
@@ -74,10 +65,6 @@ class StorageMixin(object):
             if field.password and field.name in creds:
                 creds[field.name] = util.ProtectedString(creds[field.name])
         return cloudConfig, creds
-
-    @classmethod
-    def _sanitizeKey(cls, key):
-        return key.replace('/', '_')
 
     @classmethod
     def _writeCredentialsToStore(cls, store, userId, cloudName, credentials):
@@ -136,10 +123,6 @@ class StorageMixin(object):
     def drvRemoveCloud(self):
         store = self._getConfigurationDataStore()
         store.delete(self.cloudName)
-
-    @classmethod
-    def _sanitizeKey(cls, key):
-        return key.replace('/', '_')
 
     def _setState(self, instanceId, state):
         self.log_debug("Instance %s: setting state to `%s'", instanceId, state)
