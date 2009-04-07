@@ -448,9 +448,13 @@ class BaseDriver(object):
         instanceList = self.getInstances(instanceIds)
 
         for instance in instanceList:
+            dnsName = instance.getPublicDnsName()
+            if not dnsName:
+                # We can't do anything unless we know how to contact the box
+                continue
             newState = self.updateStatusStateUpdating
-            newTime = int(time.time())
-            self._setInstanceUpdateStatus(instance, newState, newTime)
+            self._setInstanceUpdateStatus(instance, newState)
+            self.backgroundRun(self._updateInstance, instance, dnsName)
 
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return instanceList
@@ -458,33 +462,26 @@ class BaseDriver(object):
     def updateInstance(self, instanceId):
         return self.updateInstances([instanceId])
 
-    def _updateInstance(self, instance):
-        dnsName = instance.getPublicDnsName()
-        if not dnsName:
-            # We can't do anything unless we know how to contact the box
-            return
+    def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName
         updater = cimupdater.CIMUpdater(host)
         updater.checkAndApplyUpdate()
 
         # Mark the update status as done.
         newState = self.updateStatusStateDone
-        newTime = int(time.time())
-        self._setInstanceUpdateStatus(instance, newState, newTime)
+        self._setInstanceUpdateStatus(instance, newState)
 
-    def _setInstanceUpdateStatus(self, instance, newState, newTime):
-        dnsName = instance.getPublicDnsName()
-        if not dnsName:
-            # We can't do anything unless we know how to contact the box
-            return
+    def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
+        if newTime is None:
+            newTime = int(time.time())
         instance.getUpdateStatus().setState(newState)
         instance.getUpdateStatus().setTime(newTime)
         # Save the update status in the instance store
-        self._instanceStore.setUpdateStatusState(instance.getId(), newState)
-        self._instanceStore.setUpdateStatusTime(instance.getId(), newTime)
+        instanceId = instance.getId()
+        self._instanceStore.setUpdateStatusState(instanceId, newState)
+        self._instanceStore.setUpdateStatusTime(instanceId, newTime)
         # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instance.getId(), newTime+10800)
-        self.backgroundRun(self._updateInstance, instance)
+        self._instanceStore.setExpiration(instanceId, newTime+10800)
 
     def backgroundRun(self, function, *args, **kw):
         pid = os.fork()
