@@ -25,7 +25,6 @@ from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
 
-import viclient
 
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
@@ -153,6 +152,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.drvGetCloudConfiguration()
         host = self._getCloudNameFromConfig(cloudConfig)
+        # This import is expensive!!! Delay it until it is actually needed
+        import viclient
         try:
             client = viclient.VimService(host,
                                          credentials['username'],
@@ -716,6 +717,8 @@ class VMwareClient(baseDriver.BaseDriver, storage_mixin.StorageMixin):
             p.wait()
             self._setState(instanceId, 'Uploading image to VMware')
             vmFiles = os.path.join(workdir, image.getBaseFileName())
+            # This import is expensive!!! Delay it until it is actually needed
+            import viclient
             vmx = viclient.vmutils.uploadVMFiles(self.client,
                                                  vmFiles,
                                                  vmName,
