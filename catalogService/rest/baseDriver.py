@@ -175,6 +175,9 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetInstance(instanceId)
 
+    def drvGetInstance(self, instanceId):
+        return self.drvGetInstances([instanceId])
+
     def drvGetCloudCredentialsForUser(self):
         """
         Authenticate the user and cache the cloud credentials
