@@ -445,9 +445,7 @@ class BaseDriver(object):
         return None
 
     def updateInstances(self, instanceIds):
-        instanceList = instances.BaseInstances()
-        for id in instanceIds:
-            instanceList.append(self.getInstance(id))
+        instanceList = self.getInstances(instanceIds)
 
         for instance in instanceList:
             newState = self.updateStatusStateUpdating
