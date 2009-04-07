@@ -459,7 +459,11 @@ class BaseDriver(object):
         return self.updateInstances([instanceId])
 
     def _updateInstance(self, instance):
-        host = 'https://%s' % instance.publicDnsName.getText()
+        dnsName = instance.getPublicDnsName()
+        if not dnsName:
+            # We can't do anything unless we know how to contact the box
+            return
+        host = 'https://%s' % dnsName
         updater = cimupdater.CIMUpdater(host)
         updater.checkAndApplyUpdate()
 
@@ -469,6 +473,10 @@ class BaseDriver(object):
         self._setInstanceUpdateStatus(instance, newState, newTime)
 
     def _setInstanceUpdateStatus(self, instance, newState, newTime):
+        dnsName = instance.getPublicDnsName()
+        if not dnsName:
+            # We can't do anything unless we know how to contact the box
+            return
         instance.getUpdateStatus().setState(newState)
         instance.getUpdateStatus().setTime(newTime)
         # Save the update status in the instance store
