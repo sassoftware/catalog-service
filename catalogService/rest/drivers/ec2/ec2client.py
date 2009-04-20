@@ -216,7 +216,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <length>12</length>
+        <length>14</length>
       </constraints>
       <required>true</required>
     </field>
