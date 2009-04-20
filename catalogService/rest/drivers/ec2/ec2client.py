@@ -212,12 +212,6 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Amazon Account Number</desc>
       </descriptions>
       <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Maximum Characters</desc>
-        </descriptions>
-        <length>12</length>
-      </constraints>
       <required>true</required>
     </field>
     <field>
