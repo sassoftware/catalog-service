@@ -159,7 +159,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <regexp>^\s*-----BEGIN CERTIFICATE-----\r?\n([a-zA-Z0-9+/=]+\r?\n)+-----END CERTIFICATE-----\s*$</regexp>
+        <regexp>^\s*-----BEGIN CERTIFICATE-----.*-----END CERTIFICATE-----\s*$</regexp>
         <length>2048</length>
       </constraints>
       <required>true</required>
@@ -175,7 +175,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Maximum Characters</desc>
         </descriptions>
-        <regexp>^\s*-----BEGIN (\S+ )?PRIVATE KEY-----\r?\n([a-zA-Z0-9+/=]+\r?\n)+-----END (\S+ )?PRIVATE KEY-----\s*$</regexp>
+        <regexp>^\s*-----BEGIN (\S+ )?PRIVATE KEY-----.*-----END (\S+ )?PRIVATE KEY-----\s*$</regexp>
         <length>1024</length>
       </constraints>
       <required>true</required>
