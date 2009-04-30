@@ -2,6 +2,7 @@
 
 import base64
 import os
+import re
 import sys
 import time
 import urllib
@@ -323,8 +324,10 @@ class EC2Client(baseDriver.BaseDriver):
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
-                certificateData = targetData.get('ec2Certificate', ''),
-                certificateKeyData = targetData.get('ec2CertificateKey', ''),
+                certificateData = fixPEM(targetData.get('ec2Certificate', ''),
+                    error=False),
+                certificateKeyData = fixPEM(targetData.get('ec2CertificateKey',
+                    ''), error=False),
                 s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
@@ -428,8 +431,8 @@ class EC2Client(baseDriver.BaseDriver):
             ec2PublicKey = ec2PublicKey,
             ec2PrivateKey = ec2PrivateKey,
             ec2S3Bucket = ec2S3Bucket,
-            ec2Certificate = getField('certificateData'),
-            ec2CertificateKey = getField('certificateKeyData'),
+            ec2Certificate = fixPEM(getField('certificateData')),
+            ec2CertificateKey = fixPEM(getField('certificateKeyData')),
             ec2LaunchUsers = launchUsers,
             ec2LaunchGroups = launchGroups)
         dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
@@ -767,3 +770,28 @@ class EC2Client(baseDriver.BaseDriver):
         
         return map
 
+
+PEM_LINE = 76
+PEM_HEADER = '-{2,5}(BEGIN [A-Z0-9 ]+?\s*)-{2,5}'
+PEM_TRAILER = '-{2,5}(END [A-Z0-9 ]+?\s*)-{2,5}'
+PEM_BODY = '([a-zA-Z0-9/+= \t\r\n]+)'
+
+PEM = re.compile('^%s$' % (PEM_HEADER + PEM_BODY + PEM_TRAILER))
+WHITESPACE = re.compile('\s+')
+
+def fixPEM(pem, error=True):
+    """
+    Normalize a blob C{pem}, which may contain one or more
+    PEM-like sections (e.g. a certificate and private key).
+    """
+    out = ''
+    for header, body, trailer in PEM.findall(pem):
+        body = WHITESPACE.sub('', body)
+        out += '-----' + header + '-----\n'
+        while body:
+            chunk, body = body[:PEM_LINE], body[PEM_LINE:]
+            out += chunk + '\n'
+        out += '-----' + trailer + '-----\n'
+    if error and not out:
+        raise RuntimeError("No PEM blocks found in blob")
+    return out
