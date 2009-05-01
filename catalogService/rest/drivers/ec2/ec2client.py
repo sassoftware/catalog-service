@@ -158,10 +158,10 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>The certificate must start with '-----BEGIN CERTIFICATE-----', end with '-----END CERTIFICATE-----', contain 64 characters per line, and have a maximum length of 2048 characters.</desc>
+          <desc>The certificate must start with '-----BEGIN CERTIFICATE-----', end with '-----END CERTIFICATE-----', and have a maximum length of 16384 characters.</desc>
         </descriptions>
         <regexp>^\s*-----BEGIN CERTIFICATE-----.*-----END CERTIFICATE-----\s*$</regexp>
-        <length>2048</length>
+        <length>16384</length>
       </constraints>
       <required>true</required>
       <help href='configuration/certificateData.html'/>
@@ -174,10 +174,10 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>The key must start with '-----BEGIN PRIVATE KEY-----', end with '----END PRIVATE KEY-----', contain 64 characters per line, and have a maximum length of 1024 characters.</desc>
+          <desc>The key must start with '-----BEGIN PRIVATE KEY-----', end with '----END PRIVATE KEY-----', and have a maximum length of 16384 characters.</desc>
         </descriptions>
         <regexp>^\s*-----BEGIN (\S+ )?PRIVATE KEY-----.*-----END (\S+ )?PRIVATE KEY-----\s*$</regexp>
-        <length>1024</length>
+        <length>16384</length>
       </constraints>
       <required>true</required>
       <help href='configuration/certificateKeyData.html'/>

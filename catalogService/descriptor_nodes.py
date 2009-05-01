@@ -551,7 +551,7 @@ def _validateSingleValue(value, valueType, description, constraints):
             # Only applies to str
             if valueType != 'str':
                 continue
-            if not re.match(constraint['value'], cvalue):
+            if not re.compile(constraint['value'], re.S).match(cvalue):
                 errorList.append(
                     "'%s': '%s' fails regexp check '%s'" %
                             (description, value, constraint['value']))

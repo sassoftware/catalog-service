@@ -272,7 +272,7 @@ class DescriptorData(_BaseClass):
     def getFields(self):
         return [ x for x in self._fields ]
 
-    def addField(self, name, value = None):
+    def addField(self, name, value = None, checkConstraints=True):
         # Do not add the field if it was not defined
         fdesc = self._descriptor.getDataField(name)
         if fdesc is None:
@@ -290,7 +290,8 @@ class DescriptorData(_BaseClass):
             value = self._cleanseValue(fdesc, value)
             node.characters(value)
 
-        field = dnodes._DescriptorDataField(node, fdesc)
+        field = dnodes._DescriptorDataField(node, fdesc,
+                checkConstraints=checkConstraints)
         self._fields.append(field)
         self._fieldsMap[field.getName()] = field
 

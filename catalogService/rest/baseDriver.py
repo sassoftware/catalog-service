@@ -373,8 +373,7 @@ class BaseDriver(object):
         for k, v in sorted(cloudConfig.items()):
             if k not in descr._dataFieldsHash:
                 continue
-            descrData.addField(k, value = v)
-        descrData.checkConstraints()
+            descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
     def getInstanceNameFromImage(self, imageNode):
