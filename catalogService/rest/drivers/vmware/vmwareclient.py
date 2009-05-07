@@ -389,7 +389,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'runtime.powerState',
                                                    'runtime.bootTime',
                                                    'config.uuid',
-                                                   'config.extraConfig',
+                                                   #'config.extraConfig',
                                                    'guest.ipAddress' ],
                                                   uuidRef)
         
@@ -408,7 +408,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'runtime.powerState',
                                                    'runtime.bootTime',
                                                    'config.uuid',
-                                                   'config.extraConfig',
+                                  # NOTE: grabbing extra
+                                  # config multiplies the
+                                  # size of the XML being
+                                  # returned by 5 and should
+                                  # not be done without
+                                  # some sort of delayed parsing scheme.
+                                                   #'config.extraConfig',
                                                    'guest.ipAddress' ])
         return self._buildInstanceList(instanceList, instMap)
 
@@ -427,7 +433,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                                    'runtime.powerState',
                                                    'runtime.bootTime',
                                                    'config.uuid',
-                                                   'config.extraConfig',
+                                                   #'config.extraConfig',
                                                    'guest.ipAddress' ])
         imageList = images.BaseImages()
         for opaqueId, vminfo in instMap.items():
