@@ -384,18 +384,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def drvGetInstance(self, instanceId):
         uuidRef = self.client.findVMByUUID(instanceId)
-        instMap = self.client.getVirtualMachines([ 'name',
-                                                   'config.annotation',
-                                                   'config.template',
-                                                   'runtime.powerState',
-                                                   'runtime.bootTime',
-                                                   'config.uuid',
-                                                   #'config.extraConfig',
-                                                   'guest.ipAddress' ],
-                                                  uuidRef)
-        
+        instMap = self._getVirtualMachines(root = uuidRef)
         instanceList = instances.BaseInstances()
-        return self._buildInstanceList(instanceList, instMap)[0]
+        return self._buildInstanceList(instanceList, instMap)
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
@@ -403,7 +394,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         instanceList.extend(self.getInstancesFromStore())
         instMap = self.getVirtualMachines()
-
         return self._buildInstanceList(instanceList, instMap)
 
     def getVirtualMachines(self):
@@ -412,6 +402,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             # Each request generates a new Client instance.
             return self._virtualMachines
 
+        instMap = self._getVirtualMachines()
+        self._virtualMachines = instMap
+        return instMap
+
+    def _getVirtualMachines(self, root = None):
         instMap = self.client.getVirtualMachines([ 'name',
                                                    'config.annotation',
                                                    'config.template',
@@ -425,8 +420,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                   # not be done without
                                   # some sort of delayed parsing scheme.
                                                    #'config.extraConfig',
-                                                   'guest.ipAddress' ])
-        self._virtualMachines = instMap
+                                                   'guest.ipAddress' ],
+                                                   root = root)
         return instMap
 
     @classmethod

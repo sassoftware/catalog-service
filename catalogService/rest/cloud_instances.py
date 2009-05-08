@@ -35,6 +35,10 @@ class InstancesController(BaseCloudController):
         insts = self.driver(request, cloudName).getAllInstances()
         return XmlResponse(insts)
 
+    def get(self, request, cloudName, instanceId):
+        insts = self.driver(request, cloudName).getInstance(instanceId)
+        return XmlResponse(insts)
+
     def create(self, request, cloudName):
         "launch a new instance"
         request.logger.info("User %s: launching instance in %s/%s" % (
