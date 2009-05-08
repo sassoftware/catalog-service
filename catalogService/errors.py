@@ -1,6 +1,11 @@
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.
 #
+# All rights reserved.
+#
+
+import sys
+            import traceback
 from lxml import etree
 
 from catalogService.rest.response import XmlStringResponse
@@ -112,6 +117,26 @@ class ErrorMessageCallback(object):
                                         envelopeStatus = envelopeStatus,
                                         tracebackData = exception.tracebackData,
                                         productCodeData = exception.productCodeData)
+
+        try:
+            from mint import config, logerror
+            cfg = config.getConfig()
+            info = {
+                    'path'                  : request.path,
+                    'basePath'              : request.basePath,
+                    'host'                  : request.host,
+                    'method'                : request.method,
+                    'headers_in'            : request.headers,
+                    'request_params'        : request.GET,
+                    'post_params'           : request.POST,
+                    }
+            logerror.logErrorAndEmail(cfg, excClass, exception, tb,
+                    'catsrv call', info)
+
+        except ImportError:
+            traceback.print_exc()
+            sys.stderr.flush()
+
         from restlib.http import handler
         response = handler.ExceptionCallback().processException(request,
             excClass, exception, tb)
