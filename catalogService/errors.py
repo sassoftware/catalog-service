@@ -5,7 +5,7 @@
 #
 
 import sys
-            import traceback
+import traceback
 from lxml import etree
 
 from catalogService.rest.response import XmlStringResponse
