@@ -406,7 +406,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         return self._buildInstanceList(instanceList, instMap)
 
-    def getVirualMachines(self):
+    def getVirtualMachines(self):
         if self._virtualMachines is not None:
             # NOTE: we cache this, but only per catalog-service request.
             # Each request generates a new Client instance.
