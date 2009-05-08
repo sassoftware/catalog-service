@@ -386,7 +386,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         uuidRef = self.client.findVMByUUID(instanceId)
         instMap = self._getVirtualMachines(root = uuidRef)
         instanceList = instances.BaseInstances()
-        return self._buildInstanceList(instanceList, instMap)
+        ret = self._buildInstanceList(instanceList, instMap)
+        if ret:
+            return ret[0]
+        raise errors.HttpNotFound()
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()

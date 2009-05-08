@@ -176,7 +176,10 @@ class BaseDriver(object):
         return self.drvGetInstance(instanceId)
 
     def drvGetInstance(self, instanceId):
-        return self.drvGetInstances([instanceId])
+        ret = self.drvGetInstances([instanceId])
+        if ret:
+            return ret[0]
+        raise errors.HttpNotFound()
 
     def drvGetCloudCredentialsForUser(self):
         """
