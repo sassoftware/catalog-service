@@ -522,7 +522,12 @@ class EC2Client(baseDriver.BaseDriver):
         return self.terminateInstances([instanceId])[0]
 
     def drvGetInstances(self, instanceIds):
-        resultSet = self.client.get_all_instances(instance_ids = instanceIds)
+        try:
+            resultSet = self.client.get_all_instances(instance_ids = instanceIds)
+        except EC2ResponseError, e:
+            if e.code in ['InvalidInstanceID.NotFound',
+                          'InvalidInstanceID.Malformed']:
+                raise errors.HttpNotFound()
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
