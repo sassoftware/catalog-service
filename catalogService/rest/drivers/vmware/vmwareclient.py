@@ -148,6 +148,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
         self._instanceStore = None
+        self._virtualMachines = None
 
     @classmethod
     def isDriverFunctional(cls):
@@ -401,6 +402,15 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         instanceList = instances.BaseInstances()
 
         instanceList.extend(self.getInstancesFromStore())
+        instMap = self.getVirtualMachines()
+
+        return self._buildInstanceList(instanceList, instMap)
+
+    def getVirualMachines(self):
+        if self._virtualMachines is not None:
+            # NOTE: we cache this, but only per catalog-service request.
+            # Each request generates a new Client instance.
+            return self._virtualMachines
 
         instMap = self.client.getVirtualMachines([ 'name',
                                                    'config.annotation',
@@ -416,7 +426,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                   # some sort of delayed parsing scheme.
                                                    #'config.extraConfig',
                                                    'guest.ipAddress' ])
-        return self._buildInstanceList(instanceList, instMap)
+        self._virtualMachines = instMap
+        return instMap
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
@@ -427,14 +438,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         returns all templates in the inventory
         """
         cloudAlias = self.getCloudAlias()
-        instMap = self.client.getVirtualMachines([ 'name',
-                                                   'config.annotation',
-                                                   'config.template',
-                                                   'runtime.powerState',
-                                                   'runtime.bootTime',
-                                                   'config.uuid',
-                                                   #'config.extraConfig',
-                                                   'guest.ipAddress' ])
+        instMap = self.getVirtualMachines()
         imageList = images.BaseImages()
         for opaqueId, vminfo in instMap.items():
             if not vminfo.get('config.template', False):
