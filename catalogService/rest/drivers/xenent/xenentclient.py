@@ -603,9 +603,11 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
             if 'vdi_create' not in srRec['allowed_operations']:
                 continue
-            if uuid in uuidsFound:
+            if uuidsFound.get(uuid) is not None:
                 continue
-            ret.append(uuid)
+            if uuid not in uuidsFound:
+                # SR not coming from the default pool
+                ret.append(uuid)
             srRecNameLabel = srRec['name_label']
             srRecType = srRec['type']
             if srRecType == 'lvm':
