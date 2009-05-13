@@ -1,6 +1,7 @@
 
 import os
 import signal
+import tempfile
 import time
 import urllib
 
@@ -105,6 +106,15 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <help href='configuration/repositoryIdentity.html'/>
     </field>
     <field>
+      <name>repositoryBaseDir</name>
+      <descriptions>
+        <desc>GridFTP Base Directory</desc>
+      </descriptions>
+      <type>str</type>
+      <required>false</required>
+      <help href='configuration/repositoryBaseDir.html'/>
+    </field>  
+    <field>
       <name>caCert</name>
       <descriptions>
         <desc>Certificate Authority (x509) Public Key</desc>
@@ -205,6 +215,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         props.set('vws.repository', cloudConfig['repository'])
         props.set('vws.factory.identity', cloudConfig['factoryIdentity'])
         props.set('vws.repository.identity', cloudConfig['repositoryIdentity'])
+        props.set('vws.repository.basedir', cloudConfig['repositoryBaseDir'])
         try:
             cli = globuslib.WorkspaceCloudClient(props, cloudConfig['caCert'],
                 userCredentials['userCert'], userCredentials['userKey'],
@@ -433,7 +444,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             tmpDir = tempfile.mkdtemp(prefix="vws-download-")
             try:
                 self._setState(instanceId, 'Downloading image')
-                dlImagePath = self._downloadImage(img, tmpDir, auth = auth)
+                dlImagePath = self._downloadImage(image, tmpDir, auth = auth)
                 self._setState(instanceId, 'Preparing image')
                 imgFile = self._prepareImage(dlImagePath)
                 self._setState(instanceId, 'Publishing image')
@@ -479,7 +490,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return image.get('sha1') + '.gz'
+        return image.get('sha1')
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):

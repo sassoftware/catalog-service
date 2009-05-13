@@ -21,6 +21,7 @@ class WorkspaceCloudProperties(object):
         'vws.repository' : 'localhost:2811',
         'vws.factory.identity' : '/O=My Company Inc/CN=host/localhost',
         'vws.repository.identity' : '/O=My Company Inc/CN=host/localhost',
+        'vws.repository.basedir' : '/',
         'vws.memory.request' : '128',
         'vws.cahash' : '6045a439',
         'ca.certs' : '/tmp',
@@ -136,6 +137,10 @@ class WorkspaceCloudClient(object):
         # duration is time in minutes
         # We only launch one instance for now
         imageId = imageIds[0]
+
+        if not imageId.endswith('.gz'):
+            imageId += '.gz'
+
         hours = duration / 60.0
         historyDir = "%s/history" % self._tmpDir
         try:
