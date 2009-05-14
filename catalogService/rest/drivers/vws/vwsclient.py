@@ -490,7 +490,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return image.get('sha1')
+        return image.get('sha1') + '.gz'
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):
