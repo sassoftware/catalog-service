@@ -290,8 +290,6 @@ class VimService(object):
         scsiCtrl.set_element_key(diskCtlrKey)
         scsiCtrl.set_element_sharedBus('noSharing')
 
-        ideCtlr = self._getIdeController(defaultDevices)
-
         # add a floppy
         floppySpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
         floppySpec.set_element_operation('add')
@@ -302,12 +300,6 @@ class VimService(object):
         floppy.set_element_key(3)
         floppySpec.set_element_device(floppy)
 
-        # Add a cdrom based on a physical device
-        cdSpec = None
-
-        if ideCtlr:
-            cdSpec = self.createCdromConfigSpec(self, 'testcd.iso', vmName,
-                ideCtlr, datastoreRef, datastoreVolume)
         # Create a new disk - file based - for the vm
         diskSpec = None
         diskSpec = self.createVirtualDisk(datastoreName, diskCtlrKey,
@@ -328,8 +320,6 @@ class VimService(object):
             nicSpec.set_element_device(nic)
 
         deviceConfigSpec = [ scsiCtrlSpec, diskSpec ]
-        if ideCtlr:
-            deviceConfigSpec.append(cdSpec)
         deviceConfigSpec.append(nicSpec)
 
         configSpec.set_element_deviceChange(deviceConfigSpec)
