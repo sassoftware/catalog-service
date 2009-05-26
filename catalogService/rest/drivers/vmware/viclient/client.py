@@ -350,8 +350,23 @@ class VimService(object):
                 return dev
         return None
 
-    def createCdromConfigSpec(self, filename, vmName, controller, datastoreRef,
+    def createCdromConfigSpec(self, filename, vmmor, controller, datastoreRef,
                 datastoreVolume):
+        vmmor = _strToMor(vmmor, 'VirtualMachine')
+        datastoreRef = _strToMor(datastoreRef, 'Datastore')
+        # Grab the VM's configuration
+        vm = self.getVirtualMachines(['config.hardware.device', 'config.name'],
+            root = vmmor)
+        vmName = vm[vmmor]['config.name']
+        devices = vm[vmmor]['config.hardware.device']
+        devices = devices.get_element_VirtualDevice()
+        cdromUnitNumbers = [ x.get_element_unitNumber()
+                for x in devices if x.typecode.type[1] == 'VirtualCdrom' ]
+        if not cdromUnitNumbers:
+            unitNumber = 0
+        else:
+            unitNumber = max(cdromUnitNumbers) + 1
+
         cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
         cdSpec.set_element_operation('add')
         cdrom = ns0.VirtualCdrom_Def('').pyclass()
@@ -362,11 +377,18 @@ class VimService(object):
         cdrom.set_element_backing(cdDeviceBacking)
         cdrom.set_element_key(-1)
         cdrom.set_element_controllerKey(controller.get_element_key())
-        # XXX We should get the unit number dynamically
         #cdrom.set_element_unitNumber(controller.get_element_unitNumber())
-        cdrom.set_element_unitNumber(0)
+        cdrom.set_element_unitNumber(unitNumber)
         cdSpec.set_element_device(cdrom)
         return cdSpec
+
+    def disconnectCdrom(self, vmmor, cdrom):
+        cdrom.get_element_connectable().set_element_connected(False)
+        cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
+        operation = "edit"
+        cdSpec.set_element_operation(operation)
+        cdSpec.set_element_device(cdrom)
+        self.reconfigVM(vmmor, dict(deviceChange = [ cdSpec ]))
 
     def buildFullTraversal(self):
         """
@@ -977,6 +999,8 @@ class VimService(object):
                 dc=None, cr=None, ds=None, rp=None, newuuid=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
+            # See the release notes:
+            # http://www.vmware.com/support/developer/vc-sdk/visdk25pubs/visdk25knownissues.html
             vms = self.getVirtualMachines([ 'config.template',
                                          'config.uuid' ])
             mor = None
@@ -996,7 +1020,9 @@ class VimService(object):
 
         cloneSpec = req.new_spec()
         cloneSpec.set_element_template(False)
-        cloneSpec.set_element_powerOn(True)
+        # We do not want to power on the clone just yet, we need to attach its
+        # credentials disk
+        cloneSpec.set_element_powerOn(False)
         # set up the data relocation
         loc = cloneSpec.new_location()
         #loc.set_element_datastore(ds)
@@ -1012,7 +1038,13 @@ class VimService(object):
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()
-        return self.waitForTask(task)
+        ret = self.waitForTask(task)
+        if ret != 'success':
+            # FIXME: better exception
+            raise RuntimeError("Unable to clone template: %s" % ret)
+        tinfo = self.getDynamicProperty(task, 'info')
+        vm = tinfo.get_element_result()
+        return vm
 
     def shutdownVM(self, mor=None, uuid=None):
         mor = self._getVM(mor=mor, uuid=uuid)
