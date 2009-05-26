@@ -159,11 +159,14 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         host = self._getCloudNameFromConfig(cloudConfig)
         # This import is expensive!!! Delay it until it is actually needed
         import viclient
+        debug = False
+        #debug = True
         try:
             client = viclient.VimService(host,
                                          credentials['username'],
                                          credentials['password'],
-                                         transport=self.VimServiceTransport)
+                                         transport=self.VimServiceTransport,
+                                         debug = debug)
         except Exception, e:
             # FIXME: better error
             raise errors.PermissionDenied(message = '')
@@ -462,16 +465,20 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         templateUuid = None
         if not vm:
             templateUuid = os.path.basename(imageId)
-        ret = self.client.cloneVM(mor=vm,
-                                  uuid=templateUuid,
-                                  name=instanceName,
-                                  annotation=instanceDescription,
-                                  dc=self.vicfg.getMOR(dataCenter),
-                                  cr=self.vicfg.getMOR(computeResource),
-                                  ds=self.vicfg.getMOR(dataStore),
-                                  rp=self.vicfg.getMOR(resourcePool),
-                                  newuuid=uuid)
-        # FIXME: error handle on ret
+        try:
+            vmMor = self.client.cloneVM(mor=vm,
+                                        uuid=templateUuid,
+                                        name=instanceName,
+                                        annotation=instanceDescription,
+                                        dc=self.vicfg.getMOR(dataCenter),
+                                        cr=self.vicfg.getMOR(computeResource),
+                                        ds=self.vicfg.getMOR(dataStore),
+                                        rp=self.vicfg.getMOR(resourcePool),
+                                        newuuid=uuid)
+            return vmMor
+        except:
+            # FIXME: error handle on ret
+            raise
 
     def _findUniqueName(self, inventoryPrefix, startName):
         # make sure that the vm name is not used in the inventory
@@ -575,12 +582,44 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 self.client.markAsTemplate(vm=vm)
 
         if useTemplate:
-            # mark the VM as a template, clone, and launch it
+            # mark the VM as a template, clone
             self._setState(instanceId, 'Cloning template')
-            self._cloneTemplate(image.getImageId(), instanceName,
-                                instanceDescription, instanceId,
-                                dataCenter, computeResource,
-                                dataStore, resourcePool, vm=vm)
+            vmMor = self._cloneTemplate(image.getImageId(), instanceName,
+                                        instanceDescription, instanceId,
+                                        dataCenter, computeResource,
+                                        dataStore, resourcePool, vm=vm)
         else:
-            self.client.startVM(uuid=instanceId)
+            vmMor = self.client._getVM(uuid = instanceId)
+
+        self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
+                                computeResource)
+        self.client.startVM(mor = vmMor)
         self._setState(instanceId, 'Launching')
+
+    def _attachCredentials(self, vmName, vmMor, dataCenterMor, dataStoreMor,
+            computeResourceMor):
+        filename = self.getCredentialsIsoFile()
+        dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
+        dsInfo = self.vicfg.getMOR(dataStoreMor)
+        dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
+        import viclient
+        viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
+            dataCenter = dataCenter, dataStore = dataStore)
+
+        dc = self.vicfg.getMOR(dataCenterMor)
+        hostFolder = self.client.getMoRefProp(dc, 'hostFolder')
+        hostMor = self.client.getFirstDecendentMoRef(hostFolder, 'HostSystem')
+        cr = self.vicfg.getMOR(computeResourceMor)
+        defaultDevices = self.client.getDefaultDevices(cr, hostMor)
+
+        datastoreVolume = self.client._getVolumeName(dataStore)
+        controllerMor = self.client._getIdeController(defaultDevices)
+        try:
+            cdromSpec = self.client.createCdromConfigSpec(
+            os.path.basename(filename), vmMor, controllerMor, dataStoreMor,
+            datastoreVolume)
+            self.client.reconfigVM(vmMor, dict(deviceChange = [ cdromSpec ]))
+        except viclient.client.FaultException, e:
+            # We will not fail the request if we could not attach credentials
+            # to the instance
+            self.log_exception("Exception trying to attach credentials: %s", e)

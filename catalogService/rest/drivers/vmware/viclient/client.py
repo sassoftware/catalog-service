@@ -271,22 +271,8 @@ class VimService(object):
                     break
 
         # determine the data store to use
-        datastoreRef = None
-        found = False
-        for vdsInfo in configTarget.get_element_datastore():
-            dsSummary = vdsInfo.get_element_datastore()
-            if (dsSummary.get_element_name() == datastoreName
-                or not datastoreName):
-                found = True
-                if dsSummary.get_element_accessible():
-                    datastoreName = dsSummary.get_element_name()
-                    datastoreRef = dsSummary.get_element_datastore()
-                else:
-                    if datastoreName:
-                        raise RuntimeError('Specified Datastore is not accessible')
-                break
-        if not found:
-            raise RuntimeError('No Datastore found on host')
+        datastoreRef, datastoreName = self._getDatastoreRef(configTarget,
+            datastoreName)
 
         datastoreVolume = self._getVolumeName(datastoreName)
         vmfi = ns0.VirtualMachineFileInfo_Def('').pyclass()
@@ -304,13 +290,6 @@ class VimService(object):
         scsiCtrl.set_element_key(diskCtlrKey)
         scsiCtrl.set_element_sharedBus('noSharing')
 
-        # Find the IDE controller
-        ideCtlr = None
-        for dev in defaultDevices:
-            if dev.typecode == ns0.VirtualIDEController_Def:
-                ideCtrl = dev
-                break
-
         # add a floppy
         floppySpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
         floppySpec.set_element_operation('add')
@@ -320,22 +299,6 @@ class VimService(object):
         floppy.set_element_backing(flpBacking)
         floppy.set_element_key(3)
         floppySpec.set_element_device(floppy)
-
-        # Add a cdrom based on a physical device
-        cdSpec = None
-
-        if ideCtlr:
-            cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-            cdSpec.set_element_operation('add')
-            cdrom = ns0.VirtualCdrom_Def('').pyclass()
-            cdDeviceBacking = ns0.VirtualCdromIsoBackingInfo_Def('').pyclass()
-            cdDeviceBacking.set_element_datastore(datastoreRef)
-            cdDeviceBacking.set_element_fileName(datastoreVolume+'testcd.iso')
-            cdrom.set_element_backing(cdDeviceBacking)
-            cdrom.set_element_key(20)
-            cdrom.set_element_controllerKey(ideCtlr.get_element_key())
-            cdrom.set_element_unitNumber(0)
-            cdSpec.set_element_device(cdrom)
 
         # Create a new disk - file based - for the vm
         diskSpec = None
@@ -357,13 +320,75 @@ class VimService(object):
             nicSpec.set_element_device(nic)
 
         deviceConfigSpec = [ scsiCtrlSpec, diskSpec ]
-        if ideCtlr:
-            deviceConfigSpec.append(cdSpec)
         deviceConfigSpec.append(nicSpec)
 
         configSpec.set_element_deviceChange(deviceConfigSpec)
         configSpec.set_element_name(vmName)
         return configSpec
+
+    def _getDatastoreRef(self, configTarget, datastoreName):
+        # determine the data store to use
+        datastoreRef = None
+        found = False
+        for vdsInfo in configTarget.get_element_datastore():
+            dsSummary = vdsInfo.get_element_datastore()
+            if (dsSummary.get_element_name() == datastoreName
+                or not datastoreName):
+                found = True
+                if dsSummary.get_element_accessible():
+                    datastoreName = dsSummary.get_element_name()
+                    datastoreRef = dsSummary.get_element_datastore()
+                    return datastoreRef, datastoreName
+                if datastoreName:
+                    raise RuntimeError('Specified Datastore is not accessible')
+        raise RuntimeError('No Datastore found on host')
+
+    def _getIdeController(self, defaultDevices):
+        # Find the IDE controller
+        for dev in defaultDevices:
+            if isinstance(dev.typecode, ns0.VirtualIDEController_Def):
+                return dev
+        return None
+
+    def createCdromConfigSpec(self, filename, vmmor, controller, datastoreRef,
+                datastoreVolume):
+        vmmor = _strToMor(vmmor, 'VirtualMachine')
+        datastoreRef = _strToMor(datastoreRef, 'Datastore')
+        # Grab the VM's configuration
+        vm = self.getVirtualMachines(['config.hardware.device', 'config.name'],
+            root = vmmor)
+        vmName = vm[vmmor]['config.name']
+        devices = vm[vmmor]['config.hardware.device']
+        devices = devices.get_element_VirtualDevice()
+        cdromUnitNumbers = [ x.get_element_unitNumber()
+                for x in devices if x.typecode.type[1] == 'VirtualCdrom' ]
+        if not cdromUnitNumbers:
+            unitNumber = 0
+        else:
+            unitNumber = max(cdromUnitNumbers) + 1
+
+        cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
+        cdSpec.set_element_operation('add')
+        cdrom = ns0.VirtualCdrom_Def('').pyclass()
+        cdDeviceBacking = ns0.VirtualCdromIsoBackingInfo_Def('').pyclass()
+        cdDeviceBacking.set_element_datastore(datastoreRef)
+        cdDeviceBacking.set_element_fileName(
+            "%s%s/%s" % (datastoreVolume, vmName, filename))
+        cdrom.set_element_backing(cdDeviceBacking)
+        cdrom.set_element_key(-1)
+        cdrom.set_element_controllerKey(controller.get_element_key())
+        #cdrom.set_element_unitNumber(controller.get_element_unitNumber())
+        cdrom.set_element_unitNumber(unitNumber)
+        cdSpec.set_element_device(cdrom)
+        return cdSpec
+
+    def disconnectCdrom(self, vmmor, cdrom):
+        cdrom.get_element_connectable().set_element_connected(False)
+        cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
+        operation = "edit"
+        cdSpec.set_element_operation(operation)
+        cdSpec.set_element_device(cdrom)
+        self.reconfigVM(vmmor, dict(deviceChange = [ cdSpec ]))
 
     def buildFullTraversal(self):
         """
@@ -755,15 +780,7 @@ class VimService(object):
             hostmor = self.getFirstDecendentMoRef(hostFolder, 'HostSystem')
 
         # find the compute resource for the host we're going to use
-        crmor = None
-        nodeHostName = self.getDynamicProperty(hostmor, 'name')
-        for cr in computeResources:
-            crHosts = self.getDynamicProperty(cr, 'host')
-            for crHost in crHosts.get_element_ManagedObjectReference():
-                hostName = self.getDynamicProperty(crHost, 'name')
-                if hostName.lower() == nodeHostName.lower():
-                    crmor = cr
-                    break
+        crmor = self._getComputeResourceForHost(hostmor, computeResources)
         if not crmor:
             raise RuntimeError('No Compute Resource Found On Specified Host')
 
@@ -787,6 +804,16 @@ class VimService(object):
         ret = self._service.CreateVM_Task(req)
         task = ret.get_element_returnval()
         return task
+
+    def _getComputeResourceForHost(self, hostmor, computeResources):
+        nodeHostName = self.getDynamicProperty(hostmor, 'name')
+        for cr in computeResources:
+            crHosts = self.getDynamicProperty(cr, 'host')
+            for crHost in crHosts.get_element_ManagedObjectReference():
+                hostName = self.getDynamicProperty(crHost, 'name')
+                if hostName.lower() == nodeHostName.lower():
+                    return cr
+        return None
 
     def findVMByUUID(self, uuid):
         searchIndex = self._sic.get_element_searchIndex()
@@ -972,6 +999,8 @@ class VimService(object):
                 dc=None, cr=None, ds=None, rp=None, newuuid=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
+            # See the release notes:
+            # http://www.vmware.com/support/developer/vc-sdk/visdk25pubs/visdk25knownissues.html
             vms = self.getVirtualMachines([ 'config.template',
                                          'config.uuid' ])
             mor = None
@@ -991,7 +1020,9 @@ class VimService(object):
 
         cloneSpec = req.new_spec()
         cloneSpec.set_element_template(False)
-        cloneSpec.set_element_powerOn(True)
+        # We do not want to power on the clone just yet, we need to attach its
+        # credentials disk
+        cloneSpec.set_element_powerOn(False)
         # set up the data relocation
         loc = cloneSpec.new_location()
         #loc.set_element_datastore(ds)
@@ -1007,7 +1038,13 @@ class VimService(object):
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()
-        return self.waitForTask(task)
+        ret = self.waitForTask(task)
+        if ret != 'success':
+            # FIXME: better exception
+            raise RuntimeError("Unable to clone template: %s" % ret)
+        tinfo = self.getDynamicProperty(task, 'info')
+        vm = tinfo.get_element_result()
+        return vm
 
     def shutdownVM(self, mor=None, uuid=None):
         mor = self._getVM(mor=mor, uuid=uuid)

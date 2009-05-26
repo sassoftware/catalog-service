@@ -20,6 +20,8 @@ from catalogService import instanceStore
 from catalogService import keypairs, securityGroups
 from catalogService import storage
 
+from M2Crypto import X509
+
 class BaseDriver(object):
     # Enumerate the factories we support.
     CloudConfigurationDescriptor = descriptor.ConfigurationDescriptor
@@ -564,6 +566,36 @@ class BaseDriver(object):
         for key, methodName in methodMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
 
+    def getCredentialsIsoFile(self):
+        certDir = os.path.join(self._cfg.storagePath, 'x509')
+        util.mkdirChain(certDir)
+        certFile = os.path.join(certDir, "cert.pem")
+        isoDir = os.path.join(self._cfg.storagePath, 'credentials')
+        util.mkdirChain(isoDir)
+        isoFile = os.path.join(isoDir, "credentials.iso")
+
+        if os.path.exists(isoFile):
+            return isoFile
+
+        # Create an empty file for our signature
+        empty = os.path.join(certDir, "EMPTY")
+        file(empty, "w")
+
+        # Load the cert, we need the hash
+        x509 = X509.load_cert(certFile)
+        certHash = "%x" % x509.get_issuer().as_hash()
+
+        # Make ISO, if it doesn't exist already
+        cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
+            "-o", isoFile,
+            "SECURITY-CONTEXT-BOOTSTRAP=%s" % empty,
+            "etc/sfcb/clients/%s.0=%s" % (certHash, certFile) ]
+
+        devnull = file(os.devnull, "w")
+        p = subprocess.Popen(cmd, shell = False, stdout=devnull,
+            stderr = devnull)
+        p.wait()
+        return isoFile
 
 class CookieClient(object):
     def __init__(self, server, username, password):
