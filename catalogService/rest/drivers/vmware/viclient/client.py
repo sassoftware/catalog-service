@@ -16,6 +16,9 @@ from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
 
 def _strToMor(smor, mortype=None):
+    if isinstance(smor, unicode):
+        # XML parsers tend to decode information as unicode strings
+        smor = smor.encode('ascii')
     if type(smor) != str:
         return smor
     # convert a string to a managed object reference
