@@ -616,8 +616,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         controllerMor = self.client._getIdeController(defaultDevices)
         try:
             cdromSpec = self.client.createCdromConfigSpec(
-            os.path.basename(filename), vmMor, controllerMor, dataStoreMor,
-            datastoreVolume)
+                os.path.basename(filename), vmMor, controllerMor,
+                dataStoreMor, datastoreVolume)
             self.client.reconfigVM(vmMor, dict(deviceChange = [ cdromSpec ]))
         except viclient.client.FaultException, e:
             # We will not fail the request if we could not attach credentials

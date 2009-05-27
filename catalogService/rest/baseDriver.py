@@ -566,10 +566,20 @@ class BaseDriver(object):
         for key, methodName in methodMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
 
-    def getCredentialsIsoFile(self):
+    def getWbemClientCert(self):
         certDir = os.path.join(self._cfg.storagePath, 'x509')
-        util.mkdirChain(certDir)
         certFile = os.path.join(certDir, "cert.pem")
+        return certFile
+
+    def computeX509CertHash(self, certFile):
+        x509 = X509.load_cert(certFile)
+        certHash = "%x" % x509.get_issuer().as_hash()
+        return certHash
+
+    def getCredentialsIsoFile(self):
+        certFile = self.getWbemClientCert()
+        certDir = os.path.dirname(certFile)
+        util.mkdirChain(certDir)
         isoDir = os.path.join(self._cfg.storagePath, 'credentials')
         util.mkdirChain(isoDir)
         isoFile = os.path.join(isoDir, "credentials.iso")
@@ -582,8 +592,7 @@ class BaseDriver(object):
         file(empty, "w")
 
         # Load the cert, we need the hash
-        x509 = X509.load_cert(certFile)
-        certHash = "%x" % x509.get_issuer().as_hash()
+        certHash = self.computeX509CertHash(certFile)
 
         # Make ISO, if it doesn't exist already
         cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",

@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import urllib
+import urllib2
 from boto.ec2.connection import EC2Connection
 from boto.s3.connection import S3Connection
 from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
@@ -32,6 +33,9 @@ CATALOG_DEF_SECURITY_GROUP_PERMS = (
         ('tcp',  80,         80),
         ('tcp',  443,        443),
         ('tcp',  8003 ,      8003),
+)
+CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS = (
+        ('tcp',  5989,       5989),
 )
 
 EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
@@ -290,16 +294,44 @@ class EC2Client(baseDriver.BaseDriver):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
+    def _getProxyInfo(self, https = True):
+        proto = (https and "https") or "http"
+        proxyUrl = self._mintClient._cfg.proxy.get(proto)
+        if not proxyUrl:
+            return None, None, None, None
+        splitUrl = helperfuncs.urlSplit(proxyUrl)
+        proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
+        return proxyUser, proxyPass, proxy, proxyPort
+
+    def _openUrl(self, url):
+        proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo(https = False)
+        opener = urllib2.OpenerDirector()
+        if proxy:
+            proxy = helperfuncs.urlUnsplit(("http", proxyUser, proxyPass,
+                proxy, proxyPort, '', '', ''))
+            opener.add_handler(urllib2.ProxyHandler(dict(http = proxy)))
+        opener.add_handler(urllib2.HTTPHandler())
+        ret = opener.open(url)
+        return ret
+
+    def _getExternalIp(self):
+        url = "http://rpath.com/clientinfo/"
+        resp = self._openUrl(url)
+        return self._parseXml(resp.read())
+
+    def _parseXml(self, response):
+        from xml.dom import minidom
+        dom = minidom.parseString(response)
+        nodes = dom.getElementsByTagName('remoteIp')
+        if not nodes:
+            return None
+        return nodes[0].firstChild.wholeText
+
     def drvCreateCloudClient(self, credentials):
         for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
             if key not in credentials or not credentials[key]:
                 raise errors.MissingCredentials()
-        proxyUrl = self._mintClient._cfg.proxy.get('https')
-        if proxyUrl:
-            splitUrl = helperfuncs.urlSplit(proxyUrl)
-            proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
-        else:
-            proxyUser, proxyPass, proxy, proxyPort = None, None, None, None
+        proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo()
         return EC2Connection(credentials['awsPublicAccessKeyId'],
                              credentials['awsSecretAccessKey'],
                              proxy_user = proxyUser,
@@ -489,12 +521,32 @@ class EC2Client(baseDriver.BaseDriver):
         parameters = CloudParameters(parameters)
         pass
 
+    def createUserData(self, userData):
+        templ = """\
+[sfcb-client-setup]
+x509-cert-hash=%s
+x509-cert(base64)=%s
+"""
+        certPath = self.getWbemClientCert()
+        try:
+            certData = file(certPath).read()
+        except IOError:
+            return userData
+
+        certHash = self.computeX509CertHash(certPath)
+        certData = base64.b64encode(certData)
+
+        sect = templ % (certHash, certData)
+        if not userData:
+            return sect
+        return userData + '\n' + sect
+
     def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
         getField = descriptorData.getField
         remoteIp = getField('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to
         # be wrong anyway.
-        if remoteIp and CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
+        if CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
             # Create/update the default security group that opens TCP
             # ports 80, 443, and 8003 for traffic from the requesting IP address
             self._updateCatalogDefaultSecurityGroup(remoteIp)
@@ -506,7 +558,7 @@ class EC2Client(baseDriver.BaseDriver):
                     max_count=getField('maxCount'),
                     key_name=getField('keyName'),
                     security_groups=getField('securityGroups'),
-                    user_data=getField('userData'),
+                    user_data=self.createUserData(getField('userData')),
                     instance_type=getField('instanceType'))
         except EC2ResponseError, e:
             # is this a product code error?
@@ -613,7 +665,9 @@ class EC2Client(baseDriver.BaseDriver):
         return descr
 
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
-        assert(remoteIPAddress)
+        serviceIp = self._getExternalIp()
+        if not remoteIPAddress and not serviceIp:
+            return
         # add the security group if it's not present already
         try:
             self.client.create_security_group(CATALOG_DEF_SECURITY_GROUP,
@@ -624,13 +678,22 @@ class EC2Client(baseDriver.BaseDriver):
             else:
                 raise errors.ResponseError(e.status, e.message, e.body)
 
+        allowed = []
         # open ingress for ports 80, 443, and 8003 on TCP
         # for the IP address
-        for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS:
+        if remoteIPAddress:
+            allowed.extend(dict(from_port=from_port, to_port=to_port,
+                                ip_protocol=proto,
+                                cidr_ip='%s/32' % remoteIPAddress)
+                for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS)
+        if serviceIp:
+            allowed.extend(dict(from_port=from_port, to_port=to_port,
+                                ip_protocol=proto, cidr_ip='%s/32' % serviceIp)
+                for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS)
+        for pdict in allowed:
             try:
                 self.client.authorize_security_group(CATALOG_DEF_SECURITY_GROUP,
-                        ip_protocol=proto, from_port=from_port, to_port=to_port,
-                        cidr_ip='%s/32' % remoteIPAddress)
+                        **pdict)
             except EC2ResponseError, e:
                 if e.status == 400 and e.code == 'InvalidPermission.Duplicate':
                     pass # ignore this error
