@@ -22,7 +22,7 @@ class WBEMUnexpectedReturnException(WBEMException):
         return "Expected return code %s, got %s: %s" % \
             (str(self.expectedReturnCode), str(self.returnCode), str(self.returnMsg))
 
-class MyWBEMConnection(pywbem.WBEMConnection):
+class WBEMConnection(pywbem.WBEMConnection):
     '''
     Simple subclass with a single method to determine if we want to use a
     typical CIM method like GetInstance or call a custom method via
@@ -37,16 +37,17 @@ class MyWBEMConnection(pywbem.WBEMConnection):
         # method first, then use InvokeMethod.
         if hasattr(self, methodName):
             func = pywbem.WBEMConnection.__getattribute__(self, methodName)
+            if methodName not in [ 'GetInstance' ]:
+                args = (CIMClassName, ) + args
         else:
-            # Need tom make use of InvokeMethod, prepend CIMClassName and
+            # Need to make use of InvokeMethod, prepend CIMClassName and
             # methodName to the front of args.
             func = pywbem.WBEMConnection.__getattribute__(self, 'InvokeMethod')
             args = (CIMClassName, ) + args
             args = (methodName,) + args
             self.invokeMethodUsed = True
 
-        return func(*args, **kw)            
-        
+        return func(*args, **kw)
 
 class _CallableMethod(object):
     '''
@@ -85,23 +86,28 @@ class WBEMServer(object):
     respectively.
 
     Example:
-    >>> server = WBEMServer('http://localhost')
+    >>> server = WBEMServer('http://localhost', x509 = dict(cert_file = "cert.crt", key_file = "cert.key"))
     >>> result = server.GetClass('MyCIMClassName')
     >>> result = server.CustomMethod(methodArg1, methodArg2)
     '''
 
     namespace = 'root/cimv2'
 
-    def __init__(self, host, debug=False):
+    def __init__(self, host, debug=False, **kwargs):
         self.host = host
         self.debug = debug
-        self.conn = MyWBEMConnection(host)
+        # XXX FIXME: pywbem uses pyopenssl for the SSL verification callback,
+        # and in a very awkward manner too: it will open an SSL socket to
+        # which it passes the callback, then (if successful) close the socket
+        # and re-open it using HTTPSConnection. This is dangerous (aside from
+        # inefficient)
+        self.conn = WBEMConnection(host, **kwargs)
         self.conn.default_namespace = self.namespace
-        self.conn.debug = self.debug     
+        self.conn.debug = self.debug
         self.returnCodes = {}
 
     def __getattr__(self, attr):
-        return _CallableMethod(self._method_call, attr)            
+        return _CallableMethod(self._method_call, attr)
 
     def _method_call(self, CIMClassName, methodName, *args, **kw):
         try:

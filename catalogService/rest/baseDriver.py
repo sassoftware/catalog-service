@@ -43,6 +43,7 @@ class BaseDriver(object):
 
     updateStatusStateUpdating = 'updating'
     updateStatusStateDone = 'done'
+    updateStatusStateException = 'error'
 
     instanceStorageClass = storage.DiskStorage
 
@@ -469,10 +470,14 @@ class BaseDriver(object):
     def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName
         updater = cimupdater.CIMUpdater(host)
-        updater.checkAndApplyUpdate()
-
-        # Mark the update status as done.
-        newState = self.updateStatusStateDone
+        try:
+            updater.checkAndApplyUpdate()
+        except:
+            # XXX FIXME: do something with the exception
+            newState = self.updateStatusStateException
+        else:
+            # Mark the update status as done.
+            newState = self.updateStatusStateDone
         self._setInstanceUpdateStatus(instance, newState)
 
     def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
