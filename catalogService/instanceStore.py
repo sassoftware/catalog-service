@@ -4,7 +4,7 @@ import time
 
 class InstanceStore(object):
     __slots__ = [ '_store', '_prefix' ]
-    DEFAULT_EXPIRATION = 300
+    DEFAULT_EXPIRATION = 1800
 
     def __init__(self, store, prefix):
         self._store = store
