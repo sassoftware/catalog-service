@@ -490,7 +490,7 @@ class BaseDriver(object):
         self._instanceStore.setUpdateStatusState(instanceId, newState)
         self._instanceStore.setUpdateStatusTime(instanceId, newTime)
         # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instanceId, newTime+10800)
+        self._instanceStore.setExpiration(instanceId, 10800)
 
     def backgroundRun(self, function, *args, **kw):
         pid = os.fork()
