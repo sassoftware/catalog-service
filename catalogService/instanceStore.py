@@ -38,10 +38,10 @@ class InstanceStore(object):
         return self._set(instanceId, 'imageId', imageId)
 
     def getInstanceName(self, instanceId):
-        return self._set(instanceId, "instanceName", name)
+        return self._get(instanceId, "instanceName")
 
     def setInstanceName(self, instanceId, name):
-        return self._get(instanceId, "instanceName")
+        return self._set(instanceId, "instanceName", name)
 
     def getId(self, instanceId):
         return self._get(instanceId, 'id')
