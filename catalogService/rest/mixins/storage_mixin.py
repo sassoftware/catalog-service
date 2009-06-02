@@ -156,49 +156,66 @@ class StorageMixin(object):
     def launchInstanceInBackgroundCleanup(self, image, **params):
         pass
 
+    def getInstanceFromStore(self, instanceId):
+        instanceId = os.path.basename(instanceId)
+        storeKey = os.path.join(self._instanceStore._prefix, instanceId)
+        expiration = self._instanceStore.getExpiration(instanceId)
+        if expiration is None or time.time() > float(expiration):
+            # This instance exists only in the store, and expired
+            self._instanceStore.delete(storeKey)
+            return None
+        imageId = self._instanceStore.getImageId(storeKey)
+        updateData = self._instanceStore.getUpdateStatusState(storeKey)
+        imagesL = self.getImages([imageId])
+
+        # If there were no images read from the instance store, but there
+        # was update data present, just continue, so that the update data
+        # doesn't get deleted from the store.
+        if not imagesL and updateData:
+            return None
+        if not imagesL:
+            # We no longer have this image. Junk the instance
+            self._instanceStore.delete(storeKey)
+            return None
+        image = imagesL[0]
+
+        instanceName = self._instanceStore.getInstanceName(storeKey)
+        if not instanceName:
+            instanceName = self.getInstanceNameFromImage(image)
+        instanceDescription = self.getInstanceDescriptionFromImage(image) \
+            or instanceName
+
+        inst = self._nodeFactory.newInstance(id = instanceId,
+            imageId = imageId,
+            instanceId = instanceId,
+            instanceName = instanceName,
+            instanceDescription = instanceDescription,
+            dnsName = 'UNKNOWN',
+            publicDnsName = 'UNKNOWN',
+            privateDnsName = 'UNKNOWN',
+            state = self._instanceStore.getState(storeKey),
+            launchTime = None,
+            cloudName = self.cloudName,
+            cloudAlias = self.getCloudAlias())
+
+        # Check instance store for updating status, and if it's present,
+        # set the data on the instance object.
+        updateStatusState = self._instanceStore.getUpdateStatusState(storeKey, None)
+        updateStatusTime = self._instanceStore.getUpdateStatusTime(storeKey, None)
+        if updateStatusState:
+            inst.getUpdateStatus().setState(updateStatusState)
+        if updateStatusTime:
+            inst.getUpdateStatus().setTime(updateStatusTime)
+
+        return inst
+
     def getInstancesFromStore(self):
         instanceList = []
         storeInstanceKeys = self._instanceStore.enumerate()
         for storeKey in storeInstanceKeys:
-            instanceId = os.path.basename(storeKey)
-            expiration = self._instanceStore.getExpiration(storeKey)
-            if expiration is None or time.time() > float(expiration):
-                # This instance exists only in the store, and expired
-                self._instanceStore.delete(storeKey)
+            inst = self.getInstanceFromStore(storeKey)
+            if inst is None:
                 continue
-            imageId = self._instanceStore.getImageId(storeKey)
-            updateData = self._instanceStore.getUpdateStatusState(storeKey)
-            imagesL = self.getImages([imageId])
-
-            # If there were no images read from the instance store, but there
-            # was update data present, just continue, so that the update data
-            # doesn't get deleted from the store.
-            if not imagesL and updateData:
-                continue
-            elif not imagesL:
-                # We no longer have this image. Junk the instance
-                self._instanceStore.delete(storeKey)
-                continue
-            image = imagesL[0]
-
-            instanceName = self._instanceStore.getInstanceName(storeKey)
-            if not instanceName:
-                instanceName = self.getInstanceNameFromImage(image)
-            instanceDescription = self.getInstanceDescriptionFromImage(image) \
-                or instanceName
-
-            inst = self._nodeFactory.newInstance(id = instanceId,
-                imageId = imageId,
-                instanceId = instanceId,
-                instanceName = instanceName,
-                instanceDescription = instanceDescription,
-                dnsName = 'UNKNOWN',
-                publicDnsName = 'UNKNOWN',
-                privateDnsName = 'UNKNOWN',
-                state = self._instanceStore.getState(storeKey),
-                launchTime = None,
-                cloudName = self.cloudName,
-                cloudAlias = self.getCloudAlias())
 
             instanceList.append(inst)
         return instanceList
