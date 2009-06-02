@@ -181,7 +181,9 @@ class StorageMixin(object):
                 continue
             image = imagesL[0]
 
-            instanceName = self.getInstanceNameFromImage(image)
+            instanceName = self._instanceStore.getInstanceName(storeKey)
+            if not instanceName:
+                instanceName = self.getInstanceNameFromImage(image)
             instanceDescription = self.getInstanceDescriptionFromImage(image) \
                 or instanceName
 
