@@ -349,6 +349,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return cloudConfig['alias']
 
     def _buildInstanceList(self, instanceList, instMap):
+        instIdSet = set()
+        newInstanceList = []
         cloudAlias = self.getCloudAlias()
         for mor, vminfo in instMap.iteritems():
             if vminfo.get('config.template', False):
@@ -358,12 +360,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             launchTime = None
             if 'runtime.bootTime' in vminfo:
                 launchTime = int(time.mktime(vminfo['runtime.bootTime']))
+            instanceId = vminfo['config.uuid']
             inst = self._nodeFactory.newInstance(
-                id = vminfo['config.uuid'],
+                id = instanceId,
                 instanceName = vminfo['name'],
                 instanceDescription = vminfo['config.annotation'],
-                instanceId = vminfo['config.uuid'],
-                reservationId = vminfo['config.uuid'],
+                instanceId = instanceId,
+                reservationId = instanceId,
                 dnsName = vminfo.get('guest.ipAddress', None),
                 publicDnsName = vminfo.get('guest.ipAddress', None),
                 state = vminfo['runtime.powerState'],
@@ -380,7 +383,18 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             if updateStatusTime:
                 inst.getUpdateStatus().setTime(updateStatusTime)
 
-            instanceList.append(inst)
+            instIdSet.add(instanceId)
+            newInstanceList.append(inst)
+        # Add back the original instances, unless we have them already
+        for inst in instanceList:
+            instanceId = inst.getInstanceId()
+            if instanceId in instIdSet:
+                continue
+            instIdSet.add(instanceId)
+            newInstanceList.append(inst)
+
+        del instanceList[:]
+        instanceList.extend(newInstanceList)
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
 
         return instanceList
