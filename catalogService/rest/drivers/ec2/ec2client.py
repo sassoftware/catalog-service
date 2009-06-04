@@ -564,7 +564,20 @@ x509-cert(base64)=%s
             # is this a product code error?
             pcData = self._processProductCodeError(e.message)
             raise errors.ResponseError, (e.status, e.message, e.body, pcData), sys.exc_info()[2]
-        return self._getInstancesFromReservation(reservation)
+        ret = self._getInstancesFromReservation(reservation)
+        # Store x509 cert into the storage directory, so we can manage the
+        # instance in the future
+        x509Cert, x509Key = self.getWbemX509()
+        for inst in ret:
+            instanceId = inst.getInstanceId()
+            self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
+         Remove x509 components from the common storage space
+        for f in [ x509Cert, x509Key ]:
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
+        return ret
 
     def terminateInstances(self, instanceIds):
         resultSet = self.client.terminate_instances(instance_ids=instanceIds)

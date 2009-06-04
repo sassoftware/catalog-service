@@ -111,3 +111,19 @@ class InstanceStore(object):
 
     def _getInstanceId(self, key):
         return os.path.basename(key)
+
+    def storeX509(self, instanceId, certPath, keyPath):
+        """
+        Save the X509 cert components into the store, and remove the old files
+        """
+        instanceId = self._getInstanceId(instanceId)
+        self._store.set((self._prefix, instanceId, 'x509cert'),
+                        file(certPath).read())
+        self._store.set((self._prefix, instanceId, 'x509key'),
+                        file(keyPath).read())
+
+    def getX509Files(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        ret = [ self._store.getFileFromKey((self._prefix, instanceId, x))
+                for x in ['x509cert', 'x509key'] ]
+        return tuple(ret)

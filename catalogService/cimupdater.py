@@ -17,6 +17,12 @@ class CIMUpdater(object):
     DEFAULT_TIMEOUT = 3600
 
     def __init__(self, host, x509 = None):
+        """
+        Connect to the specified host.
+        x509 should be a dictionary with cert_file and key_file as keys, and
+        paths to the corresponding X509 components as values.
+        """
+
         self.server = wbemlib.WBEMServer(host, debug = True, x509 = x509)
         self._jobStates = None
         self._updateCheckReturnValues = None

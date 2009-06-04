@@ -19,8 +19,7 @@ from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
 from catalogService import keypairs, securityGroups
 from catalogService import storage
-
-from M2Crypto import X509
+from catalogService import x509
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -62,6 +61,8 @@ class BaseDriver(object):
         self._nodeFactory.userId = userId
         self._logger = None
         self._instanceStore = None
+        self._x509Cert = None
+        self._x509Key = None
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -469,7 +470,10 @@ class BaseDriver(object):
 
     def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName
-        updater = cimupdater.CIMUpdater(host)
+        instanceId = instance.getInstanceId()
+        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        x509Dict = dict(cert_file = certFile, key_file = keyFile)
+        updater = cimupdater.CIMUpdater(host, x509)
         try:
             updater.checkAndApplyUpdate()
         except:
@@ -572,14 +576,26 @@ class BaseDriver(object):
             getattr(image, methodName)(mintImageData.get(key))
 
     def getWbemClientCert(self):
+        return self.getWbemX509()[0]
+
+    def getWbemX509(self):
+        if self._x509Cert:
+            # Already generated for this instance
+            return self._x509Cert, self._x509Key
         certDir = os.path.join(self._cfg.storagePath, 'x509')
-        certFile = os.path.join(certDir, "cert.pem")
-        return certFile
+        self._x509Cert, self._x509Key = self.newX509(certDir)
+        return self._x509Cert, self._x509Key
 
     def computeX509CertHash(self, certFile):
-        x509 = X509.load_cert(certFile)
-        certHash = "%x" % x509.get_issuer().as_hash()
-        return certHash
+        return x509.X509.computeHash(certFile)
+
+    def newX509(self, certDir):
+        netloc = urllib2.urlparse.urlparse(self._nodeFactory.baseUrl)[1]
+        host, port = urllib.splitnport(netloc)
+
+        commonName = 'Client certificate for %s' % host
+        util.mkdirChain(certDir)
+        return x509.X509.new(commonName, certDir = certDir)
 
     def getCredentialsIsoFile(self):
         certFile = self.getWbemClientCert()
@@ -587,10 +603,9 @@ class BaseDriver(object):
         util.mkdirChain(certDir)
         isoDir = os.path.join(self._cfg.storagePath, 'credentials')
         util.mkdirChain(isoDir)
-        isoFile = os.path.join(isoDir, "credentials.iso")
-
-        if os.path.exists(isoFile):
-            return isoFile
+        fd, isoFile = x509.tempfile.mkstemp(dir = isoDir,
+             prefix = 'credentials-', suffix = '.iso')
+        os.close(fd)
 
         # Create an empty file for our signature
         empty = os.path.join(certDir, "EMPTY")
