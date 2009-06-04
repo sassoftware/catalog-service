@@ -471,9 +471,11 @@ class BaseDriver(object):
     def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName
         instanceId = instance.getInstanceId()
+        self.log_debug("Updating instance %s (%s))", instanceId, dnsName)
         certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
         x509Dict = dict(cert_file = certFile, key_file = keyFile)
-        updater = cimupdater.CIMUpdater(host, x509)
+        updater = cimupdater.CIMUpdater(host, x509Dict)
         try:
             updater.checkAndApplyUpdate()
         except:
