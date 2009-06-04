@@ -571,7 +571,7 @@ x509-cert(base64)=%s
         for inst in ret:
             instanceId = inst.getInstanceId()
             self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
-         Remove x509 components from the common storage space
+        # Remove x509 components from the common storage space
         for f in [ x509Cert, x509Key ]:
             try:
                 os.unlink(f)
