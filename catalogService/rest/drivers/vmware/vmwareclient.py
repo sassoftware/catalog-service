@@ -616,6 +616,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                 computeResource)
         self.client.startVM(mor = vmMor)
         self._setState(instanceId, 'Launching')
+        # Grab the real uuid
+        instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
+        uuid = instMap[vmMor]['config.uuid']
+        return uuid
+
 
     def _attachCredentials(self, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor):

@@ -145,7 +145,10 @@ class StorageMixin(object):
         self._instanceStore.setPid(instanceId)
         try:
             try:
-                self.launchInstanceProcess(image, auth, **params)
+                realInstanceId = self.launchInstanceProcess(image, auth, **params)
+                if realInstanceId:
+                    x509Cert, x509Key = self.getWbemX509()
+                    self._instanceStore.storeX509(realInstanceId, x509Cert, x509Key)
             except:
                 self._setState(instanceId, 'Error')
                 raise
@@ -154,7 +157,7 @@ class StorageMixin(object):
             self.launchInstanceInBackgroundCleanup(image, **params)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
-        pass
+        self.cleanUpX509()
 
     def getInstanceFromStore(self, instanceId):
         instanceId = os.path.basename(instanceId)

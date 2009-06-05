@@ -588,6 +588,16 @@ class BaseDriver(object):
         self._x509Cert, self._x509Key = self.newX509(certDir)
         return self._x509Cert, self._x509Key
 
+    def cleanUpX509(self):
+        if not self._x509Cert:
+            return
+        certs = self.getWbemX509()
+        for c in certs:
+            try:
+                os.unlink(c)
+            except OSError:
+                pass
+
     def computeX509CertHash(self, certFile):
         return x509.X509.computeHash(certFile)
 
