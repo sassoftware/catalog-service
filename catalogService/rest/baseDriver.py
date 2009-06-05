@@ -421,7 +421,6 @@ class BaseDriver(object):
 
     def _downloadImage(self, image, tmpDir, auth = None, extension = '.tgz'):
         imageId = image.getImageId()
-        build = self._mintClient.getBuild(image.getBuildId())
 
         downloadUrl = image.getDownloadUrl()
         imageId = os.path.basename(image.getId())
