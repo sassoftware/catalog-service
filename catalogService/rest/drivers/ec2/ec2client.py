@@ -593,6 +593,8 @@ x509-cert(base64)=%s
             if e.code in ['InvalidInstanceID.NotFound',
                           'InvalidInstanceID.Malformed']:
                 raise errors.HttpNotFound()
+            raise errors.ResponseError(e.status, e.message, e.body)
+
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
