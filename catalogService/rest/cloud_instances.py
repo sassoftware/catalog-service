@@ -19,6 +19,10 @@ class ImagesController(BaseCloudController):
         imgNodes = self.driver(request, cloudName).getAllImages()
         return XmlResponse(imgNodes)
 
+    def get(self, request, cloudName, imageId):
+        images = self.driver(request, cloudName).getImages([imageId])
+        return XmlResponse(images)
+
 class InstancesUpdateController(BaseCloudController):
     modelName = 'instanceUpdateId'
 
