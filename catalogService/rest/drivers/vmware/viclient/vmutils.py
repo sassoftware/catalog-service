@@ -59,6 +59,7 @@ def _makeConnection(url, method, headers = None, bodyStream = None):
                 sizeLimit=hdrs['Content-Length'])
         return r.getresponse()
     except socket.error, e:
+        raise
         response = None
         try:
             response = r.getresponse()
