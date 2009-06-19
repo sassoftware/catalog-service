@@ -421,7 +421,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         instanceList.extend(self.getInstancesFromStore())
         instMap = self.getVirtualMachines()
-        return self._buildInstanceList(instanceList, instMap)
+        return self.filterInstances(instanceIds,
+            self._buildInstanceList(instanceList, instMap))
 
     def getVirtualMachines(self):
         if self._virtualMachines is not None:
