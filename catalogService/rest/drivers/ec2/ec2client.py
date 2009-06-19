@@ -541,7 +541,7 @@ x509-cert(base64)=%s
             return sect
         return userData + '\n' + sect
 
-    def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
+    def launchInstanceFromDescriptorData(self, descriptorData, auth):
         getField = descriptorData.getField
         remoteIp = getField('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to

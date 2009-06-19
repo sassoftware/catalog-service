@@ -113,7 +113,7 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self._logger = self._getLogger(self.address_string())
         self.handler.setLogger(self._logger)
         rlogging.LoggerCallback.logger = self._logger
-        self.handler.handle(self, self.path[len(self.pathPrefix):])
+        self.handler.handle(self, pathPrefix=self.pathPrefix)
     do_GET = do_POST = do_PUT = do_DELETE = do
 
     @classmethod
