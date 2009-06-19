@@ -50,7 +50,9 @@ class InstancesController(BaseCloudController):
         # We need to pass in authentication information, downloading private
         # images requires that.
         insts = self.driver(request, cloudName).launchInstance(request.read(),
-                request.auth)
+                                                               request.host,
+                                                               request.auth,
+                                                               )
         request.logger.info("User %s: launched instance %s/%s/%s with image %s"
             % ( request.auth[0], self.driver.cloudType, cloudName,
             ','.join([os.path.basename(x.getInstanceId()) for x in insts]),

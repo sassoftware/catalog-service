@@ -123,7 +123,8 @@ class ErrorMessageCallback(object):
             cfg = config.getConfig()
             info = {
                     'path'                  : request.path,
-                    'baseUrl'               : request.baseUrl,
+                    'basePath'              : request.basePath,
+                    'host'                  : request.host,
                     'method'                : request.method,
                     'headers_in'            : request.headers,
                     'request_params'        : request.GET,
