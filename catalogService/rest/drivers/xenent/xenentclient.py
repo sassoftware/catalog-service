@@ -399,7 +399,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         if task.get('status') != 'success':
             errorInfo = task.get('error_info', '')
             raise errors.CatalogError("Unable to upload image %s: %s" %
-                vmFile, errorInfo)
+                (vmFile, errorInfo))
         # Wrap the pseudo-XMLRPC response
         params = XenAPI.xmlrpclib.loads(self._XmlRpcWrapper %
             task['result'])[0]
