@@ -185,6 +185,16 @@ class BaseDriver(object):
             return ret[0]
         raise errors.HttpNotFound()
 
+    def filterInstances(self, instanceIds, instanceList):
+        if not instanceIds:
+            return instanceList
+
+        instanceIds = set(os.path.basename(x) for x in instanceIds)
+        ret = instances.BaseInstances()
+        ret.extend(x for x in instanceList
+            if x.getInstanceId() in instanceIds)
+        return ret
+
     def drvGetCloudCredentialsForUser(self):
         """
         Authenticate the user and cache the cloud credentials
@@ -271,16 +281,16 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
-    def launchInstance(self, xmlString, requestIPAddress, auth):
+    def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
         descr.setRootElement('newInstance')
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
-        return self.launchInstanceFromDescriptorData(descrData, requestIPAddress, auth)
+        return self.launchInstanceFromDescriptorData(descrData, auth)
 
-    def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
+    def launchInstanceFromDescriptorData(self, descriptorData, auth):
         client = self.client
         cloudConfig = self.drvGetCloudConfiguration()
 
@@ -451,7 +461,9 @@ class BaseDriver(object):
 
     def updateInstances(self, instanceIds):
         instanceList = self.getInstances(instanceIds)
+        return self._updateInstances(instanceList)
 
+    def _updateInstances(self, instanceList):
         for instance in instanceList:
             dnsName = instance.getPublicDnsName()
             if not dnsName:
@@ -465,7 +477,8 @@ class BaseDriver(object):
         return instanceList
 
     def updateInstance(self, instanceId):
-        return self.updateInstances([instanceId])
+        instance = self.getInstance(instanceId)
+        return self._updateInstances([instance])
 
     def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName
