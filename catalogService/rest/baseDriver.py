@@ -281,16 +281,16 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
-    def launchInstance(self, xmlString, auth):
+    def launchInstance(self, xmlString, requestIPAddress, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
         descr.setRootElement('newInstance')
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
-        return self.launchInstanceFromDescriptorData(descrData, auth)
+        return self.launchInstanceFromDescriptorData(descrData, requestIPAddress, auth)
 
-    def launchInstanceFromDescriptorData(self, descriptorData, auth):
+    def launchInstanceFromDescriptorData(self, descriptorData, requestIPAddress, auth):
         client = self.client
         cloudConfig = self.drvGetCloudConfiguration()
 
