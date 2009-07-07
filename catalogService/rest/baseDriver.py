@@ -475,7 +475,7 @@ class BaseDriver(object):
 
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         ret = instances.BaseInstances()
-        ret.update(instanceList)
+        ret.extend(instanceList)
         return ret
 
     def updateInstance(self, instanceId):
