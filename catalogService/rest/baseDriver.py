@@ -185,6 +185,16 @@ class BaseDriver(object):
             return ret[0]
         raise errors.HttpNotFound()
 
+    def filterInstances(self, instanceIds, instanceList):
+        if not instanceIds:
+            return instanceList
+
+        instanceIds = set(os.path.basename(x) for x in instanceIds)
+        ret = instances.BaseInstances()
+        ret.extend(x for x in instanceList
+            if x.getInstanceId() in instanceIds)
+        return ret
+
     def drvGetCloudCredentialsForUser(self):
         """
         Authenticate the user and cache the cloud credentials
@@ -451,7 +461,9 @@ class BaseDriver(object):
 
     def updateInstances(self, instanceIds):
         instanceList = self.getInstances(instanceIds)
+        return self._updateInstances(instanceList)
 
+    def _updateInstances(self, instanceList):
         for instance in instanceList:
             dnsName = instance.getPublicDnsName()
             if not dnsName:
@@ -465,7 +477,8 @@ class BaseDriver(object):
         return instanceList
 
     def updateInstance(self, instanceId):
-        return self.updateInstances([instanceId])
+        instance = self.getInstance(instanceId)
+        return self._updateInstances([instance])
 
     def _updateInstance(self, instance, dnsName):
         host = 'https://%s' % dnsName

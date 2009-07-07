@@ -372,14 +372,8 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
 
             instanceList.append(inst)
-        if instanceIds:
-            instanceIds = set(os.path.basename(x) for x in instanceIds)
-            ret = instances.BaseInstances()
-            ret.extend(x for x in instanceList
-                if x.getInstanceId() in instanceIds)
-            instanceList = ret
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
+        return self.filterInstances(instanceIds, instanceList)
 
     def _putImage(self, vmFile, srUuid, taskRef):
         srRef = self.client.xenapi.SR.get_by_uuid(srUuid)
