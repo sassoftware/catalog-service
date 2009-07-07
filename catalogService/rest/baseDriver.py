@@ -474,7 +474,9 @@ class BaseDriver(object):
             self.backgroundRun(self._updateInstance, instance, dnsName)
 
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        return instanceList
+        ret = instances.BaseInstances()
+        ret.update(instanceList)
+        return ret
 
     def updateInstance(self, instanceId):
         instance = self.getInstance(instanceId)
