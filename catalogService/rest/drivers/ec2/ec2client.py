@@ -413,12 +413,10 @@ class EC2Client(baseDriver.BaseDriver):
             conn.create_bucket(bucket)
         except S3CreateError, e:
             # Bucket already exists
-            errStatus = e.status
-            errMessage = e.message
-            errBody = e.body
+            pass
         except S3ResponseError, e:
             # Bad auth data
-            raise errors.ResponseError(e.status, e.message, e.body)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         else:
             return True
 
@@ -426,14 +424,14 @@ class EC2Client(baseDriver.BaseDriver):
         try:
             bucket = conn.get_bucket(bucket)
         except S3ResponseError:
-            raise errors.ResponseError(errStatus, errMessage, errBody)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
 
         keyName = self._createRandomKey()
         key = bucket.new_key(keyName)
         try:
             key.set_contents_from_string("")
         except S3ResponseError:
-            raise errors.ResponseError(errStatus, errMessage, errBody)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         else:
             # Clean up
             bucket.delete_key(keyName)
@@ -477,13 +475,23 @@ class EC2Client(baseDriver.BaseDriver):
         try:
             cli.get_all_regions()
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, e.message, e.body)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         try:
             self._mintClient.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
             pass
         store.set('enabled', 1)
         return self.listClouds()[0]
+
+    @classmethod
+    def _getErrorCode(cls, err):
+        fname = hasattr(err, 'error_code') and 'error_code' or 'code'
+        return getattr(err, fname)
+
+    @classmethod
+    def _getErrorMessage(cls, err):
+        fname = hasattr(err, 'error_message') and 'error_message' or 'message'
+        return getattr(err, fname)
 
     def isDriverFunctional(self):
         return True
@@ -562,8 +570,9 @@ x509-cert(base64)=%s
                     instance_type=getField('instanceType'))
         except EC2ResponseError, e:
             # is this a product code error?
-            pcData = self._processProductCodeError(e.message)
-            raise errors.ResponseError, (e.status, e.message, e.body, pcData), sys.exc_info()[2]
+            errorMsg = self._getErrorMessage(e)
+            pcData = self._processProductCodeError(errorMsg)
+            raise errors.ResponseError, (e.status, errorMsg, e.body, pcData), sys.exc_info()[2]
         ret = self._getInstancesFromReservation(reservation)
         # Store x509 cert into the storage directory, so we can manage the
         # instance in the future
@@ -590,10 +599,10 @@ x509-cert(base64)=%s
         try:
             resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         except EC2ResponseError, e:
-            if e.code in ['InvalidInstanceID.NotFound',
-                          'InvalidInstanceID.Malformed']:
+            if self._getErrorCode(e) in ['InvalidInstanceID.NotFound',
+                                         'InvalidInstanceID.Malformed']:
                 raise errors.HttpNotFound()
-            raise errors.ResponseError(e.status, e.message, e.body)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
 
         insts = instances.BaseInstances()
         for reservation in resultSet:
@@ -688,10 +697,10 @@ x509-cert(base64)=%s
             self.client.create_security_group(CATALOG_DEF_SECURITY_GROUP,
                     CATALOG_DEF_SECURITY_GROUP_DESC)
         except EC2ResponseError, e:
-            if e.status == 400 and e.code == 'InvalidGroup.Duplicate':
+            if e.status == 400 and self._getErrorCode(e) == 'InvalidGroup.Duplicate':
                 pass # ignore this error
             else:
-                raise errors.ResponseError(e.status, e.message, e.body)
+                raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
 
         allowed = []
         # open ingress for ports 80, 443, and 8003 on TCP
@@ -710,10 +719,10 @@ x509-cert(base64)=%s
                 self.client.authorize_security_group(CATALOG_DEF_SECURITY_GROUP,
                         **pdict)
             except EC2ResponseError, e:
-                if e.status == 400 and e.code == 'InvalidPermission.Duplicate':
+                if e.status == 400 and self._getErrorCode(e) == 'InvalidPermission.Duplicate':
                     pass # ignore this error
                 else:
-                    raise errors.ResponseError(e.status, e.message, e.body)
+                    raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
 
         return CATALOG_DEF_SECURITY_GROUP
 
@@ -749,8 +758,9 @@ x509-cert(base64)=%s
         return ret
 
     def _getSingleInstance(self, instance, imageNode, properties):
-        if hasattr(instance, 'ami_launch_index'):
-            properties['launchIndex'] = int(instance.ami_launch_index)
+        launchIndex = getattr(instance, 'ami_launch_index', None)
+        if launchIndex is not None:
+            properties['launchIndex'] = int(launchIndex)
         for attr, botoAttr in self._instanceBotoMap.items():
             properties[attr] = getattr(instance, botoAttr, None)
         # come up with a sane name
@@ -802,14 +812,14 @@ x509-cert(base64)=%s
         try:
             rs = self.client.get_all_key_pairs(keynames = keynames)
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, e.message, e.body)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         return [ (x.name, x.fingerprint) for x in rs ]
 
     def _cliGetSecurityGroups(self, groupNames = None):
         try:
             rs = self.client.get_all_security_groups(groupnames = groupNames)
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, e.message, e.body)
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         ret = []
         defSecurityGroup = None
         for sg in rs:
@@ -835,24 +845,23 @@ x509-cert(base64)=%s
     def _processProductCodeError(self, message):
         if "subscription to productcode" in message.lower():
             return self._getProductCodeData(message)
-        else:
-            return None
-                
+        return None
+
     def _getProductCodeData(self, message):
         """
         Get the proper product code entry based on the message
         @return: a dict in the form of {'code': <code>, 'url': <url'}
         """
         # get the product code from the message
-        map = None
         parts = message.strip().split(' ')
         if parts and len(parts) >= 3:
             code = parts[3]
-            url = EC2_DEVPAY_OFFERING_BASE_URL % code
-            map = {'code': code, 'url': url}
-        
-        return map
+            return self._getProductCodeMap(code)
+        return None
 
+    def _getProductCodeMap(self, productCode):
+        return dict(code = productCode,
+                    url = EC2_DEVPAY_OFFERING_BASE_URL % productCode)
 
 PEM_LINE = 76
 PEM_HEADER = '-{2,5}(BEGIN [A-Z0-9 ]+?\s*)-{2,5}'
