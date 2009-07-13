@@ -14,6 +14,8 @@ import time
 
 from xml.dom import minidom
 
+from catalogService import timeutils
+
 class WorkspaceCloudProperties(object):
     __slots__ = [ 'properties' ]
     _properties = {
@@ -470,8 +472,7 @@ class WorkspaceCloudClient(object):
                 except ValueError:
                     pass
             elif k in timeFields:
-                ttup = time.strptime(v, cls._timeFormat)
-                tstamp = int(time.mktime(ttup))
+                tstamp = timeutils.utctime(v, cls._timeFormat)
                 meth = getattr(inst, timeFields[k])
                 meth(tstamp)
         return inst
