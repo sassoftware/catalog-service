@@ -359,7 +359,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
             launchTime = None
             if 'runtime.bootTime' in vminfo:
-                launchTime = int(time.mktime(vminfo['runtime.bootTime']))
+                launchTime = self.utctime(vminfo['runtime.bootTime'])
             instanceId = vminfo['config.uuid']
             inst = self._nodeFactory.newInstance(
                 id = instanceId,

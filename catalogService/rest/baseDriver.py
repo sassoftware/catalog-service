@@ -19,6 +19,7 @@ from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
 from catalogService import keypairs, securityGroups
 from catalogService import storage
+from catalogService import timeutils
 from catalogService import x509
 
 class BaseDriver(object):
@@ -651,6 +652,12 @@ class BaseDriver(object):
             stderr = devnull)
         p.wait()
         return isoFile
+
+    @classmethod
+    def utctime(cls, timestr, timeFormat = None):
+        if timeFormat is None:
+            timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
+        return timeutils.utctime(timestr, timeFormat)
 
 class CookieClient(object):
     def __init__(self, server, username, password):

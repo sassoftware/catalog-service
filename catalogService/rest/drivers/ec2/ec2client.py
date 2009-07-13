@@ -772,9 +772,7 @@ x509-cert(base64)=%s
         properties['instanceName'] = instanceName
         properties['instanceDescription'] = instanceDescription
         if properties['launchTime']:
-            timeTuple = time.strptime(properties['launchTime'], 
-                           "%Y-%m-%dT%H:%M:%S.000Z")
-            properties['launchTime'] = int(time.mktime(timeTuple))
+            properties['launchTime'] = self.utctime(properties['launchTime'])
 
         productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
             for x in instance.product_codes ]

@@ -327,13 +327,11 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # we parse the value ourselves
         startTime = metrics['start_time'].value
         try:
-            startTime = time.strptime(startTime, "%Y%m%dT%H:%M:%SZ")
+            startTime = self.utctime(startTime, "%Y%m%dT%H:%M:%SZ")
         except ValueError:
             # We couldn't parse the value.
             return None
-        # time.mktime will produce a local time out of a Zulu time, so we need
-        # to adjust it with the local timezone offset
-        return int(time.mktime(startTime) - time.timezone)
+        return startTime
 
     def drvGetInstances(self, instanceIds):
         instMap  = self.client.xenapi.VM.get_all_records()
