@@ -182,6 +182,8 @@ class BaseNode(xmllib.BaseNode):
             return xmllib.BooleanNode.fromString(val.getText())
         if slotType == list:
             return [ x.getText() for x in val.iterChildren()]
+        if slotType == int:
+            return int(val.getText())
         if isinstance(val, xmllib.IntegerNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:

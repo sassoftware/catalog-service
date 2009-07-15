@@ -13,7 +13,8 @@ class NodeFactory(object):
         'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'imageFactory', 'instanceFactory', 'instanceUpdateStatusFactory',
-        'instanceTypeFactory', 'keyPairFactory', 'securityGroupFactory',
+        'instanceTypeFactory', 'jobTypeFactory', 'keyPairFactory',
+        'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName', 'userId']
 
     def __init__(self, **kwargs):
@@ -109,6 +110,20 @@ class NodeFactory(object):
                 if '://' not in href:
                     helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
         return descriptor
+
+    def newJobType(self, *args, **kwargs):
+        node = self.jobTypeFactory(*args, **kwargs)
+        cloudTypeId = self._getCloudTypeUrl(self.cloudType)
+        node.setId(cloudTypeId)
+        node.setCloudInstances(cloud_types.CloudInstances(
+            href = self.join(cloudTypeId, 'instances')))
+        node.setDescriptorCredentials(cloud_types.DescriptorCredentials(
+            href = self.join(cloudTypeId, 'descriptor', 'credentials')))
+        node.setDescriptorInstanceConfiguration(
+            cloud_types.DescriptorInstanceConfiguration(
+                href = self.join(cloudTypeId, 'descriptor', 'configuration')))
+        return node
+
 
     @classmethod
     def join(cls, *args):
