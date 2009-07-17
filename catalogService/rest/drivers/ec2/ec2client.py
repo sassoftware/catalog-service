@@ -25,6 +25,8 @@ from catalogService import securityGroups
 from catalogService import storage
 from catalogService.rest import baseDriver
 
+CATALOG_DYN_SECURITY_GROUP = 'dynamic'
+CATALOG_DYN_SECURITY_GROUP_DESC = 'Generated Security Group'
 CATALOG_DEF_SECURITY_GROUP = 'catalog-default'
 CATALOG_DEF_SECURITY_GROUP_DESC = 'Default EC2 Catalog Security Group'
 CATALOG_DEF_SECURITY_GROUP_PERMS = (
@@ -546,10 +548,16 @@ x509-cert(base64)=%s
         remoteIp = getField('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to
         # be wrong anyway.
+        securityGroups = getField('securityGroups')
         if CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
             # Create/update the default security group that opens TCP
             # ports 80, 443, and 8003 for traffic from the requesting IP address
             self._updateCatalogDefaultSecurityGroup(remoteIp)
+        if CATALOG_DYN_SECURITY_GROUP in getField('securityGroups'):
+            dynSecurityGroup = self._updateCatalogDefaultSecurityGroup(remoteIp, dynamic = True)
+            # Replace placeholder dynamic security group with generated security group
+            securityGroups.remove(CATALOG_DYN_SECURITY_GROUP)
+            securityGroups.append(dynSecurityGroup)
 
         imageId = os.path.basename(getField('imageId'))
         try:
@@ -557,7 +565,7 @@ x509-cert(base64)=%s
                     min_count=getField('minCount'),
                     max_count=getField('maxCount'),
                     key_name=getField('keyName'),
-                    security_groups=getField('securityGroups'),
+                    security_groups=securityGroups,
                     user_data=self.createUserData(getField('userData')),
                     instance_type=getField('instanceType'))
         except EC2ResponseError, e:
@@ -679,19 +687,33 @@ x509-cert(base64)=%s
             constraints = dict(constraintName = 'length', value = 256))
         return descr
 
-    def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress):
-        serviceIp = self._getExternalIp()
-        if not remoteIPAddress and not serviceIp:
-            return
+    def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress, dynamic = False):
         # add the security group if it's not present already
+        if dynamic:
+            securityGroup = os.popen("uuidgen").read()[:-1]
+            securityGroupDesc = CATALOG_DYN_SECURITY_GROUP_DESC
+        else:
+            securityGroup = CATALOG_DEF_SECURITY_GROUP
+            securityGroupDesc = CATALOG_DEF_SECURITY_GROUP_DESC
+
         try:
-            self.client.create_security_group(CATALOG_DEF_SECURITY_GROUP,
-                    CATALOG_DEF_SECURITY_GROUP_DESC)
+            self.client.create_security_group(securityGroup,
+                    securityGroupDesc)
         except EC2ResponseError, e:
             if e.status == 400 and e.code == 'InvalidGroup.Duplicate':
                 pass # ignore this error
             else:
                 raise errors.ResponseError(e.status, e.message, e.body)
+
+        self._updateCatalogSecurityGroup(remoteIPAddress, securityGroup)
+
+        return securityGroup
+
+    def _updateCatalogSecurityGroup(self, remoteIPAddress, securityGroup):
+
+        serviceIp = self._getExternalIp()
+        if not remoteIPAddress and not serviceIp:
+            return
 
         allowed = []
         # open ingress for ports 80, 443, and 8003 on TCP
@@ -707,15 +729,14 @@ x509-cert(base64)=%s
                 for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS)
         for pdict in allowed:
             try:
-                self.client.authorize_security_group(CATALOG_DEF_SECURITY_GROUP,
+                self.client.authorize_security_group(securityGroup,
                         **pdict)
             except EC2ResponseError, e:
                 if e.status == 400 and e.code == 'InvalidPermission.Duplicate':
                     pass # ignore this error
                 else:
                     raise errors.ResponseError(e.status, e.message, e.body)
-
-        return CATALOG_DEF_SECURITY_GROUP
+        return securityGroup
 
     def _getInstancesFromResult(self, resultSet):
         instanceList = instances.BaseInstances()
@@ -758,7 +779,7 @@ x509-cert(base64)=%s
         instanceName = self.getInstanceNameFromImage(imageNode)
         instanceDescription = self.getInstanceDescriptionFromImage(imageNode) \
             or instanceName
-        
+
         properties['instanceName'] = instanceName
         properties['instanceDescription'] = instanceDescription
         if properties['launchTime']:
@@ -823,7 +844,14 @@ x509-cert(base64)=%s
             defSecurityGroup = (CATALOG_DEF_SECURITY_GROUP,
                                 CATALOG_DEF_SECURITY_GROUP_DESC,
                                 None)
+        dynSecurityGroup = (CATALOG_DYN_SECURITY_GROUP,
+                            CATALOG_DYN_SECURITY_GROUP_DESC,
+                            None)
+        ret.insert(0, dynSecurityGroup)
         ret.insert(0, defSecurityGroup)
+        p = re.compile('........-....-....-....-............')
+        ret = [x for x in ret if not p.match(x[0])]
+
         return ret
 
     def _getConfigurationDataStore(self):
@@ -831,13 +859,13 @@ x509-cert(base64)=%s
             self.cloudType, 'aws')
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
-    
+
     def _processProductCodeError(self, message):
         if "subscription to productcode" in message.lower():
             return self._getProductCodeData(message)
         else:
             return None
-                
+
     def _getProductCodeData(self, message):
         """
         Get the proper product code entry based on the message
@@ -850,7 +878,7 @@ x509-cert(base64)=%s
             code = parts[3]
             url = EC2_DEVPAY_OFFERING_BASE_URL % code
             map = {'code': code, 'url': url}
-        
+
         return map
 
 
