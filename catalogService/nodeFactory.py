@@ -124,6 +124,12 @@ class NodeFactory(object):
                 href = self.join(cloudTypeId, 'descriptor', 'configuration')))
         return node
 
+    def getJobIdUrl(self, jobId):
+        # XXX the fact that we have to deconstruct the job id is
+        # unfortunate
+        jobType, jobId = jobId.split('/')
+        return self.join(self.baseUrl, 'jobs', 'types', jobType, 'jobs',
+            jobId)
 
     @classmethod
     def join(cls, *args):

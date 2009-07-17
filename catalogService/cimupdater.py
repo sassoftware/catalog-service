@@ -7,6 +7,8 @@ import time
 
 import wbemlib
 
+WBEMException = wbemlib.WBEMException
+
 class CIMUpdater(object):
     '''
     Class for checking and applying updates to a remote appliance via CIM.
@@ -117,6 +119,20 @@ class CIMUpdater(object):
 
     def getAvailableItemList(self):
         return self._filterItemList([8])
+
+    def getInstalledGroups(self):
+        # XXX this is fairly low-level, we should probably try to wrap some of
+        # these in wbemlib
+        installedGroups = self.getInstalledItemList()
+        ids = [ g['Antecedent']['InstanceID'] for g in installedGroups ]
+        instanceNames = [ wbemlib.pywbem.cim_obj.CIMInstanceName(
+            'VAMI_SoftwareIdentity', keybindings = dict(InstanceId = i))
+            for i in ids ]
+        instances = [ self.server.VAMI_SoftwareIdentity.GetInstance(i)
+            for i in instanceNames ]
+        ret = [ "%s=%s" % (x['name'], x['VersionString'])
+            for x in instances ]
+        return ret
 
     def _filterItemList(self, states):
         insts = self.server.VAMI_ElementSoftwareIdentity.EnumerateInstances()

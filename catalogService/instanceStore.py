@@ -127,3 +127,55 @@ class InstanceStore(object):
         ret = [ self._store.getFileFromKey((self._prefix, instanceId, x))
                 for x in ['x509cert', 'x509key'] ]
         return tuple(ret)
+
+    def setSoftwareVersionJobId(self, instanceId, jobId):
+        instanceId = self._getInstanceId(instanceId)
+        return self._set(instanceId, 'softwareVersionJobId', jobId)
+
+    def getSoftwareVersionJobId(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        return self._get(instanceId, 'softwareVersionJobId')
+
+    def setSoftwareVersionJobStatus(self, instanceId, status):
+        instanceId = self._getInstanceId(instanceId)
+        return self._set(instanceId, 'softwareVersionJobStatus', status)
+
+    def getSoftwareVersionJobStatus(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        return self._get(instanceId, 'softwareVersionJobStatus')
+
+    def setSoftwareVersion(self, instanceId, version):
+        instanceId = self._getInstanceId(instanceId)
+        return self._set(instanceId, 'softwareVersion', version)
+
+    def getSoftwareVersion(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        return self._get(instanceId, 'softwareVersion')
+
+    def setSoftwareVersionLastChecked(self, instanceId, timestamp = None):
+        instanceId = self._getInstanceId(instanceId)
+        if timestamp is None:
+            timestamp = time.time()
+        timestamp = int(timestamp)
+        return self._set(instanceId, 'softwareVersionLastChecked', timestamp)
+
+    def getSoftwareVersionLastChecked(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        ret = self._get(instanceId, 'softwareVersionLastChecked')
+        if ret is None:
+            return None
+        return int(float(ret))
+
+    def setSoftwareVersionNextCheck(self, instanceId, timestamp = None, delta = 86400):
+        instanceId = self._getInstanceId(instanceId)
+        if timestamp is None:
+            timestamp = time.time()
+        timestamp = int(timestamp + delta)
+        return self._set(instanceId, 'softwareVersionNextCheck', timestamp)
+
+    def getSoftwareVersionNextCheck(self, instanceId):
+        instanceId = self._getInstanceId(instanceId)
+        ret = self._get(instanceId, 'softwareVersionNextCheck')
+        if ret is None:
+            return None
+        return int(float(ret))

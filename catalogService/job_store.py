@@ -61,6 +61,7 @@ class BaseJob(object):
         expiration = FieldTimestamp,
         ttl = FieldInteger,
         result = FieldString,
+        pid = FieldInteger,
     )
     _defaultTTL = 7200
     _DEFAULT = object()

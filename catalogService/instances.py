@@ -38,6 +38,19 @@ class _ProductCode(xmlNode.BaseNode):
     def getId(self):
         return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
 
+class _SoftwareVersion(xmlNode.BaseNode):
+    tag = "softwareVersion"
+    multiple = True
+
+    def __init__(self, attrs = None, nsMap = None, item = None):
+        xmlNode.BaseNode.__init__(self, attrs, nsMap = nsMap)
+        if item is None:
+            return
+        self.characters(str(item))
+
+    def getId(self):
+        return "softwareVersion: %s" % self.getText()
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -48,11 +61,20 @@ class BaseInstance(xmlNode.BaseNode):
                   'imageId', 'placement', 'kernel', 'ramdisk',
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
-                  'updateStatus', 
+                  'updateStatus',
                   '_xmlNodeHash', 'launchTime', 'productCode',
-                  'placement' ]
+                  'placement',
+                  'softwareVersion',
+                  'softwareVersionJobId',
+                  'softwareVersionJobStatus',
+                  'softwareVersionLastChecked',
+                  'softwareVersionNextCheck',
+                  ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
-                        productCode = _ProductCode)
+                        productCode = _ProductCode,
+                        softwareVersionLastChecked = int,
+                        softwareVersionNextCheck = int,
+                        softwareVersion = _SoftwareVersion)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -76,6 +98,7 @@ class Handler(xmlNode.Handler):
     launchIndexClass = IntegerNode
     instanceTypeClass = InstanceType
     instanceTypesClass = InstanceTypes
+    softwareVersionClass = _SoftwareVersion
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.launchIndexClass, 'launchIndex')
@@ -89,3 +112,5 @@ class Handler(xmlNode.Handler):
                           self.instanceUpdateStatusStateClass.tag)
         self.registerType(self.instanceUpdateStatusTimeClass,
                           self.instanceUpdateStatusTimeClass.tag)
+        self.registerType(self.softwareVersionClass,
+                          self.softwareVersionClass.tag)

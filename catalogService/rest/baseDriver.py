@@ -17,6 +17,7 @@ from catalogService import nodeFactory
 from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
+from catalogService import job_store
 from catalogService import keypairs, securityGroups
 from catalogService import storage
 from catalogService import timeutils
@@ -62,6 +63,9 @@ class BaseDriver(object):
         self._nodeFactory.userId = userId
         self._logger = None
         self._instanceStore = None
+        spJobSuffix = 'jobs'
+        spath = os.path.join(self._cfg.storagePath, spJobSuffix)
+        self._jobsStore = job_store.ApplianceVersionUpdateJobStore(spath)
         self._x509Cert = None
         self._x509Key = None
 
@@ -173,12 +177,120 @@ class BaseDriver(object):
     def getInstances(self, instanceIds):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
-        return self.drvGetInstances(instanceIds)
+        instances = self.drvGetInstances(instanceIds)
+        for instance in instances:
+            self._updateSoftwareVersion(instance)
+        return instances
+
+    def _updateSoftwareVersion(self, instance):
+        state = instance.getState()
+        if not state or state.lower() != 'running':
+            return
+        instanceId = instance.getInstanceId()
+        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
+        if softwareVersion:
+            content = [ instances._SoftwareVersion(None, None, x)
+                for x in softwareVersion.split('\n') ]
+            instance.setSoftwareVersion(content)
+        nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
+        lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
+        jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
+        jobStatus = self._instanceStore.getSoftwareVersionJobStatus(instanceId)
+        instance.setSoftwareVersionNextCheck(nextCheck)
+        instance.setSoftwareVersionLastChecked(lastChecked)
+        instance.setSoftwareVersionJobStatus(jobStatus)
+        if jobId:
+            instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(jobId))
+
+        if nextCheck and time.time() < nextCheck:
+            return
+
+        if jobStatus == 'Refreshing':
+            # XXX Verify if process still exists
+            return
+
+        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        if not (os.path.exists(keyFile) and os.path.exists(certFile)):
+            return
+        # Do we have an IP address/DNS name for this instance?
+        ipAddr = instance.getPublicDnsName()
+        if not ipAddr:
+            return
+        job = self._jobsStore.create()
+        self.backgroundRun(self.runUpdateSoftwareVersion, instance, job)
+        instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id))
+        jobStatus = 'Refreshing'
+        instance.setSoftwareVersionJobStatus(jobStatus)
+
+    class ProbeHostError(Exception):
+        pass
+
+    def runUpdateSoftwareVersion(self, instance, job):
+        instanceId = instance.getInstanceId()
+        job.pid = os.getpid()
+        job.status = job.STATUS_RUNNING
+
+        self._instanceStore.setSoftwareVersionJobId(instanceId, job.id)
+        self._instanceStore.setSoftwareVersionJobStatus(instanceId,
+                                                        "Refreshing")
+        self._instanceStore.setSoftwareVersionLastChecked(instanceId)
+        self._instanceStore.setSoftwareVersionNextCheck(instanceId)
+        try:
+            self.runUpdateSoftwareVersionJob(instanceId, instance, job)
+        finally:
+            job.pid = None
+            self._instanceStore.setSoftwareVersionJobStatus(instanceId,
+                                                            "Done")
+            self._instanceStore.setSoftwareVersionLastChecked(instanceId)
+            self._instanceStore.setSoftwareVersionNextCheck(instanceId)
+
+    def runUpdateSoftwareVersionJob(self, instanceId, instance, job):
+        _le = job_store.LogEntry
+        ipAddr = instance.getPublicDnsName()
+        port = 5989
+        self.log_debug("software version: probing %s:%s" % (ipAddr, port))
+        try:
+            self._probeHost(ipAddr, port)
+        except self.ProbeHostError, e:
+            job.addLog(_le("Error contacting system %s: %s" % (ipAddr, str(e))))
+            job.status = job.STATUS_FAILED
+            return
+        job.addLog(_le("Successfully probed %s:%s" % (ipAddr, port)))
+        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
+        # We know we can contact the appliance.
+        x509Dict = dict(cert_file = certFile, key_file = keyFile)
+        wbemUrl = "https://%s" % ipAddr
+        try:
+            updater = cimupdater.CIMUpdater(wbemUrl, x509Dict)
+            installedGroups = updater.getInstalledGroups()
+        except cimupdater.WBEMException, e:
+            job.addLog(_le("Error retrieving software version for %s: %s" %
+                (ipAddr, str(e))))
+            job.status = job.STATUS_FAILED
+            return
+        content = '\n'.join(installedGroups)
+        job.result = content
+        self._instanceStore.setSoftwareVersion(instanceId, content)
+        job.status = job.STATUS_COMPLETED
+
+    def _probeHost(self, host, port):
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        try:
+            s.connect((host, port))
+        except socket.error, e:
+            raise self.ProbeHostError(str(e))
+        s.close()
+        return True
 
     def getInstance(self, instanceId):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
-        return self.drvGetInstance(instanceId)
+        instance = self.drvGetInstance(instanceId)
+        self._updateSoftwareVersion(instance)
+        return instance
 
     def drvGetInstance(self, instanceId):
         ret = self.drvGetInstances([instanceId])
