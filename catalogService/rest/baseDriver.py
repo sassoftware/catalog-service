@@ -257,7 +257,9 @@ class BaseDriver(object):
             return
         job.addLog(_le("Successfully probed %s:%s" % (ipAddr, port)))
         certFile, keyFile = self._instanceStore.getX509Files(instanceId)
-        self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
+        self.log_debug("Querying %s using cert %s, key %s", ipAddr,
+                       certFile, keyFile)
+
         # We know we can contact the appliance.
         x509Dict = dict(cert_file = certFile, key_file = keyFile)
         wbemUrl = "https://%s" % ipAddr
