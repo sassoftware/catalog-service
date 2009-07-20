@@ -44,6 +44,11 @@ EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
 
 EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode=%s"
 
+class EC2_SecurityGroup(instances.xmlNode.BaseNode):
+    tag = "securityGroup"
+    multiple = True
+    __slots__ = ['id']
+
 class EC2_Image(images.BaseImage):
     "EC2 Image"
 
@@ -53,9 +58,11 @@ class EC2_Instance(instances.BaseInstance):
     "EC2 Instance"
 
     __slots__ = instances.BaseInstance.__slots__ + [
-                'keyName', ]
+                'keyName', 'securityGroup', ]
 
     _constructorOverrides = EC2_Image._constructorOverrides.copy()
+    _slotTypeMap = instances.BaseInstance._slotTypeMap.copy()
+    _slotTypeMap['securityGroup'] = EC2_SecurityGroup
 
 class EC2_Cloud(clouds.BaseCloud):
     "EC2 Cloud"
@@ -755,6 +762,10 @@ x509-cert(base64)=%s
     def _getInstancesFromReservation(self, reservation):
         insts = instances.BaseInstances()
         insts.extend(self._getInstances(reservation.instances, reservation))
+        securityGroups = [ EC2_SecurityGroup().setId(x.id)
+            for x in reservation.groups ]
+        for inst in insts:
+            inst.setSecurityGroup(securityGroups)
         return insts
 
     def _getInstances(self, instancesIterable, reservation=None):
