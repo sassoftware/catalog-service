@@ -48,6 +48,7 @@ class EC2_SecurityGroup(instances.xmlNode.BaseNode):
     tag = "securityGroup"
     multiple = True
     __slots__ = ['id']
+    _slotAttributes = set(['id'])
 
 class EC2_Image(images.BaseImage):
     "EC2 Image"
