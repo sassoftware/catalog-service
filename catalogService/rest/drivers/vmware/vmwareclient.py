@@ -361,10 +361,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             if 'runtime.bootTime' in vminfo:
                 launchTime = self.utctime(vminfo['runtime.bootTime'])
             instanceId = vminfo['config.uuid']
+            longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
             inst = self._nodeFactory.newInstance(
                 id = instanceId,
                 instanceName = vminfo['name'],
-                instanceDescription = vminfo['config.annotation'].decode('utf-8', 'replace'),
+                instanceDescription = longName,
                 instanceId = instanceId,
                 reservationId = instanceId,
                 dnsName = vminfo.get('guest.ipAddress', None),
@@ -468,6 +469,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
 
             imageId = vminfo['config.uuid']
+            longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
             image = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
@@ -475,7 +477,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 is_rBuilderImage = False,
                 shortName = vminfo['name'],
                 productName = vminfo['name'],
-                longName = vminfo['config.annotation'].decode('utf-8', 'replace'),
+                longName = longName,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
             imageList.append(image)
