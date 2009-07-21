@@ -303,6 +303,9 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             constraints = dict(constraintName = 'length',
                                value = 128))
         storageRepos = self._getStorageRepos()
+        if not storageRepos:
+            # No storage repositories defined; fail
+            raise errors.CatalogError("No Storage Repositories defined")
         descr.addDataField("storageRepository",
             descriptions = "Storage Repository",
             required = True,
