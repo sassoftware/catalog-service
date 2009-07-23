@@ -117,13 +117,54 @@ class VimService(object):
         self._rootFolder = self._sic.get_element_rootFolder()
 
         # log in
+        ret = self.login(self._service, username, password, locale,
+            self._sic.get_element_sessionManager())
+        self._loggedIn = True
+        self._service = self.ServiceProxy(self._service, username, password,
+            locale, self._sic.get_element_sessionManager())
+
+    @classmethod
+    def login(cls, service, username, password, locale, sessionManager):
         req = LoginRequestMsg()
-        req.set_element__this(self._sic.get_element_sessionManager())
+        req.set_element__this(sessionManager)
         req.set_element_userName(username)
         req.set_element_password(password)
         req.set_element_locale(locale)
-        ret = self._service.Login(req)
-        self._loggedIn = True
+        ret = service.Login(req)
+        return ret
+
+    class ServiceProxy(object):
+        def __init__(self, service, username, password, locale, sessionManager):
+            self._service = service
+            self._username = username
+            self._password = password
+            self._locale = locale
+            self._sessionManager = sessionManager
+
+        class ServiceProxyMethod(object):
+            def __init__(self, method, serviceProxy):
+                self._method = method
+                self._serviceProxy = serviceProxy
+
+            def __call__(self, *args, **kwargs):
+                try:
+                    return self._method(*args, **kwargs)
+                except FaultException, e:
+                    if e.fault.string != 'The session is not authenticated.':
+                        raise
+                    # Log in again
+                    VimService.login(self._serviceProxy._service,
+                        self._serviceProxy._username,
+                        self._serviceProxy._password,
+                        self._serviceProxy._locale,
+                        self._serviceProxy._sessionManager)
+                    return self._method(*args, **kwargs)
+
+        def __getattr__(self, name):
+            ret = getattr(self._service, name)
+            if not hasattr(ret, '__call__'):
+                return ret
+            return self.ServiceProxyMethod(ret, self)
 
     def isESX(self):
         prodLine = self._sic.get_element_about().get_element_productLineId()
