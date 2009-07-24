@@ -184,7 +184,8 @@ class BaseDriver(object):
 
     def _updateSoftwareVersion(self, instance):
         state = instance.getState()
-        if not state or state.lower() != 'running':
+        # XXX we really should normalize the states across drivers
+        if not state or state.lower() not in ['running', 'poweredon']:
             return
         instanceId = instance.getInstanceId()
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
