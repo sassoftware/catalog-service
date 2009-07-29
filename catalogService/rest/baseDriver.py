@@ -206,7 +206,7 @@ class BaseDriver(object):
         if nextCheck and time.time() < nextCheck:
             return
 
-        if jobStatus == 'Refreshing':
+        if jobStatus == 'Running':
             # XXX Verify if process still exists
             return
 
@@ -220,7 +220,7 @@ class BaseDriver(object):
         job = self._jobsStore.create()
         self.backgroundRun(self.runUpdateSoftwareVersion, instance, job)
         instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id))
-        jobStatus = 'Refreshing'
+        jobStatus = 'Running'
         instance.setSoftwareVersionJobStatus(jobStatus)
 
     class ProbeHostError(Exception):
@@ -233,7 +233,7 @@ class BaseDriver(object):
 
         self._instanceStore.setSoftwareVersionJobId(instanceId, job.id)
         self._instanceStore.setSoftwareVersionJobStatus(instanceId,
-                                                        "Refreshing")
+                                                        "Running")
         self._instanceStore.setSoftwareVersionLastChecked(instanceId)
         self._instanceStore.setSoftwareVersionNextCheck(instanceId)
         try:
