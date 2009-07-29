@@ -390,11 +390,18 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # The server does not send any useful information back. Close the
         # request and fetch the status from the task
         resp.close()
-        task = self.client.xenapi.task.get_record(taskRef)
-        if task.get('status') != 'success':
-            errorInfo = task.get('error_info', '')
-            raise errors.CatalogError("Unable to upload image %s: %s" %
-                (vmFile, errorInfo))
+        for i in range(60):
+            task = self.client.xenapi.task.get_record(taskRef)
+            if task.get('status') == 'pending':
+                time.sleep(1)
+                continue
+            if task.get('status') != 'success':
+                errorInfo = task.get('error_info', '')
+                raise errors.CatalogError("Unable to upload image %s: %s" %
+                    (vmFile, errorInfo))
+            break
+        else:
+            raise errors.CatalogError("Task is pending for too long")
         # Wrap the pseudo-XMLRPC response
         params = XenAPI.xmlrpclib.loads(self._XmlRpcWrapper %
             task['result'])[0]
