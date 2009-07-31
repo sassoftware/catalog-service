@@ -403,14 +403,18 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def drvGetInstance(self, instanceId):
         # Look in the instance store first. This is fairly cheap
         storeInstance = self.getInstanceFromStore(instanceId)
-        if storeInstance:
-            return storeInstance
 
         uuidRef = self.client.findVMByUUID(instanceId)
         if not uuidRef:
+            if storeInstance:
+                return storeInstance
             raise errors.HttpNotFound()
+
         instMap = self._getVirtualMachines(root = uuidRef)
         instanceList = instances.BaseInstances()
+        if storeInstance:
+            instanceList.append(storeInstance)
+
         ret = self._buildInstanceList(instanceList, instMap)
         if ret:
             return ret[0]
