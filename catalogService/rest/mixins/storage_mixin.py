@@ -124,105 +124,6 @@ class StorageMixin(object):
         store = self._getConfigurationDataStore()
         store.delete(self.cloudName)
 
-    def _setState(self, instanceId, state):
-        self.log_debug("Instance %s: setting state to `%s'", instanceId, state)
-        return self._instanceStore.setState(instanceId, state)
-
-    def getLaunchInstanceParameters(self, image, descriptorData):
-        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self, image,
-            descriptorData)
-        imageId = params['imageId']
-        instanceName = params['instanceName']
-        instanceId = self._instanceStore.newKey(imageId = imageId)
-        self._instanceStore.setInstanceName(instanceId, instanceName)
-        self._instanceStore.setState(instanceId, 'Creating')
-
-        params['instanceId'] = instanceId
-        return params
-
-    def launchInstanceInBackground(self, image, auth, **params):
-        instanceId = params['instanceId']
-        self._instanceStore.setPid(instanceId)
-        try:
-            try:
-                realInstanceId = self.launchInstanceProcess(image, auth, **params)
-                if realInstanceId:
-                    x509Cert, x509Key = self.getWbemX509()
-                    self._instanceStore.storeX509(realInstanceId, x509Cert, x509Key)
-            except:
-                self._setState(instanceId, 'Error')
-                raise
-        finally:
-            self._instanceStore.deletePid(instanceId)
-            self.launchInstanceInBackgroundCleanup(image, **params)
-
-    def launchInstanceInBackgroundCleanup(self, image, **params):
-        self.cleanUpX509()
-
-    def getInstanceFromStore(self, instanceId):
-        instanceId = os.path.basename(instanceId)
-        storeKey = os.path.join(self._instanceStore._prefix, instanceId)
-        expiration = self._instanceStore.getExpiration(instanceId)
-        if expiration is None or time.time() > float(expiration):
-            # This instance exists only in the store, and expired
-            self._instanceStore.delete(storeKey)
-            return None
-        imageId = self._instanceStore.getImageId(storeKey)
-        updateData = self._instanceStore.getUpdateStatusState(storeKey)
-        imagesL = self.getImages([imageId])
-
-        # If there were no images read from the instance store, but there
-        # was update data present, just continue, so that the update data
-        # doesn't get deleted from the store.
-        if not imagesL and updateData:
-            return None
-        if not imagesL:
-            # We no longer have this image. Junk the instance
-            self._instanceStore.delete(storeKey)
-            return None
-        image = imagesL[0]
-
-        instanceName = self._instanceStore.getInstanceName(storeKey)
-        if not instanceName:
-            instanceName = self.getInstanceNameFromImage(image)
-        instanceDescription = self.getInstanceDescriptionFromImage(image) \
-            or instanceName
-
-        inst = self._nodeFactory.newInstance(id = instanceId,
-            imageId = imageId,
-            instanceId = instanceId,
-            instanceName = instanceName,
-            instanceDescription = instanceDescription,
-            dnsName = 'UNKNOWN',
-            publicDnsName = 'UNKNOWN',
-            privateDnsName = 'UNKNOWN',
-            state = self._instanceStore.getState(storeKey),
-            launchTime = None,
-            cloudName = self.cloudName,
-            cloudAlias = self.getCloudAlias())
-
-        # Check instance store for updating status, and if it's present,
-        # set the data on the instance object.
-        updateStatusState = self._instanceStore.getUpdateStatusState(storeKey, None)
-        updateStatusTime = self._instanceStore.getUpdateStatusTime(storeKey, None)
-        if updateStatusState:
-            inst.getUpdateStatus().setState(updateStatusState)
-        if updateStatusTime:
-            inst.getUpdateStatus().setTime(updateStatusTime)
-
-        return inst
-
-    def getInstancesFromStore(self):
-        instanceList = []
-        storeInstanceKeys = self._instanceStore.enumerate()
-        for storeKey in storeInstanceKeys:
-            inst = self.getInstanceFromStore(storeKey)
-            if inst is None:
-                continue
-
-            instanceList.append(inst)
-        return instanceList
-
     @classmethod
     def _getCloudNameFromConfig(cls, config):
         return config['name']
@@ -234,10 +135,4 @@ class StorageMixin(object):
     def isValidCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
         return bool(cloudConfig)
-
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
-                         description = cloudConfig['description'],
-                         cloudAlias = cloudConfig['alias'])
-        return cld
 

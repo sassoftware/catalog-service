@@ -2,6 +2,7 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
+import os
 import urllib
 
 from catalogService import clouds
@@ -13,7 +14,8 @@ class NodeFactory(object):
         'cloudFactory', 'cloudTypeFactory', 'credentialsFactory',
         'credentialsFieldFactory', 'credentialsFieldsFactory',
         'imageFactory', 'instanceFactory', 'instanceUpdateStatusFactory',
-        'instanceTypeFactory', 'jobTypeFactory', 'keyPairFactory',
+        'instanceTypeFactory', 'instanceLaunchJobFactory',
+        'jobTypeFactory', 'keyPairFactory',
         'securityGroupFactory',
         'baseUrl', 'cloudType', 'cloudName', 'userId']
 
@@ -48,6 +50,11 @@ class NodeFactory(object):
             'configuration')))
         node.setDescriptorLaunch(clouds.DescriptorLaunch(href =
                                  self.join(cloudId, 'descriptor', 'launch')))
+        searchParams = dict(cloudName = node.getCloudName(),
+                cloudType = self.cloudType,
+                status = 'Running')
+        node.setActiveJobs(clouds.ActiveJobs(href = self.getJobSearchUrl(
+            'instance-launch', searchParams)))
         return node
 
     def newCloudConfigurationDescriptor(self, descr):
@@ -101,6 +108,16 @@ class NodeFactory(object):
         node.setUpdateStatus(updateStatus)
         return node
 
+    def newInstanceLaunchJob(self, *args, **kwargs):
+        node = self.instanceLaunchJobFactory(*args, **kwargs)
+        node.setId(self.getJobIdUrl(node.getId(), node.getType()))
+        node.setImageId(self._getImageUrl(node, node.getImageId()))
+        for result in (node.getResult() or []):
+            href = result.getHref()
+            if href:
+                result.setHref(self._getInstanceUrl(node, href))
+        return node
+
     def newLaunchDescriptor(self, descriptor):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
@@ -124,12 +141,19 @@ class NodeFactory(object):
                 href = self.join(cloudTypeId, 'descriptor', 'configuration')))
         return node
 
-    def getJobIdUrl(self, jobId):
-        # XXX the fact that we have to deconstruct the job id is
-        # unfortunate
-        jobType, jobId = jobId.split('/')
+    def getJobIdUrl(self, jobId, jobType):
+        jobId = os.path.basename(jobId)
+        jobType = os.path.basename(jobType)
         return self.join(self.baseUrl, 'jobs', 'types', jobType, 'jobs',
             jobId)
+
+    def getJobSearchUrl(self, jobType, params):
+        q = urllib.quote_plus
+        params = sorted(params.items())
+        params = '&'.join("%s=%s" % (q(x, safe=':'), q(y, safe=':'))
+            for (x, y) in params)
+        return self.join(self.baseUrl, 'jobs', 'types', jobType,
+            'jobs?' + params)
 
     @classmethod
     def join(cls, *args):
@@ -143,12 +167,22 @@ class NodeFactory(object):
         return self._getCloudUrl(self.cloudType, node.getCloudName())
 
     def getImageUrl(self, node):
+        return self._getImageUrl(node, node.getId())
+
+    def _getImageUrl(self, node, imageId):
+        if imageId is None:
+            return None
         return self.join(self.getCloudUrl(node), 'images',
-                        self._quote(node.getId()))
+                        self._quote(imageId))
 
     def getInstanceUrl(self, node):
+        return self._getInstanceUrl(node, node.getId())
+
+    def _getInstanceUrl(self, node, instanceId):
+        if instanceId is None:
+            return None
         return self.join(self.getCloudUrl(node), 'instances',
-                        self._quote(node.getId()))
+                        self._quote(instanceId))
 
     def _getCloudTypeUrl(self, cloudType):
         return self.join(self.baseUrl, 'clouds', cloudType)

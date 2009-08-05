@@ -49,13 +49,12 @@ class InstancesController(BaseCloudController):
             request.auth[0], self.driver.cloudType, cloudName))
         # We need to pass in authentication information, downloading private
         # images requires that.
-        insts = self.driver(request, cloudName).launchInstance(request.read(),
+        job = self.driver(request, cloudName).launchInstance(request.read(),
                 request.auth)
-        request.logger.info("User %s: launched instance %s/%s/%s with image %s"
+        request.logger.info("User %s: %s/%s: launched job %s with image %s"
             % ( request.auth[0], self.driver.cloudType, cloudName,
-            ','.join([os.path.basename(x.getInstanceId()) for x in insts]),
-            ','.join([os.path.basename(x.getImageId()) for x in insts])))
-        return XmlResponse(insts)
+            job.getId(), os.path.basename(job.getImageId())))
+        return XmlResponse(job)
 
     def destroy(self, request, cloudName, instanceId):
         insts = self.driver(request, cloudName).terminateInstance(instanceId)

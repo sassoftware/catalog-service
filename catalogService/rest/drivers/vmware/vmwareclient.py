@@ -179,7 +179,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     vicfg = property(_getVIConfig)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
             image, descriptorData)
         getField = descriptorData.getField
         dataCenter = getField('dataCenter')
@@ -401,19 +401,12 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return instanceList
 
     def drvGetInstance(self, instanceId):
-        # Look in the instance store first. This is fairly cheap
-        storeInstance = self.getInstanceFromStore(instanceId)
-
         uuidRef = self.client.findVMByUUID(instanceId)
         if not uuidRef:
-            if storeInstance:
-                return storeInstance
             raise errors.HttpNotFound()
 
         instMap = self._getVirtualMachines(root = uuidRef)
         instanceList = instances.BaseInstances()
-        if storeInstance:
-            instanceList.append(storeInstance)
 
         ret = self._buildInstanceList(instanceList, instMap)
         if ret:
@@ -423,8 +416,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
-
-        instanceList.extend(self.getInstancesFromStore())
         instMap = self.getVirtualMachines()
         return self.filterInstances(instanceIds,
             self._buildInstanceList(instanceList, instMap))
@@ -487,8 +478,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             imageList.append(image)
         return imageList
 
-    def _cloneTemplate(self, imageId, instanceName, instanceDescription,
-                       uuid, dataCenter, computeResource, dataStore,
+    def _cloneTemplate(self, job, imageId, instanceName, instanceDescription,
+                       dataCenter, computeResource, dataStore,
                        resourcePool, vm=None):
         templateUuid = None
         if not vm:
@@ -501,8 +492,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                         dc=self.vicfg.getMOR(dataCenter),
                                         cr=self.vicfg.getMOR(computeResource),
                                         ds=self.vicfg.getMOR(dataStore),
-                                        rp=self.vicfg.getMOR(resourcePool),
-                                        newuuid=uuid)
+                                        rp=self.vicfg.getMOR(resourcePool))
             return vmMor
         except:
             # FIXME: error handle on ret
@@ -522,8 +512,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
-    def _deployImage(self, instanceId, image, auth, dataCenter, dataStore,
+    def _deployImage(self, job, image, auth, dataCenter, dataStore,
                      computeResource, resourcePool, vmName, uuid):
+
         dc = self.vicfg.getDatacenter(dataCenter)
         dcName = dc.properties['name']
 
@@ -539,7 +530,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        self._setState(instanceId, 'Downloading image')
+        job.addLog(self.LogEntry('Downloading image'))
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
             path = self._downloadImage(image, tmpDir, auth = auth)
@@ -553,10 +544,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        self._setState(instanceId, 'Extracting image')
+        job.addLog(self.LogEntry('Extracting image'))
         try:
             workdir = self.extractImage(path)
-            self._setState(instanceId, 'Uploading image to VMware')
+            job.addLog(self.LogEntry('Uploading image to VMware'))
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
@@ -578,10 +569,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
 
-    def launchInstanceProcess(self, image, auth, **launchParams):
+    def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
         imageId = ppop('imageId')
-        instanceId = ppop('instanceId')
         dataCenter = ppop('dataCenter')
         computeResource = ppop('computeResource')
         dataStore = ppop('dataStore')
@@ -603,7 +593,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 # uuid for deployment
                 vmName = instanceName
                 uuid = instanceId
-            vm = self._deployImage(instanceId, image, auth, dataCenter,
+            vm = self._deployImage(job, image, auth, dataCenter,
                                    dataStore, computeResource,
                                    resourcePool, vmName, uuid)
             if useTemplate:
@@ -611,9 +601,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         if useTemplate:
             # mark the VM as a template, clone
-            self._setState(instanceId, 'Cloning template')
-            vmMor = self._cloneTemplate(image.getImageId(), instanceName,
-                                        instanceDescription, instanceId,
+            job.addLog(self.LogEntry('Cloning template'))
+            vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
+                                        instanceDescription,
                                         dataCenter, computeResource,
                                         dataStore, resourcePool, vm=vm)
         else:
@@ -622,7 +612,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
                                 computeResource)
         self.client.startVM(mor = vmMor)
-        self._setState(instanceId, 'Launching')
+        job.addLog(self.LogEntry('Launching'))
         # Grab the real uuid
         instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
         uuid = instMap[vmMor]['config.uuid']

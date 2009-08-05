@@ -188,6 +188,13 @@ class BaseNode(xmllib.BaseNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:
             return val
+        if hasattr(val, 'iterChildren'):
+            children = [ x for x in val.iterChildren()
+                if not isinstance(x, basestring) ]
+            if children:
+                # Mixed mode not supported: we don't extract the text out of
+                # nodes with children
+                return val
         if hasattr(val, 'getText'):
             return val.getText()
         # Well, this may be a list of values. Just return it
@@ -228,6 +235,21 @@ class MultiItemList(list):
     """
     List containing items that get serialized without a wrapping parent node
     """
+
+class BaseMultiNode(BaseNode):
+    tag = "softwareVersion"
+    multiple = True
+
+    def __init__(self, attrs = None, nsMap = None, item = None):
+        BaseNode.__init__(self, attrs, nsMap = nsMap)
+        if item is None:
+            return
+        self.characters(str(item))
+
+    def getId(self):
+        return "%s: %s" % (self.tag, self.getText())
+
+
 
 class Handler(xmllib.DataBinder):
     "Base xml handler"
