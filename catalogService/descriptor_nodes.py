@@ -236,6 +236,9 @@ class _MaxNode(xmllib.IntegerNode):
 class _RequiredNode(xmllib.BooleanNode):
     name = 'required'
 
+class _AllowFileContent(xmllib.BooleanNode):
+    name = 'allowFileContent'
+
 class _PasswordNode(xmllib.BooleanNode):
     name = 'password'
 
@@ -385,6 +388,7 @@ class DataFieldNode(_NoCharDataNode):
         (_DefaultNode, None),
         (_ConstraintsNode, None),
         (_RequiredNode, None),
+        (_AllowFileContent, None),
         (_HiddenNode, None),
         (_PasswordNode, None),
         (_ConditionalNode, None),

@@ -192,6 +192,7 @@ class BaseDescriptor(_BaseClass):
                     for x in constraintsDescriptions])
         df.default = default
         df.required = kwargs.get('required')
+        df.allowFileContent = kwargs.get('allowFileContent')
         df.hidden = kwargs.get('hidden')
         df.password = kwargs.get('password')
         conditional = kwargs.get('conditional')
@@ -419,7 +420,7 @@ class EnumeratedType(list):
 class PresentationField(object):
     __slots__ = [ 'name', 'descriptions', 'help', 'type', 'multiple', 'default',
                   'constraints', 'constraintsDescriptions', 'required',
-                  'hidden', 'password', 'conditional' ]
+                  'hidden', 'password', 'conditional', 'allowFileContent' ]
     def __init__(self, node):
         self.name = node.name
         self.descriptions = node.descriptions.getDescriptions()
@@ -436,6 +437,7 @@ class PresentationField(object):
             if self.default is not None:
                 self.default = dnodes._cast(self.default, self.type)
         self.required = node.required
+        self.allowFileContent = node.allowFileContent
         self.hidden = node.hidden
         self.password = node.password
         self.constraintsDescriptions = {}
