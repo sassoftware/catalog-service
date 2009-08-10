@@ -178,6 +178,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>16384</length>
       </constraints>
       <required>true</required>
+      <allowFileContent>true</allowFileContent>
       <help href='configuration/certificateData.html'/>
     </field>
     <field>
@@ -194,6 +195,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>16384</length>
       </constraints>
       <required>true</required>
+      <allowFileContent>true</allowFileContent>
       <help href='configuration/certificateKeyData.html'/>
     </field>
     <field>
