@@ -6,7 +6,7 @@ import inspect
 
 import urllib
 
-from rpath_common import xmllib
+import rpath_xmllib as xmllib
 from conary.lib import digestlib
 
 class BaseNode(xmllib.BaseNode):

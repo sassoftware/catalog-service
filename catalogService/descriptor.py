@@ -6,7 +6,7 @@
 import os
 import StringIO
 
-from rpath_common.xmllib import api1 as xmllib
+from rpath_xmllib import api1 as xmllib
 
 from catalogService import descriptor_errors as errors
 from catalogService import descriptor_nodes as dnodes

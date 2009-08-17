@@ -2,7 +2,7 @@
 # Copyright (c) 2008 rPath, Inc.
 #
 
-from rpath_common import xmllib
+import rpath_xmllib as xmllib
 
 from catalogService import xmlNode
 
