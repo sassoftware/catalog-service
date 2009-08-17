@@ -3,7 +3,7 @@
 # Copyright (c) 2008-2009 rPath, Inc.
 #
 
-from rpath_common.storage import api1
+from rpath_storage import api1
 from catalogService import config
 
 DiskStorage = api1.DiskStorage
