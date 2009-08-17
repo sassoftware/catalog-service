@@ -44,11 +44,19 @@ EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
 
 EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode=%s"
 
-class EC2_SecurityGroup(instances.xmlNode.BaseNode):
-    tag = "securityGroup"
+class EC2_IPRange(instances.xmlNode.BaseMultiNode):
+    tag = 'ipRange'
+
+class EC2_Permissions(instances.xmlNode.BaseMultiNode):
+    tag = 'permission'
+    __slots__ = ['ipRange', 'ipProtocol', 'fromPort', 'toPort']
+    _slotTypeMap = instances.xmlNode.BaseMultiNode._slotTypeMap.copy()
+    _slotTypeMap['ipRange'] = EC2_IPRange
+
+class EC2_SecurityGroup(securityGroups.BaseSecurityGroup):
     multiple = True
-    __slots__ = ['id']
-    _slotAttributes = set(['id'])
+    _slotTypeMap = securityGroups.BaseSecurityGroup._slotTypeMap.copy()
+    _slotTypeMap['permission'] = EC2_Permissions
 
 class EC2_Image(images.BaseImage):
     "EC2 Image"
@@ -278,6 +286,7 @@ class EC2Client(baseDriver.BaseDriver):
     Cloud = EC2_Cloud
     Image = EC2_Image
     Instance = EC2_Instance
+    SecurityGroup = EC2_SecurityGroup
 
     _instanceBotoMap = dict(
                 dnsName = 'dns_name',
@@ -305,6 +314,11 @@ class EC2Client(baseDriver.BaseDriver):
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
+
+    dynamicSecurityGroupPattern = re.compile(baseDriver.BaseDriver._uuid('.' * 32))
+
+    class SecurityGroupHandler(securityGroups.Handler):
+        securityGroupClass = EC2_SecurityGroup
 
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
@@ -709,7 +723,7 @@ x509-cert(base64)=%s
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress, dynamic = False):
         # add the security group if it's not present already
         if dynamic:
-            securityGroup = os.popen("uuidgen").read()[:-1]
+            securityGroup = self.uuidgen()
             securityGroupDesc = CATALOG_DYN_SECURITY_GROUP_DESC
         else:
             securityGroup = CATALOG_DEF_SECURITY_GROUP
@@ -765,10 +779,12 @@ x509-cert(base64)=%s
     def _getInstancesFromReservation(self, reservation):
         insts = instances.BaseInstances()
         insts.extend(self._getInstances(reservation.instances, reservation))
-        securityGroups = [ EC2_SecurityGroup().setId(x.id)
-            for x in reservation.groups ]
+        sGroups = []
+        for grp in reservation.groups:
+            sGroups.append(self.SecurityGroup(id = grp.id,
+                groupName = grp.id))
         for inst in insts:
-            inst.setSecurityGroup(securityGroups)
+            inst.setSecurityGroup(sGroups)
         return insts
 
     def _getInstances(self, instancesIterable, reservation=None):
@@ -848,32 +864,45 @@ x509-cert(base64)=%s
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         return [ (x.name, x.fingerprint) for x in rs ]
 
-    def _cliGetSecurityGroups(self, groupNames = None):
+    def _getUnfilteredSecurityGroups(self, groupNames = None):
+        ret = []
         try:
             rs = self.client.get_all_security_groups(groupnames = groupNames)
         except EC2ResponseError, e:
-            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
-        ret = []
-        defSecurityGroup = None
+            raise errors.ResponseError(e.status, self._getErrorMessage(e),
+                e.body)
+
         for sg in rs:
-            entry =(sg.name, sg.description, sg.owner_id)
-            if sg.name == CATALOG_DEF_SECURITY_GROUP:
+            rules = [(x.grants, x.ip_protocol, x.from_port, x.to_port) for x in sg.rules]
+            entry =(sg.name, sg.description, sg.owner_id, rules)
+            ret.append(entry)
+        return ret
+
+    def _cliGetSecurityGroups(self, groupNames = None):
+        sGroups = self._getUnfilteredSecurityGroups(groupNames = groupNames)
+        dynSecurityGroup = (CATALOG_DYN_SECURITY_GROUP,
+                            CATALOG_DYN_SECURITY_GROUP_DESC,
+                            None,
+                            [])
+        ret = [ dynSecurityGroup ]
+        defSecurityGroup = None
+        for entry in sGroups:
+            sgName = entry[0]
+            if sgName == CATALOG_DEF_SECURITY_GROUP:
                 # We will add this group as the first one
                 defSecurityGroup = entry
+                continue
+            # Filter out any security groups that match the UUID pattern
+            if self.dynamicSecurityGroupPattern.match(sgName):
                 continue
             ret.append(entry)
         if defSecurityGroup is None:
             defSecurityGroup = (CATALOG_DEF_SECURITY_GROUP,
                                 CATALOG_DEF_SECURITY_GROUP_DESC,
-                                None)
-        dynSecurityGroup = (CATALOG_DYN_SECURITY_GROUP,
-                            CATALOG_DYN_SECURITY_GROUP_DESC,
-                            None)
-        ret.insert(0, dynSecurityGroup)
+                                None,
+                                [([], x[0], x[1], x[2]) for x in
+                                    CATALOG_DEF_SECURITY_GROUP_PERMS])
         ret.insert(0, defSecurityGroup)
-        p = re.compile('........-....-....-....-............')
-        ret = [x for x in ret if not p.match(x[0])]
-
         return ret
 
     def _getConfigurationDataStore(self):
@@ -902,6 +931,94 @@ x509-cert(base64)=%s
     def _getProductCodeMap(self, productCode):
         return dict(code = productCode,
                     url = EC2_DEVPAY_OFFERING_BASE_URL % productCode)
+
+    def getSecurityGroups(self, instanceId):
+        instance = self.getInstance(instanceId)
+        groupNames = [ x.getGroupName() for x in instance.getSecurityGroup() ]
+        if not groupNames:
+            raise errors.ResponseError(404)
+        sGroups = self._getUnfilteredSecurityGroups(
+            groupNames = groupNames)
+        ret = securityGroups.BaseSecurityGroups()
+        for sg in sGroups:
+            ret.append(self._createSecurityGroupNode(instanceId, sg))
+        return ret
+
+    def getSecurityGroup(self, instanceId, securityGroup):
+        instance = self.getInstance(instanceId)
+        groupNames = [ x.getGroupName() for x in instance.getSecurityGroup() ]
+        if not groupNames or securityGroup not in groupNames:
+            raise errors.ResponseError(404)
+        # XXX can the security group disappear?
+        sGroup = self._getUnfilteredSecurityGroups(
+            groupNames = [ securityGroup ] )[0]
+        return self._createSecurityGroupNode(instanceId, sGroup)
+
+    def updateSecurityGroup(self, instanceId, securityGroup, xmlContent):
+        instance = self.getInstance(instanceId)
+        groupNames = [ x.getGroupName() for x in instance.getSecurityGroup() ]
+        if not groupNames or securityGroup not in groupNames:
+            raise errors.ResponseError(404)
+        # XXX exception handling
+        sgObject = self.SecurityGroupHandler().parseString(xmlContent)
+        newRules = [
+            ( [ y.getText() for y in x.getIpRange() ],
+              x.getIpProtocol(), x.getFromPort(), x.getToPort())
+            for x in sgObject.getPermission() ]
+        # Hash the rules
+        newRulesSet = self._buildRuleSet(newRules)
+        sGroup = self._getUnfilteredSecurityGroups(
+            groupNames = [ securityGroup ] )[0]
+        oldRulesSet = self._buildRuleSet(sGroup[3])
+        toAuthorize = newRulesSet.difference(oldRulesSet)
+        for cidr_ip, ip_protocol, from_port, to_port in toAuthorize:
+            try:
+                self.client.authorize_security_group(securityGroup,
+                    cidr_ip = cidr_ip, ip_protocol = ip_protocol,
+                    from_port = from_port, to_port = to_port)
+            except EC2ResponseError, e:
+                if e.status == 400 and self._getErrorCode(e) == 'InvalidPermission.Duplicate':
+                    pass # ignore this error
+                else:
+                    raise errors.ResponseError(e.status, e.message, e.body)
+        toRevoke = oldRulesSet.difference(newRulesSet)
+        for cidr_ip, ip_protocol, from_port, to_port in toRevoke:
+            try:
+                self.client.revoke_security_group(securityGroup,
+                    cidr_ip = cidr_ip, ip_protocol = ip_protocol,
+                    from_port = from_port, to_port = to_port)
+            except EC2ResponseError, e:
+                pass # ignore this error, at least for now
+        return self.getSecurityGroup(instanceId, securityGroup)
+
+    @classmethod
+    def _buildRuleSet(cls, rules):
+        ruleSet = set()
+        for ipRange, ipProto, fromPort, toPort in rules:
+            ipProto = str(ipProto)
+            fromPort = str(fromPort)
+            toPort = str(toPort)
+            for ip in ipRange:
+                ruleSet.add((str(ip), ipProto, fromPort, toPort))
+        return ruleSet
+
+    def _createSecurityGroupNode(self, instanceId, sg):
+        permissions = []
+        for perm in sg[3]:
+            p = EC2_Permissions()
+            p.setIpRange([ EC2_IPRange(item = x) for x in perm[0]])
+            p.setIpProtocol(perm[1])
+            p.setFromPort(perm[2])
+            p.setToPort(perm[3])
+            permissions.append(p)
+        ret = self._nodeFactory.newSecurityGroup(instanceId,
+            self.SecurityGroup(id = sg[0],
+                groupName = sg[0],
+                description = sg[1],
+                ownerId = sg[2],
+                permission = permissions))
+        return ret
+
 
 PEM_LINE = 76
 PEM_HEADER = '-{2,5}(BEGIN [A-Z0-9 ]+?\s*)-{2,5}'

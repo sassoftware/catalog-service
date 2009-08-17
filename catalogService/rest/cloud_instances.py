@@ -30,9 +30,31 @@ class InstancesUpdateController(BaseCloudController):
         insts = self.driver(request, cloudName).updateInstance(instanceId)
         return XmlResponse(insts)
 
+class SecurityGroupsController(BaseCloudController):
+    modelName = 'securityGroup'
+
+    def index(self, request, cloudName, instanceId):
+        return self._getMethod(request, cloudName, instanceId,
+            "getSecurityGroups")
+
+    def get(self, request, cloudName, instanceId, securityGroup):
+        return self._getMethod(request, cloudName, instanceId,
+            "getSecurityGroup", securityGroup)
+
+    def update(self, request, cloudName, instanceId, securityGroup):
+        requestData = request.read()
+        return self._getMethod(request, cloudName, instanceId,
+            "updateSecurityGroup", securityGroup, requestData)
+
+    def _getMethod(self, request, cloudName, instanceId, methodName, *args):
+        meth = getattr(self.driver(request, cloudName), methodName, None)
+        if meth is None:
+            return XmlStringResponse("", status = 404)
+        return XmlResponse(meth(instanceId, *args))
 
 class InstancesController(BaseCloudController):
-    urls = dict(updates=InstancesUpdateController)
+    urls = dict(updates=InstancesUpdateController,
+                securityGroups=SecurityGroupsController)
 
     modelName = 'instanceId'
     def index(self, request, cloudName):

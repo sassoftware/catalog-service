@@ -8,8 +8,8 @@ import xmlNode
 
 class BaseSecurityGroup(xmlNode.BaseNode):
     tag = 'securityGroup'
-    __slots__ = [ 'id', 'ownerId', 'groupName', 'description',
-            'remoteIp' ]
+    __slots__ = [ 'id', 'ownerId', 'groupName', 'description', 'permission' ]
+    _slotAttributes = set(['id'])
 
 class BaseSecurityGroups(xmlNode.BaseNodeCollection):
     tag = 'securityGroups'
@@ -19,5 +19,10 @@ class Handler(xmllib.DataBinder):
     securityGroupsClass = BaseSecurityGroups
     def __init__(self):
         xmllib.DataBinder.__init__(self)
-        self.registerType(self.securityGroupClass, self.securityGroupClass.tag)
-        self.registerType(self.securityGroupsClass, self.securityGroupsClass.tag)
+        classes = [ self.securityGroupClass, self.securityGroupsClass ]
+        while classes:
+            cls = classes.pop()
+            self.registerType(cls, cls.tag)
+            for k, v in getattr(cls, '_slotTypeMap', {}).items():
+                if type(v) is type:
+                    classes.append(v)

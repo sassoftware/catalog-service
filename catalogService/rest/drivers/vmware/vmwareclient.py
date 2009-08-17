@@ -9,7 +9,7 @@ import signal
 import time
 import tempfile
 
-from conary.lib import util, sha1helper
+from conary.lib import util
 
 from catalogService import clouds
 from catalogService import descriptor
@@ -105,13 +105,6 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 class VMwareImage(images.BaseImage):
     'VMware Image'
 
-def _uuid(s):
-    return '-'.join((s[:8], s[8:12], s[12:16], s[16:20], s[20:32]))
-
-def uuidgen():
-    hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
-    return _uuid(hex)
-
 def formatSize(size):
     suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
     div = 1
@@ -126,7 +119,7 @@ class InstanceStorage(storage.DiskStorage):
     VMware instance ids should look like a UUID
     """
     def _generateString(self, length):
-        return uuidgen()
+        return baseDriver.BaseDriver.uuidgen()
 
 class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     Image = VMwareImage
@@ -459,7 +452,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return _uuid(image.get('sha1'))
+        return cls._uuid(image.get('sha1'))
 
     def _getTemplatesFromInventory(self):
         """

@@ -9,7 +9,7 @@ import time
 import urllib
 import urllib2
 
-from conary.lib import util
+from conary.lib import util, sha1helper
 
 from catalogService import cimupdater
 from catalogService import errors
@@ -773,6 +773,16 @@ class BaseDriver(object):
         if timeFormat is None:
             timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
         return timeutils.utctime(timestr, timeFormat)
+
+    @classmethod
+    def _uuid(cls, s):
+        return '-'.join((s[:8], s[8:12], s[12:16], s[16:20], s[20:32]))
+
+    @classmethod
+    def uuidgen(cls):
+        hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
+        return cls._uuid(hex)
+
 
 class CookieClient(object):
     def __init__(self, server, username, password):

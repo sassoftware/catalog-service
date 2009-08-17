@@ -124,6 +124,13 @@ class NodeFactory(object):
                 href = self.join(cloudTypeId, 'descriptor', 'configuration')))
         return node
 
+    def newSecurityGroup(self, instanceId, secGroup):
+        sgId = self.join(self._getCloudUrl(self.cloudType, self.cloudName),
+            'instances', instanceId, 'securityGroups',
+            self._quote(secGroup.getId()))
+        secGroup.setId(sgId)
+        return secGroup
+
     def getJobIdUrl(self, jobId):
         # XXX the fact that we have to deconstruct the job id is
         # unfortunate
