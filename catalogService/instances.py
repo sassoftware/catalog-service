@@ -38,18 +38,8 @@ class _ProductCode(xmlNode.BaseNode):
     def getId(self):
         return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
 
-class _SoftwareVersion(xmlNode.BaseNode):
+class _SoftwareVersion(xmlNode.BaseMultiNode):
     tag = "softwareVersion"
-    multiple = True
-
-    def __init__(self, attrs = None, nsMap = None, item = None):
-        xmlNode.BaseNode.__init__(self, attrs, nsMap = nsMap)
-        if item is None:
-            return
-        self.characters(str(item))
-
-    def getId(self):
-        return "softwareVersion: %s" % self.getText()
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'

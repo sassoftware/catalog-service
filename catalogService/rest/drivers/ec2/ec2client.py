@@ -371,6 +371,7 @@ class EC2Client(baseDriver.BaseDriver):
             return {}
         ret = dict(name = 'aws', alias = 'ec2', cloudAlias = 'ec2',
             fullDescription = EC2_DESCRIPTION,
+            description = EC2_DESCRIPTION,
             )
         if self._mintClient and isAdmin:
             try:
@@ -546,10 +547,7 @@ class EC2Client(baseDriver.BaseDriver):
         if not self.drvGetCloudConfiguration():
             # Cloud is not configured
             return []
-        return [ None ]
-
-    def _createCloudNode(self, cloudConfig):
-        return self._nodeFactory.newCloud()
+        return [ self.drvGetCloudConfiguration() ]
 
     def updateCloud(self, parameters):
         parameters = CloudParameters(parameters)
@@ -575,50 +573,51 @@ x509-cert(base64)=%s
             return sect
         return userData + '\n' + sect
 
-    def launchInstanceFromDescriptorData(self, descriptorData, auth):
+    def getLaunchInstanceParameters(self, image, descriptorData):
+        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self, image,
+            descriptorData)
         getField = descriptorData.getField
-        remoteIp = getField('remoteIp')
+        params['remoteIp'] = getField('remoteIp')
+        params['securityGroups'] = getField('securityGroups')
+        params['minCount'] = getField('minCount')
+        params['maxCount'] = getField('maxCount')
+        params['keyName'] = getField('keyName')
+        params['userData'] = getField('userData')
+        params['instanceType'] = getField('instanceType')
+
+        return params
+
+    def launchInstanceProcess(self, job, image, auth, **launchParams):
+        remoteIp = launchParams.pop('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to
         # be wrong anyway.
-        securityGroups = getField('securityGroups')
-        if CATALOG_DEF_SECURITY_GROUP in getField('securityGroups'):
+        securityGroups = launchParams.pop('securityGroups')
+        if CATALOG_DEF_SECURITY_GROUP in securityGroups:
             # Create/update the default security group that opens TCP
             # ports 80, 443, and 8003 for traffic from the requesting IP address
             self._updateCatalogDefaultSecurityGroup(remoteIp)
-        if CATALOG_DYN_SECURITY_GROUP in getField('securityGroups'):
+        if CATALOG_DYN_SECURITY_GROUP in securityGroups:
             dynSecurityGroup = self._updateCatalogDefaultSecurityGroup(remoteIp, dynamic = True)
             # Replace placeholder dynamic security group with generated security group
             securityGroups.remove(CATALOG_DYN_SECURITY_GROUP)
             securityGroups.append(dynSecurityGroup)
 
-        imageId = os.path.basename(getField('imageId'))
+        imageId = launchParams.pop('imageId')
         try:
             reservation = self.client.run_instances(imageId,
-                    min_count=getField('minCount'),
-                    max_count=getField('maxCount'),
-                    key_name=getField('keyName'),
+                    min_count=launchParams.get('minCount'),
+                    max_count=launchParams.get('maxCount'),
+                    key_name=launchParams.get('keyName'),
                     security_groups=securityGroups,
-                    user_data=self.createUserData(getField('userData')),
-                    instance_type=getField('instanceType'))
+                    user_data=self.createUserData(launchParams.get('userData')),
+                    instance_type=launchParams.get('instanceType'))
         except EC2ResponseError, e:
             # is this a product code error?
             errorMsg = self._getErrorMessage(e)
             pcData = self._processProductCodeError(errorMsg)
             raise errors.ResponseError, (e.status, errorMsg, e.body, pcData), sys.exc_info()[2]
-        ret = self._getInstancesFromReservation(reservation)
-        # Store x509 cert into the storage directory, so we can manage the
-        # instance in the future
-        x509Cert, x509Key = self.getWbemX509()
-        for inst in ret:
-            instanceId = inst.getInstanceId()
-            self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
-        # Remove x509 components from the common storage space
-        for f in [ x509Cert, x509Key ]:
-            try:
-                os.unlink(f)
-            except OSError:
-                pass
-        return ret
+
+        return [ x.id for x in reservation.instances ]
 
     def terminateInstances(self, instanceIds):
         resultSet = self.client.terminate_instances(instance_ids=instanceIds)
