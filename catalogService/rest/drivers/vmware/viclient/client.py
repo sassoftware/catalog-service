@@ -261,7 +261,7 @@ class VimService(object):
         """
 
         envBrowseMor = self.getMoRefProp(computeResMor, 'environmentBrowser')
-        if envBrowse is None:
+        if envBrowseMor is None:
             return None
 
         req = QueryConfigOptionRequestMsg()
