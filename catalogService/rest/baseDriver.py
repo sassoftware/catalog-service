@@ -17,6 +17,7 @@ from catalogService import nodeFactory
 from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
+from catalogService import job_models
 from catalogService import job_store
 from catalogService import keypairs, securityGroups
 from catalogService import storage
@@ -34,6 +35,7 @@ class BaseDriver(object):
     CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
+    InstanceLaunchJob = job_models.Job
     InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
     KeyPair          = keypairs.BaseKeyPair
@@ -47,6 +49,8 @@ class BaseDriver(object):
     updateStatusStateException = 'error'
 
     instanceStorageClass = storage.DiskStorage
+
+    LogEntry = job_store.LogEntry
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, mintClient=None, userId = None):
@@ -66,6 +70,12 @@ class BaseDriver(object):
         spJobSuffix = 'jobs'
         spath = os.path.join(self._cfg.storagePath, spJobSuffix)
         self._jobsStore = job_store.ApplianceVersionUpdateJobStore(spath)
+        self._instanceLaunchJobStore = job_store.LaunchJobStore(spath)
+        #if cloudName:
+        #    spath = os.path.join(self._cfg.storagePath, spJobSuffix,
+        #        self.cloudType, self._sanitizeKey(cloudName))
+        #else:
+        #    self._instanceLaunchJobStore = None
         self._x509Cert = None
         self._x509Key = None
 
@@ -133,6 +143,7 @@ class BaseDriver(object):
             credentialsFieldsFactory = self.CredentialsFields,
             imageFactory = self.Image,
             instanceFactory = self.Instance,
+            instanceLaunchJobFactory = self.InstanceLaunchJob,
             instanceUpdateStatusFactory = self.InstanceUpdateStatus,
             instanceTypeFactory = self.InstanceType,
             keyPairFactory = self.KeyPair,
@@ -152,6 +163,12 @@ class BaseDriver(object):
             # are not set
             ret.append(cloudNode)
         return ret
+
+    def _createCloudNode(self, cloudConfig):
+        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
+                         description = cloudConfig['description'],
+                         cloudAlias = cloudConfig['alias'])
+        return cld
 
     def getCloud(self, cloudName):
         ret = clouds.BaseClouds()
@@ -201,7 +218,8 @@ class BaseDriver(object):
         instance.setSoftwareVersionLastChecked(lastChecked)
         instance.setSoftwareVersionJobStatus(jobStatus)
         if jobId:
-            instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(jobId))
+            instance.setSoftwareVersionJobId(
+                self._nodeFactory.getJobIdUrl(jobId, 'appliance-version-update'))
 
         if nextCheck and time.time() < nextCheck:
             return
@@ -219,7 +237,8 @@ class BaseDriver(object):
             return
         job = self._jobsStore.create()
         self.backgroundRun(self.runUpdateSoftwareVersion, instance, job)
-        instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id))
+        instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id,
+                    'appliance-version-update'))
         jobStatus = 'Running'
         instance.setSoftwareVersionJobStatus(jobStatus)
 
@@ -246,7 +265,7 @@ class BaseDriver(object):
             self._instanceStore.setSoftwareVersionNextCheck(instanceId)
 
     def runUpdateSoftwareVersionJob(self, instanceId, instance, job):
-        _le = job_store.LogEntry
+        _le = self.LogEntry
         ipAddr = instance.getPublicDnsName()
         port = 5989
         self.log_debug("software version: probing %s:%s" % (ipAddr, port))
@@ -404,9 +423,46 @@ class BaseDriver(object):
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
-        return self.launchInstanceFromDescriptorData(descrData, auth)
+        return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
-    def launchInstanceFromDescriptorData(self, descriptorData, auth):
+    def launchInstanceInBackground(self, jobId, image, auth, **params):
+        job = self._instanceLaunchJobStore.get(jobId)
+        job.pid = os.getpid()
+        job.status = job.STATUS_RUNNING
+        try:
+            try:
+                realInstanceId = self.launchInstanceProcess(job, image, auth, **params)
+                if not realInstanceId:
+                    job.addLog(self.LogEntry('Launch failed, no instance was created'))
+                    job.status = job.STATUS_FAILED
+                    return
+                # Some drivers (like ec2) may have the ability to launch
+                # multiple instances with the same call.
+                if not isinstance(realInstanceId, list):
+                    realInstanceId = [ realInstanceId ]
+                x509Cert, x509Key = self.getWbemX509()
+                for instanceId in realInstanceId:
+                    self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
+                job.result = '\n'.join(realInstanceId)
+                job.status = job.STATUS_COMPLETED
+            except errors.CatalogError, e:
+                err = errors.CatalogErrorResponse(e.status,
+                    message = e.msg, tracebackData = e.tracebackData,
+                    productCodeData = e.productCodeData)
+                job.status = job.STATUS_FAILED
+                job.errorResponse = err.response[0]
+            except Exception, e:
+                job.addLog(self.LogEntry(str(e)))
+                job.status = job.STATUS_FAILED
+                raise
+        finally:
+            job.pid = None
+            self.launchInstanceInBackgroundCleanup(image, **params)
+
+    def launchInstanceInBackgroundCleanup(self, image, **params):
+        self.cleanUpX509()
+
+    def launchInstanceFromDescriptorData(self, descriptorData, auth, descrXml):
         client = self.client
         cloudConfig = self.drvGetCloudConfiguration()
 
@@ -419,14 +475,19 @@ class BaseDriver(object):
 
         params = self.getLaunchInstanceParameters(image, descriptorData)
 
-        self.backgroundRun(self.launchInstanceInBackground, image, auth,
+        job = self._instanceLaunchJobStore.create()
+        jobId = job.id
+        job.cloudName = self.cloudName
+        job.cloudType = self.cloudType
+        # Save the invocation, we may want to replay a job
+        job.launchData = descrXml
+        job.imageId = image.getImageId()
+        self.backgroundRun(self.launchInstanceInBackground, jobId, image, auth,
                            **params)
-        newInstanceParams = self.getNewInstanceParameters(image,
+        newInstanceParams = self.getNewInstanceParameters(jobId, image,
             descriptorData, params)
-        instanceList = instances.BaseInstances()
-        instance = self._nodeFactory.newInstance(**newInstanceParams)
-        instanceList.append(instance)
-        return instanceList
+        newInstanceParams['createdBy'] = self.userId
+        return self._nodeFactory.newInstanceLaunchJob(**newInstanceParams)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         getField = descriptorData.getField
@@ -444,17 +505,16 @@ class BaseDriver(object):
             instanceType = getField('instanceType'),
         )
 
-    def getNewInstanceParameters(self, image, descriptorData, launchParams):
+    def getNewInstanceParameters(self, jobId, image, descriptorData, launchParams):
         imageId = launchParams['imageId']
-        instanceId = launchParams['instanceId']
         return dict(
-            id = instanceId,
-            instanceId = instanceId,
+            id = jobId,
             imageId = imageId,
             instanceName = launchParams.get('instanceName'),
             instanceDescription = launchParams.get('instanceDescription'),
             cloudName = self.cloudName,
             cloudAlias = self.getCloudAlias(),
+            type = 'instance-launch',
         )
 
     def createCloud(self, cloudConfigurationData):

@@ -428,39 +428,36 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return instanceList
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
             image, descriptorData)
         getField = descriptorData.getField
         duration = getField('duration')
         params['duration'] = duration
         return params
 
-    def launchInstanceProcess(self, image, auth, **launchParams):
-        instanceId = launchParams.pop('instanceId')
+    def launchInstanceProcess(self, job, image, auth, **launchParams):
         duration = launchParams.pop('duration')
-        self._instanceStore.setPid(instanceId)
         if not image.getIsDeployed():
-
-            tmpDir = tempfile.mkdtemp(prefix="vws-download-")
+            tmpDir = os.path.join(self.client._tmpDir, 'downloads')
+            util.mkdirChain(tmpDir)
             try:
-                self._setState(instanceId, 'Downloading image')
+                job.addLog(self.LogEntry('Downloading image'))
                 dlImagePath = self._downloadImage(image, tmpDir, auth = auth)
-                self._setState(instanceId, 'Preparing image')
+                job.addLog(self.LogEntry('Preparing image'))
                 imgFile = self._prepareImage(dlImagePath)
-                self._setState(instanceId, 'Publishing image')
+                job.addLog(self.LogEntry('Publishing image'))
                 self._publishImage(imgFile)
             finally:
                 util.rmtree(tmpDir, ignore_errors = True)
         imageId = image.getImageId()
 
         def callback(realId):
-            self._instanceStore.setId(instanceId, realId)
-            # We no longer manage the state ourselves
-            self._setState(instanceId, None)
-        self._setState(instanceId, 'Launching')
+            pass
 
+        job.addLog(self.LogEntry('Launching'))
         realId = self.client.launchInstances([imageId],
             duration = duration, callback = callback)
+        return str(realId)
 
     def _prepareImage(self, downloadFilePath):
         retfile = self.client._repackageImage(downloadFilePath)
