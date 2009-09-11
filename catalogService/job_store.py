@@ -60,7 +60,11 @@ class BaseJob(object):
         modified = FieldTimestamp,
         expiration = FieldTimestamp,
         ttl = FieldInteger,
+        # Result, if the job's status is COMPLETED. Multiple results may be
+        # supported, they are saved newline-separated.
         result = FieldString,
+        # Error response, if the job's status is FAILED.
+        errorResponse = FieldString,
         pid = FieldInteger,
     )
     _defaultTTL = 7200
@@ -195,6 +199,20 @@ class LogBaseJob(BaseJob):
                                              os.path.basename(ts))
             for ts in self._store.enumerate((self.id, "logs")))
 
+class InstanceLaunchJob(LogBaseJob):
+    _fieldTypes = LogBaseJob._fieldTypes.copy()
+    _fieldTypes['imageId'] = FieldString
+    _fieldTypes['cloudType'] = FieldString
+    _fieldTypes['cloudName'] = FieldString
+    _fieldTypes['launchData'] = FieldString
+
+class VersionUpdateLaunchJob(LogBaseJob):
+    _fieldTypes = LogBaseJob._fieldTypes.copy()
+    _fieldTypes = LogBaseJob._fieldTypes.copy()
+    _fieldTypes['instanceId'] = FieldString
+    _fieldTypes['cloudType'] = FieldString
+    _fieldTypes['cloudName'] = FieldString
+
 class JobStore(object):
     __slots__ = [ '_store' ]
 
@@ -245,12 +263,16 @@ class JobStore(object):
             yield job
 
 class LaunchJobStore(JobStore):
-    jobType = "launch"
-    jobFactory = LogBaseJob
+    jobType = "instance-launch"
+    jobFactory = InstanceLaunchJob
+    # XXX this is not the proper place to indicate the conversion to href
+    resultIsHref = True
 
 class ApplianceVersionUpdateJobStore(JobStore):
     jobType = "appliance-version-update"
-    jobFactory = LogBaseJob
+    jobFactory = VersionUpdateLaunchJob
+    # XXX this is not the proper place to indicate the conversion to href
+    resultIsHref = False
 
 def createStore(storagePath):
     storePath = os.path.join(storagePath, "catalog-jobs")

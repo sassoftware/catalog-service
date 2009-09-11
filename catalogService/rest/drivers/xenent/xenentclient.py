@@ -340,9 +340,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         instMap  = self.client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
-
-        instanceList.extend(self.getInstancesFromStore())
-
         for opaqueId, vm in instMap.items():
             if vm['is_a_template']:
                 continue
@@ -423,16 +420,16 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self._setVmMetadata(vmRef, checksum = checksum)
         return vmRef, vmUuid
 
-    def _deployImage(self, instanceId, image, auth, srUuid):
+    def _deployImage(self, job, image, auth, srUuid):
         tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
         try:
             downloadUrl = image.getDownloadUrl()
             checksum = image.getImageId()
 
-            self._setState(instanceId, 'Downloading image')
+            job.addLog(self.LogEntry('Downloading image'))
             path = self._downloadImage(image, tmpDir, auth = auth, extension = '.xva')
 
-            self._setState(instanceId, 'Importing image')
+            job.addLog(self.LogEntry('Importing image'))
             templRef, templUuid = self._importImage(image, path, srUuid)
 
             image.setImageId(templUuid)
@@ -441,16 +438,15 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             util.rmtree(tmpDir, ignore_errors = True)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        params = storage_mixin.StorageMixin.getLaunchInstanceParameters(self,
+        params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
             image, descriptorData)
         getField = descriptorData.getField
         srUuid = getField('storageRepository')
         params['srUuid'] = srUuid
         return params
 
-    def launchInstanceProcess(self, image, auth, **launchParams):
+    def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
-        instanceId = ppop('instanceId')
         srUuid = ppop('srUuid')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
@@ -460,15 +456,16 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         nameDescription = image.getBuildDescription()
 
         if not image.getIsDeployed():
-            self._deployImage(instanceId, image, auth, srUuid)
+            self._deployImage(job, image, auth, srUuid)
 
         imageId = image.getInternalTargetId()
 
-        self._setState(instanceId, 'Cloning template')
-        realId = self.cloneTemplate(imageId, instanceName,
+        job.addLog(self.LogEntry('Cloning template'))
+        realId = self.cloneTemplate(job, imageId, instanceName,
             instanceDescription)
-        self._setState(instanceId, 'Launching')
+        job.addLog(self.LogEntry('Launching'))
         self.startVm(realId)
+        return realId
 
     def _getImagesFromGrid(self):
         cloudAlias = self.getCloudAlias()
@@ -518,7 +515,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             # At this point the instance doesn't exist anymore
             self._instanceStore.delete(instId)
 
-    def cloneTemplate(self, imageId, instanceName, instanceDescription):
+    def cloneTemplate(self, job, imageId, instanceName, instanceDescription):
         vmTemplateRef = self.client.xenapi.VM.get_by_uuid(imageId)
         imageId = os.path.basename(imageId)
 
