@@ -217,7 +217,10 @@ class VimService(object):
         if not objContent:
             return None
 
-        dynamicProperty = objContent[0].get_element_propSet()
+        objContent = objContent[0]
+        if not hasattr(objContent, '_propSet'):
+            return None
+        dynamicProperty = objContent.get_element_propSet()
         if not dynamicProperty:
             return None
 
@@ -237,6 +240,8 @@ class VimService(object):
 
     def getConfigTarget(self, computeRes, host=None):
         envBrowse = self.getMoRefProp(computeRes, 'environmentBrowser')
+        if envBrowse is None:
+            return None
         req = QueryConfigTargetRequestMsg()
         req.set_element__this(envBrowse)
         if host:
@@ -256,6 +261,8 @@ class VimService(object):
         """
 
         envBrowseMor = self.getMoRefProp(computeResMor, 'environmentBrowser')
+        if envBrowseMor is None:
+            return None
 
         req = QueryConfigOptionRequestMsg()
         req.set_element__this(envBrowseMor)
@@ -306,7 +313,8 @@ class VimService(object):
 
         # determine the default network name
         networkName = None
-        network = configTarget.get_element_network()
+        network = (configTarget is not None and
+                   configTarget.get_element_network()) or None
         if network:
             for netInfo in network:
                 netSummary = netInfo.get_element_network()
@@ -992,7 +1000,9 @@ class VimService(object):
             # target.  This lets us build up the options for deploying
             # VMs
             configTarget = self.getConfigTarget(cr)
-            for ds in configTarget.get_element_datastore():
+            datastores = (configTarget is not None and
+                          configTarget.get_element_datastore()) or []
+            for ds in datastores:
                 # first go through all the datastores and record
                 # their names.
                 ds = ds.get_element_datastore()

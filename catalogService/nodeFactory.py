@@ -148,10 +148,9 @@ class NodeFactory(object):
         secGroup.setId(sgId)
         return secGroup
 
-    def getJobIdUrl(self, jobId):
-        # XXX the fact that we have to deconstruct the job id is
-        # unfortunate
-        jobType, jobId = jobId.split('/')
+    def getJobIdUrl(self, jobId, jobType):
+        jobId = os.path.basename(jobId)
+        jobType = os.path.basename(jobType)
         return self.join(self.baseUrl, 'jobs', 'types', jobType, 'jobs',
             jobId)
 

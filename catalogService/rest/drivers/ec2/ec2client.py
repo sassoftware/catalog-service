@@ -1024,7 +1024,7 @@ PEM_HEADER = '-{2,5}(BEGIN [A-Z0-9 ]+?\s*)-{2,5}'
 PEM_TRAILER = '-{2,5}(END [A-Z0-9 ]+?\s*)-{2,5}'
 PEM_BODY = '([a-zA-Z0-9/+= \t\r\n]+)'
 
-PEM = re.compile('^%s$' % (PEM_HEADER + PEM_BODY + PEM_TRAILER))
+PEM = re.compile('^%s$' % (PEM_HEADER + PEM_BODY + PEM_TRAILER), re.M)
 WHITESPACE = re.compile('\s+')
 
 def fixPEM(pem, error=True):
