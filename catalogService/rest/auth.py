@@ -33,7 +33,9 @@ class AuthenticationCallback(object):
     def processMethod(self, request, viewMethod, args, kwargs):
         if getattr(viewMethod, 'public', None) or request.mintAuth is not None:
             return
-        return response.Response(status=403)
+        if 'HTTP_X_FLASH_VERSION' in request.headers:
+            return response.Response(status=403)
+        return response.Response(status=401)
 
     def getMintConfig(self):
         return mint.config.getConfig()
