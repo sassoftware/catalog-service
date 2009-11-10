@@ -39,8 +39,8 @@ class AuthenticationCallback(object):
 
     def processResponse(self, request, response):
         """ Clean up resources on the way out. """
-        if hasattr(self.mintClient, server):
-            self.mintClient.server._server.db.close()
+        if hasattr(request.mintClient, server):
+            request.mintClient.server._server.db.close()
 
     def getMintConfig(self):
         return mint.config.getConfig()
