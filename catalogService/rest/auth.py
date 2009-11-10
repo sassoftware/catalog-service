@@ -39,7 +39,7 @@ class AuthenticationCallback(object):
 
     def processResponse(self, request, response):
         """ Clean up resources on the way out. """
-        if hasattr(request.mintClient, server):
+        if hasattr(request.mintClient, 'server'):
             request.mintClient.server._server.db.close()
 
     def getMintConfig(self):
