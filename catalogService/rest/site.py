@@ -30,7 +30,7 @@ class CatalogServiceController(base.BaseController):
     def userinfo(self, request):
         responseId = self.url(request, "userinfo")
         prefhref = self.url(request, "users") + request.mintAuth.username\
-            + "/preferences"
+            + "/preferences/"
         preferences = userInfo.Preferences(href=prefhref) 
         response = userInfo.UserInfo(id = responseId,
             username = request.mintAuth.username,
