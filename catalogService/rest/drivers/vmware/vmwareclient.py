@@ -247,6 +247,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                )
         for cr in crToDc.keys():
             cfg = cr.configTarget
+            if cfg is None:
+                continue
             dataStores = []
 
             for ds in cfg.get_element_datastore():
