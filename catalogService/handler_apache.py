@@ -4,15 +4,21 @@
 #
 
 import base64
+import os
 
 from conary.lib import coveragehook
 from conary.lib import util
+from conary import dbstore
 
 from catalogService.utils import logger as rlogging
 from restlib.http import modpython
 
+from mint import config
+from mint.db.database import Database
+
 from catalogService import errors
 from catalogService.rest.api import site
+from catalogService.rest.database import RestDatabase
 from catalogService.rest.middleware import auth
 from catalogService.rest.middleware import response
 
@@ -25,17 +31,15 @@ class ModPythonHttpHandler(modpython.ModPythonHttpHandler):
 
 class ApacheRESTHandler(object):
     httpHandlerClass = ModPythonHttpHandler
-    def __init__(self, restdb):
-        self.handler = self.httpHandlerClass(
-            site.CatalogServiceController(restdb))
-        self.handler.addCallback(errors.ErrorMessageCallback())
-        self.addAuthCallback(restdb)
+    def __init__(self, pathPrefix, restdb):
+        self.pathPrefix = pathPrefix
+        controller = site.CatalogServiceController(restdb)
+        self.handler = self.httpHandlerClass(controller)
+        self.handler.addCallback(errors.ErrorMessageCallback(controller))
+        self.handler.addCallback(auth.AuthenticationCallback(restdb, controller))
         # It is important that the logger callback is always called, so keep
         # this last
         self.handler.addCallback(rlogging.LoggerCallback())
-
-    def addAuthCallback(self, restdb):
-        self.handler.addCallback(auth.AuthenticationCallback(restdb))
 
     def handle(self, req):
         logger = self.getLogger(req)
@@ -56,5 +60,12 @@ def handler(req):
     The function is for testing purposes only.
     """
     coveragehook.install()
-    _handler = ApacheRESTHandler('/TOP', restDb)
+    mintCfgPath = os.path.join(req.document_root(), '..', '..', 'mint.conf')
+    mintcfg = config.getConfig(mintCfgPath)
+    mintdb = Database(mintcfg)
+    restdb = RestDatabase(mintcfg, mintdb)
+
+    topLevel = os.path.join(mintcfg.basePath)
+
+    _handler = ApacheRESTHandler(topLevel, restdb)
     return _handler.handle(req)

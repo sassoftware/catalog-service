@@ -14,7 +14,6 @@ from conary.lib import util
 from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
 from catalogService.rest.models import clouds
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
@@ -121,7 +120,7 @@ class InstanceStorage(storage.DiskStorage):
     def _generateString(self, length):
         return baseDriver.BaseDriver.uuidgen()
 
-class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class VMwareClient(baseDriver.BaseDriver):
     Image = VMwareImage
     cloudType = 'vmware'
     instanceStorageClass = InstanceStorage
@@ -151,7 +150,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
-        host = self._getCloudNameFromConfig(cloudConfig)
+        host = self.cloudName
         # This import is expensive!!! Delay it until it is actually needed
         import viclient
         debug = False
@@ -427,7 +426,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def getImageIdFromMintImage(cls, image):
         return cls._uuid(image.get('sha1'))
 
-    def getImagesFromTarget(self):
+    def getImagesFromTarget(self, imageIds):
         """
         returns all templates in the inventory
         currently we return the templates as available images
@@ -440,6 +439,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
 
             imageId = vminfo['config.uuid']
+            if imageIds is not None and imageId not in imageIds:
+                continue
             longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
             image = self._nodeFactory.newImage(
                 id = imageId,

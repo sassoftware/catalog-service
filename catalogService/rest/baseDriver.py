@@ -29,6 +29,8 @@ from catalogService.utils import cimupdater
 from catalogService.utils import timeutils
 from catalogService.utils import x509
 
+from mint.mint_error import TargetExists
+
 class BaseDriver(object):
     # Enumerate the factories we support.
     CloudConfigurationDescriptor = descriptor.ConfigurationDescriptor
@@ -46,7 +48,10 @@ class BaseDriver(object):
     KeyPair          = keypairs.BaseKeyPair
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
+    # Map descriptor field name to name in internal storage field
     _credNameMap = []
+    # Map descriptor field name to name in internal storage field
+    _configNameMap = []
     cloudType = None
 
     updateStatusStateUpdating = 'updating'
@@ -121,7 +126,10 @@ class BaseDriver(object):
             return self._logger.exception(*args, **kwargs)
 
     def isValidCloudName(self, cloudName):
-        raise NotImplementedError
+        if self.db is None:
+            return True
+        self.cloudName = cloudName
+        return bool(self.getTargetConfiguration())
 
     def __call__(self, request, cloudName=None):
         # This is a bit of a hack - basically, we're turning this class
@@ -380,6 +388,12 @@ class BaseDriver(object):
         return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
             self.cloudName, self.userId)
 
+    def drvGetCredentialsFromDescriptor(self, fields):
+        ret = {}
+        for field, key in self._credNameMap:
+            ret[key] = str(fields.getField(field))
+        return ret
+
     def drvGetCloudClient(self):
         """
         Authenticate the user, cache the cloud credentials and the client
@@ -393,6 +407,32 @@ class BaseDriver(object):
         return self._cloudClient
 
     client = property(drvGetCloudClient)
+
+    def drvValidateCredentials(self, creds):
+        self.drvCreateCloudClient(creds)
+        return True
+
+    def drvCreateCloud(self, descriptorData):
+        cloudName = self.getCloudNameFromDescriptorData(descriptorData)
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        self.cloudName = cloudName
+        self.drvVerifyCloudConfiguration(config)
+        self.saveTarget(config)
+        return self._createCloudNode(cloudName, config)
+
+    @classmethod
+    def getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('name')
+
+    def drvVerifyCloudConfiguration(self, config):
+        pass
+
+    def saveTarget(self, dataDict):
+        try:
+            self.db.targetMgr.addTarget(self.cloudType, self.cloudName, dataDict)
+        except TargetExists:
+            raise errors.CloudExists()
 
     def getCloudAlias(self):
         cloudConfig = self.getTargetConfiguration()
@@ -615,9 +655,18 @@ class BaseDriver(object):
         descrData = descriptor.DescriptorData(descriptor = descr)
 
         cloudConfig = self.getTargetConfiguration(isAdmin = True)
-        for k, v in sorted(cloudConfig.items()):
+        kvlist = []
+        for k, v in cloudConfig.items():
             if k not in descr._dataFieldsHash:
                 continue
+            # We add all field names and values to the list first, so we can
+            # sort them after adding the extra maps
+            kvlist.append((k, v))
+        for field, k in self._configNameMap:
+            kvlist.append((field, cloudConfig.get(k)))
+        kvlist.sort()
+
+        for k, v in kvlist:
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
@@ -627,11 +676,20 @@ class BaseDriver(object):
         if isAdmin and not self.db.auth.auth.admin:
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
         try:
-            targetData = self.db.targetMgr.getTargetData('ec2', 'aws')
+            targetData = self.db.targetMgr.getTargetData(self.cloudType,
+                                                         self.cloudName)
         except TargetMissing:
             targetData = {}
 
         return self.drvGetTargetConfiguration(targetData, isAdmin = isAdmin)
+
+    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
+        if not targetData:
+            return targetData
+        # Add the target name, we don't have to persist it in the target data
+        # section
+        targetData['name'] = self.cloudName
+        return targetData
 
     def getInstanceNameFromImage(self, imageNode):
         if imageNode is None:

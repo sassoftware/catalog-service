@@ -85,24 +85,18 @@ class InstancesController(BaseCloudController):
 class UserEnvironmentController(BaseCloudController):
     def index(self, request, cloudName, userName):
         if userName != request.auth[0]:
-            if 'HTTP_X_FLASH_VERSION' in request.headers:
-                return XmlStringResponse("", status=403)
-            return XmlStringResponse("", status = 401)
+            return self.PermissionDenied(request)
         return XmlResponse(self.driver(request, cloudName).getEnvironment())
 
 class CredentialsController(BaseCloudController):
     def index(self, request, cloudName, userName):
         if userName != request.auth[0]:
-            if 'HTTP_X_FLASH_VERSION' in request.headers:
-                return XmlStringResponse("", status=403)
-            return XmlStringResponse("", status = 401)
+            return self.PermissionDenied(request)
         return XmlResponse(self.driver(request, cloudName).getUserCredentials())
 
     def update(self, request, cloudName, userName):
         if userName != request.auth[0]:
-            if 'HTTP_X_FLASH_VERSION' in request.headers:
-                return XmlStringResponse("", status=403)
-            return XmlStringResponse("", status = 401)
+            return self.PermissionDenied(request)
         dataLen = request.getContentLength()
         data = request.read(dataLen)
 

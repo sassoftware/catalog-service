@@ -10,7 +10,6 @@ from conary.lib import util
 from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
 from catalogService.rest.models import clouds
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
@@ -187,7 +186,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     Image = VWS_Image
     Instance = VWS_Instance
@@ -198,6 +197,10 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         ('userCert', 'userCert'),
         ('userKey', 'userKey'),
         ('sshPubKey', 'sshPubKey'),
+    ]
+
+    _configNameMap = [
+        ('factory', 'name'),
     ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
@@ -213,7 +216,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         props = globuslib.WorkspaceCloudProperties()
         userCredentials = credentials
-        props.set('vws.factory', cloudConfig['factory'])
+        props.set('vws.factory', self.cloudName)
         props.set('vws.repository', cloudConfig['repository'])
         props.set('vws.factory.identity', cloudConfig['factoryIdentity'])
         props.set('vws.repository.identity', cloudConfig['repositoryIdentity'])
@@ -228,16 +231,6 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def _getUserIdForInstanceStore(self):
         return self._cloudClient.userCertHash
-
-    def isValidCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        return bool(cloudConfig)
-
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['factory'],
-                         description = cloudConfig['description'],
-                         cloudAlias = cloudConfig['alias'])
-        return cld
 
     def terminateInstances(self, instanceIds):
         client = self.client
@@ -450,13 +443,15 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def _publishImage(self, fileName):
         self.client.transferInstance(fileName)
 
-    def getImagesFromTarget(self):
+    def getImagesFromTarget(self, imageIds):
         cloudAlias = self.client.getCloudAlias()
 
-        imageIds = self.client.listImages()
+        targetImageIds = self.client.listImages()
         imageList = images.BaseImages()
 
-        for imageId in imageIds:
+        for imageId in targetImageIds:
+            if imageIds is not None and imageId not in imageIds:
+                continue
             imageName = imageId
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
@@ -496,11 +491,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             store.set(key, v)
 
     @classmethod
-    def _getCloudNameFromConfig(cls, config):
-        return config['factory']
-
-    @classmethod
-    def _getCloudNameFromDescriptorData(cls, descriptorData):
+    def getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('factory')
 
     def _killRunningProcessesForInstances(self, nonGlobusInstIds):

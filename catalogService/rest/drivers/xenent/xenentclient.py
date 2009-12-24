@@ -14,7 +14,6 @@ from catalogService import errors
 from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
 from catalogService.rest.models import clouds
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
@@ -197,9 +196,8 @@ class UploadClient(object):
         resp = self.getOpener().open(req)
         return resp
 
-class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class XenEntClient(baseDriver.BaseDriver):
     Image = XenEnt_Image
-
     cloudType = 'xen-enterprise'
 
     _credNameMap = [
@@ -228,7 +226,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             klass = self.XenSessionClass
         else:
             klass = XenAPI.Session
-        sess = klass("https://%s" % self._getCloudNameFromConfig(cloudConfig))
+        sess = klass("https://%s" % self.cloudName)
         try:
             # password is a ProtectedString, we have to convert to string
             sess.login_with_password(credentials['username'],
@@ -267,23 +265,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
-
-    def drvGetImages(self, imageIds):
-        imageList = self._getImagesFromGrid()
-        imageList = self.addMintDataToImageList(imageList, 'XEN_OVA')
-
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is not None:
-            imagesById = dict((x.getImageId(), x) for x in imageList )
-            newImageList = images.BaseImages()
-            for imageId in imageIds:
-                if imageId is None or imageId not in imagesById:
-                    continue
-                newImageList.append(imagesById[imageId])
-            imageList = newImageList
-        return imageList
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Xen Enterprise Launch Parameters")
@@ -469,7 +450,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self.startVm(realId)
         return realId
 
-    def getImagesFromTarget(self):
+    def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
         instMap  = self.client.xenapi.VM.get_all_records()
 
@@ -486,6 +467,9 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             else:
                 is_rBuilderImage = False
                 imageId = vm['uuid']
+
+            if imageIdsFilter is not None and imageId not in imageIdsFilter:
+                continue
 
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,

@@ -7,6 +7,8 @@ import sys
 import traceback
 from lxml import etree
 
+from mint.rest.middleware import error
+
 from catalogService.rest.middleware.response import XmlStringResponse
 from catalogService.rest.middleware import http_codes
 
@@ -99,7 +101,7 @@ class DownloadError(CatalogError):
     """Error downloading image"""
     status = 404
 
-class ErrorMessageCallback(object):
+class ErrorMessageCallback(error.ErrorCallback):
     def processResponse(self, request, response):
         if response.status == 200 or response.content:
             return
@@ -116,32 +118,8 @@ class ErrorMessageCallback(object):
                                         envelopeStatus = envelopeStatus,
                                         tracebackData = exception.tracebackData,
                                         productCodeData = exception.productCodeData)
-
-        try:
-            from mint import config, logerror
-            cfg = config.getConfig()
-            info = {
-                    'path'                  : request.path,
-                    'baseUrl'               : request.baseUrl,
-                    'method'                : request.method,
-                    'headers_in'            : request.headers,
-                    'request_params'        : request.GET,
-                    'post_params'           : request.POST,
-                    }
-            logerror.logErrorAndEmail(cfg, excClass, exception, tb,
-                    'catsrv call', info)
-
-        except ImportError:
-            traceback.print_exc()
-            sys.stderr.flush()
-
-        from restlib.http import handler
-        response = handler.ExceptionCallback().processException(request,
-            excClass, exception, tb)
-        return CatalogErrorResponse(status = response.status,
-            message = response.message,
-            tracebackData = response.content,
-            envelopeStatus = envelopeStatus)
+        return error.ErrorCallback.processException(self, request, excClass,
+            exception, tb)
 
     @classmethod
     def _getEnvelopeStatus(cls, request):

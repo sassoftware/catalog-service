@@ -68,18 +68,19 @@ class StorageMixin(object):
                 for k in store.enumerate("%s/%s" % (userId, cloudName)))
 
     def _getCloudConfiguration(self, cloudName):
-        store = self._getConfigurationDataStore(cloudName)
-        return dict((k, store.get(k)) for k in store.enumerate())
+        cloudData = self._mintClient.getTargetData(self.cloudType, cloudName)
+        self._addExtraConfigData(cloudName, cloudData)
+        return cloudData
 
     def drvCreateCloud(self, descriptorData):
         cloudName = self._getCloudNameFromDescriptorData(descriptorData)
         config = dict((k.getName(), k.getValue())
             for k in descriptorData.getFields())
         self.drvVerifyCloudConfiguration(config)
-        store = self._getConfigurationDataStore()
-        if store.exists(cloudName):
+        try:
+            self.configureCloud(config)
+        except TargetExists:
             raise errors.CloudExists()
-        self.configureCloud(store, config)
         return self._createCloudNode(config)
 
     def drvVerifyCloudConfiguration(self, config):
@@ -113,10 +114,13 @@ class StorageMixin(object):
         return config['name']
 
     @classmethod
+    def _addExtraConfigData(cls, cloudName, cloudData):
+        cloudData['name'] = cloudName
+        return cloudData
+
+    @classmethod
     def _getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('name')
 
     def isValidCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        return bool(cloudConfig)
-
+        return True

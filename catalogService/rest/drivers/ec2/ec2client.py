@@ -308,9 +308,9 @@ class EC2Client(baseDriver.BaseDriver):
     )
 
     _credNameMap = [
-        ('accountId', 'awsAccountNumber'),
-        ('publicAccessKeyId', 'awsPublicAccessKeyId'),
-        ('secretAccessKey', 'awsSecretAccessKey'),
+        ('accountId', 'accountId'),
+        ('publicAccessKeyId', 'publicAccessKeyId'),
+        ('secretAccessKey', 'secretAccessKey'),
      ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
@@ -514,9 +514,7 @@ class EC2Client(baseDriver.BaseDriver):
     def isValidCloudName(self, cloudName):
         if cloudName != 'aws':
             return False
-        if self.db is None:
-            return True
-        return bool(self.getTargetConfiguration())
+        return baseDriver.BaseDriver.isValidCloudName(self, cloudName)
 
     def drvGetCredentialsFromDescriptor(self, fields):
         accountId = str(fields.getField('accountId'))

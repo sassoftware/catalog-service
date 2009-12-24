@@ -92,7 +92,7 @@ def getHandler(restDb):
     controller = site.CatalogServiceController(restDb)
     handler = SimpleHttpHandler(controller)
     handler.addCallback(auth.AuthenticationCallback(restDb, controller))
-    handler.addCallback(errors.ErrorMessageCallback())
+    handler.addCallback(errors.ErrorMessageCallback(controller))
     # It is important that the logger callback is always called, so keep this
     # last
     handler.addCallback(rlogging.LoggerCallback())
