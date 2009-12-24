@@ -1,15 +1,14 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008-2009 rPath, Inc.
-#
-# All rights reserved.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import sys
 import traceback
 from lxml import etree
 
-from catalogService.rest.response import XmlStringResponse
-from catalogService import http_codes
+from catalogService.rest.middleware.response import XmlStringResponse
+from catalogService.rest.middleware import http_codes
 
 class CatalogErrorResponse(XmlStringResponse):
     def __init__(self, status, message, tracebackData='', productCodeData=None, envelopeStatus=None,

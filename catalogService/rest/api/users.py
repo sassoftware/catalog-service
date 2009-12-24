@@ -1,11 +1,15 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
 
 import os
 
 from restlib.response import Response
-from catalogService import userData
+from catalogService.rest.models import userData
 from catalogService import storage
-from catalogService.rest.base import BaseController
-from catalogService.rest.response import XmlStringResponse, XmlResponse
+from catalogService.rest.api.base import BaseController
+from catalogService.rest.middleware.response import XmlStringResponse, XmlResponse
 
 class UsersController(BaseController):
     modelName = 'userId'

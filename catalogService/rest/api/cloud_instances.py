@@ -1,16 +1,15 @@
-#!/usr/bin/python2.4
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
 import urllib
 
-from catalogService import credentials
 from catalogService.errors import InvalidCloudName
 
-from catalogService.rest.base import BaseCloudController
-from catalogService.rest.response import XmlResponse, XmlStringResponse
+from catalogService.rest.api.base import BaseCloudController
+from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse
 
 class ImagesController(BaseCloudController):
     modelName = 'imageId'

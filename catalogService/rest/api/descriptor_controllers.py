@@ -1,6 +1,10 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
 
-from catalogService.rest.base import BaseCloudController
-from catalogService.rest.response import XmlResponse
+from catalogService.rest.api.base import BaseCloudController
+from catalogService.rest.middleware.response import XmlResponse
 
 class CredentialsDescriptorController(BaseCloudController):
     def index(self, request):

@@ -1,5 +1,6 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 """
 Summary
@@ -63,13 +64,13 @@ import BaseHTTPServer
 import logging
 
 from restlib.http import simplehttp
-from catalogService import logger as rlogging
+from catalogService.utils import logger as rlogging
 
 from catalogService import config
 from catalogService import errors
 from catalogService import storage
-from catalogService.rest import auth
-from catalogService.rest import site
+from catalogService.rest.middleware import auth
+from catalogService.rest.api import site
 
 # Monkeypatch BaseHTTPServer for older Python (e.g. the one that
 # rLS1 has) to include a function that we rely on. Yes, this is gross.

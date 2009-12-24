@@ -1,6 +1,6 @@
 from restlib import response
 
-from catalogService import xmlNode
+from catalogService.rest.models import xmlNode
 
 class XmlStringResponse(response.Response):
     def __init__(self, *args, **kw):

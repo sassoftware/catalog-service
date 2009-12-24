@@ -1,14 +1,19 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
+
 import mint.client
 import mint.config
 import mint.shimclient
 
-from catalogService import userInfo
-from catalogService import serviceInfo
-from catalogService.rest.response import XmlResponse
-from catalogService.rest import base
-from catalogService.rest import jobs
-from catalogService.rest import users
-from catalogService.rest import clouds
+from catalogService.rest.models import userInfo
+from catalogService.rest.models import serviceInfo
+from catalogService.rest.middleware.response import XmlResponse
+from catalogService.rest.api import base
+from catalogService.rest.api import jobs
+from catalogService.rest.api import users
+from catalogService.rest.api import clouds
 
 class CatalogServiceController(base.BaseController):
     urls = {'clouds' : clouds.AllCloudController,

@@ -1,14 +1,14 @@
-#!/usr/bin/python2.4
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
 import urllib
 
 from catalogService import errors
-from catalogService.rest.base import BaseCloudController
-from catalogService.rest.response import HtmlFileResponse
+from catalogService.rest.api.base import BaseCloudController
+from catalogService.rest.middleware.response import HtmlFileResponse
 
 class CloudHelpController(BaseCloudController):
     # Special controller, that serves static files from a directory

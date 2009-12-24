@@ -1,11 +1,12 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import rpath_xmllib as xmllib
 
-from catalogService import instances
-from catalogService import xmlNode
+from catalogService.rest.models import instances
+import xmlNode
 
 class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'

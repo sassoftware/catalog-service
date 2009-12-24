@@ -10,15 +10,15 @@ import httplib
 
 from conary.lib import util
 
-from catalogService import clouds
 from catalogService import errors
-from catalogService import descriptor
-from catalogService import images
-from catalogService import instances
 from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.mixins import storage_mixin
+from catalogService.rest.models import clouds
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
 
 XenAPI = None
 xenprov = None

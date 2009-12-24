@@ -1,11 +1,12 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import rpath_xmllib as xmllib
 
 import xmlNode
-from catalogService import instances
+from catalogService.rest.models import instances
 
 class BaseImage(xmlNode.BaseNode):
     tag = 'image'

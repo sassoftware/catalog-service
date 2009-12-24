@@ -15,15 +15,15 @@ from mint import helperfuncs
 from mint.mint_error import EC2Exception as MintEC2Exception
 from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
 
-from catalogService import clouds
-from catalogService import descriptor
 from catalogService import errors
-from catalogService import instances
-from catalogService import images
-from catalogService import keypairs
-from catalogService import securityGroups
 from catalogService import storage
 from catalogService.rest import baseDriver
+from catalogService.rest.models import clouds
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
+from catalogService.rest.models import keypairs
+from catalogService.rest.models import securityGroups
 
 CATALOG_DYN_SECURITY_GROUP = 'dynamic'
 CATALOG_DYN_SECURITY_GROUP_DESC = 'Generated Security Group'

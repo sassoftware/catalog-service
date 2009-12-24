@@ -1,12 +1,17 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
+
 from restlib import controller
 
-from catalogService import cloud_types
+from catalogService.rest.models import cloud_types
 
-from catalogService.rest import cloud_help
-from catalogService.rest import cloud_instances
-from catalogService.rest import descriptor_controllers
-from catalogService.rest.base import BaseController, BaseCloudController
-from catalogService.rest.response import XmlResponse
+from catalogService.rest.api import cloud_help
+from catalogService.rest.api import cloud_instances
+from catalogService.rest.api import descriptor_controllers
+from catalogService.rest.api.base import BaseController, BaseCloudController
+from catalogService.rest.middleware.response import XmlResponse
 
 class CloudTypeController(BaseCloudController):
     urls = {
@@ -30,7 +35,7 @@ class AllCloudController(BaseController):
     def loadCloudTypes(self):
         drivers = []
         self.urls = {}
-        moduleDir =  __name__.rsplit('.', 1)[0] + '.drivers'
+        moduleDir =  __name__.rsplit('.', 2)[0] + '.drivers'
         for driverName in SUPPORTED_MODULES:
             # FIXME: I'm not sure why putting driver here instead of drivers
             # allows it this to work.

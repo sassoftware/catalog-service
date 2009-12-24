@@ -11,18 +11,23 @@ import urllib2
 
 from conary.lib import util, sha1helper
 
-from catalogService import cimupdater
 from catalogService import errors
-from catalogService import nodeFactory
-from catalogService import descriptor
-from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
-from catalogService import job_models
 from catalogService import job_store
-from catalogService import keypairs, securityGroups
+from catalogService import nodeFactory
 from catalogService import storage
-from catalogService import timeutils
-from catalogService import x509
+from catalogService.rest.models import clouds
+from catalogService.rest.models import cloud_types
+from catalogService.rest.models import credentials
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
+from catalogService.rest.models import job_models
+from catalogService.rest.models import keypairs
+from catalogService.rest.models import securityGroups
+from catalogService.utils import cimupdater
+from catalogService.utils import timeutils
+from catalogService.utils import x509
 
 class BaseDriver(object):
     # Enumerate the factories we support.

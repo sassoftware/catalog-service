@@ -1,5 +1,6 @@
-
-# Copyright (c) 2008 rPath, Inc.
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import inspect

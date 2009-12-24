@@ -14,7 +14,7 @@ import time
 
 from xml.dom import minidom
 
-from catalogService import timeutils
+from catalogService.utils import timeutils
 
 class WorkspaceCloudProperties(object):
     __slots__ = [ 'properties' ]

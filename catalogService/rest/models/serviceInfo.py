@@ -1,10 +1,11 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import rpath_xmllib as xmllib
 
-from catalogService import xmlNode
+import xmlNode
 
 class ServiceInfo(xmlNode.BaseNode):
     tag = 'serviceinfo'

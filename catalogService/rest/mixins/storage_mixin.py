@@ -9,12 +9,11 @@ import time
 
 from conary.lib import util
 
-from catalogService import clouds
 from catalogService import errors
 from catalogService import instanceStore
 from catalogService import storage
-
 from catalogService.rest import baseDriver
+from catalogService.rest.models import clouds
 
 class StorageMixin(object):
 

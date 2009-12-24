@@ -1,6 +1,6 @@
-#!/usr/bin/python2.4
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
@@ -9,7 +9,7 @@ import StringIO
 from rpath_xmllib import api1 as xmllib
 
 from catalogService import descriptor_errors as errors
-from catalogService import descriptor_nodes as dnodes
+from catalogService.rest.models import descriptor_nodes as dnodes
 
 InvalidXML = xmllib.InvalidXML
 

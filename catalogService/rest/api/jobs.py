@@ -1,16 +1,17 @@
+#!/usr/bin/python
 #
-# Copyright (C) 2009 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 from lxml import etree
 import os
 
-from catalogService import nodeFactory
-from catalogService import job_models
 from catalogService import job_store
-from catalogService import job_types
-from catalogService.rest import base
-from catalogService.rest.response import XmlResponse, XmlStringResponse
+from catalogService import nodeFactory
+from catalogService.rest.api import base
+from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse
+from catalogService.rest.models import job_models
+from catalogService.rest.models import job_types
 
 class BaseFilter(object):
     _filterFields = set()

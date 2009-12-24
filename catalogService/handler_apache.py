@@ -1,5 +1,6 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
@@ -8,13 +9,14 @@ import base64
 from conary.lib import coveragehook
 from conary.lib import util
 
-from catalogService import logger as rlogging
+from catalogService.utils import logger as rlogging
 from restlib.http import modpython
 
 from catalogService import errors
 from catalogService import storage
-from catalogService.rest import auth
-from catalogService.rest import response, site
+from catalogService.rest.api import site
+from catalogService.rest.middleware import auth
+from catalogService.rest.middleware import response
 
 class Request(modpython.ModPythonRequest):
     _helpDir = '/usr/share/catalog-service/help'
