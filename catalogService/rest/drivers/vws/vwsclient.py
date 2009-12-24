@@ -203,12 +203,14 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
+    RBUILDER_BUILD_TYPE = 'VWS'
+
     @classmethod
     def isDriverFunctional(cls):
         return globuslib.WorkspaceCloudClient.isFunctional()
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         props = globuslib.WorkspaceCloudProperties()
         userCredentials = credentials
         props.set('vws.factory', cloudConfig['factory'])
@@ -266,25 +268,6 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
-
-    def drvGetImages(self, imageIds):
-        imageList = self._getImagesFromGrid()
-        imageList = self.addMintDataToImageList(imageList, 'VWS')
-
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is not None:
-            imagesById = dict((x.getImageId(), x) for x in imageList )
-            newImageList = images.BaseImages()
-            for imageId in imageIds:
-                if imageId.endswith('.gz') and imageId not in imagesById:
-                    imageId = imageId[:-3]
-                if imageId not in imagesById:
-                    continue
-                newImageList.append(imagesById[imageId])
-            imageList = newImageList
-        return imageList
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Globus Workspaces Launch Parameters")
@@ -467,7 +450,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def _publishImage(self, fileName):
         self.client.transferInstance(fileName)
 
-    def _getImagesFromGrid(self):
+    def getImagesFromTarget(self):
         cloudAlias = self.client.getCloudAlias()
 
         imageIds = self.client.listImages()
@@ -484,6 +467,15 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
+
+    def _imageIdInMap(self, imageId, imageIdMap):
+        # Images in mint have no .gz, but we have to store them with a .gz in
+        # the grid. This normalizes the 
+        if imageId is None:
+            return None
+        if imageId.endswith('.gz') and imageId not in imageIdMap:
+            imageId = imageId[:-3]
+        return (imageId in imageIdMap and imageId) or None
 
     @classmethod
     def getImageIdFromMintImage(cls, image):

@@ -88,9 +88,10 @@ class Request(simplehttp.SimpleHttpRequest):
 class SimpleHttpHandler(simplehttp.SimpleHttpHandler):
     requestClass = Request
 
-def getHandler(storageConfig):
-    handler = SimpleHttpHandler(site.CatalogServiceController(storageConfig))
-    handler.addCallback(auth.AuthenticationCallback(storageConfig))
+def getHandler(restDb):
+    controller = site.CatalogServiceController(restDb)
+    handler = SimpleHttpHandler(controller)
+    handler.addCallback(auth.AuthenticationCallback(restDb, controller))
     handler.addCallback(errors.ErrorMessageCallback())
     # It is important that the logger callback is always called, so keep this
     # last
@@ -101,14 +102,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     pathPrefix = '/TOPLEVEL'
     logLevel = 1
     _logFile = None
-    storageConfig = None
     handler = None
 
     @classmethod
-    def updateHandler(class_, storageConfig):
+    def updateHandler(class_, restDb):
         # Note: this is needed for testing
-        class_.storageConfig = storageConfig
-        class_.handler = getHandler(storageConfig)
+        class_.handler = getHandler(restDb)
 
     def do(self):
         self._logger = self._getLogger(self.address_string())
@@ -134,6 +133,3 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_error(self, format, *args):
         return self._log(logging.ERROR, format, *args)
-
-
-BaseRESTHandler.updateHandler(storage.StorageConfig(storagePath = 'storage'))

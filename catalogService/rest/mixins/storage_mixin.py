@@ -23,15 +23,6 @@ class StorageMixin(object):
         for k, v in config.iteritems():
             store.set("%s/%s" % (cloudName, k), v)
 
-    def _enumerateConfiguredClouds(self):
-        if not self.isDriverFunctional():
-            return []
-        store = self._getConfigurationDataStore()
-        ret = []
-        for cloudName in sorted(store.enumerate()):
-            ret.append(self._getCloudConfiguration(cloudName))
-        return ret
-
     def _getCredentialsDataStore(self):
         path = os.path.join(self._cfg.storagePath, 'credentials',
             self.cloudType)
@@ -45,9 +36,6 @@ class StorageMixin(object):
             path += '/' + self._sanitizeKey(cloudName)
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
-
-    def _getCloudCredentialsForUser(self, cloudName):
-        return self._getCredentialsForCloudName(cloudName)[1]
 
     def _getCredentialsForCloudName(self, cloudName):
         cloudConfig = self._getCloudConfiguration(cloudName)
@@ -82,9 +70,6 @@ class StorageMixin(object):
     def _getCloudConfiguration(self, cloudName):
         store = self._getConfigurationDataStore(cloudName)
         return dict((k, store.get(k)) for k in store.enumerate())
-
-    def drvGetCloudConfiguration(self, isAdmin = False):
-        return self._getCloudConfiguration(self.cloudName)
 
     def drvCreateCloud(self, descriptorData):
         cloudName = self._getCloudNameFromDescriptorData(descriptorData)

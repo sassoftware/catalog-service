@@ -9,12 +9,14 @@ class BaseGenericController(controller.RestController):
     pass
 
 class BaseController(BaseGenericController):
-    def __init__(self, parent, path, cfg):
+    def __init__(self, parent, path, cfg, db):
         self.cfg = cfg
-        BaseGenericController.__init__(self, parent, path, [ cfg ])
+        self.db = db
+        BaseGenericController.__init__(self, parent, path, [ cfg, db ])
 
 class BaseCloudController(BaseGenericController):
-    def __init__(self, parent, path, driver, cfg):
+    def __init__(self, parent, path, driver, cfg, db):
         self.cfg = cfg
         self.driver = driver
-        BaseGenericController.__init__(self, parent, path, [driver, cfg])
+        self.db = db
+        BaseGenericController.__init__(self, parent, path, [driver, cfg, db])

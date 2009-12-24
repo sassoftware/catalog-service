@@ -3,10 +3,13 @@
 # Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
+import os
+
 import mint.client
 import mint.config
 import mint.shimclient
 
+from catalogService import storage
 from catalogService.rest.models import userInfo
 from catalogService.rest.models import serviceInfo
 from catalogService.rest.middleware.response import XmlResponse
@@ -22,8 +25,11 @@ class CatalogServiceController(base.BaseController):
             'serviceinfo' : 'serviceinfo',
             'jobs' : jobs.JobsController, }
 
-    def __init__(self, cfg):
-        base.BaseController.__init__(self, None, None, cfg)
+    def __init__(self, restdb):
+        storagePath = os.path.join(restdb.cfg.dataPath, 'catalog')
+
+        storageConfig = storage.StorageConfig(storagePath=storagePath)
+        base.BaseController.__init__(self, None, None, storageConfig, restdb)
         self.loadCloudTypes()
 
     def loadCloudTypes(self):

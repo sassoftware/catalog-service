@@ -3,7 +3,6 @@
 # Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
-import os
 import base64
 
 from conary.lib import coveragehook
@@ -13,7 +12,6 @@ from catalogService.utils import logger as rlogging
 from restlib.http import modpython
 
 from catalogService import errors
-from catalogService import storage
 from catalogService.rest.api import site
 from catalogService.rest.middleware import auth
 from catalogService.rest.middleware import response
@@ -27,19 +25,17 @@ class ModPythonHttpHandler(modpython.ModPythonHttpHandler):
 
 class ApacheRESTHandler(object):
     httpHandlerClass = ModPythonHttpHandler
-    def __init__(self, pathPrefix, storagePath):
-        self.pathPrefix = pathPrefix
-        self.storageConfig = storage.StorageConfig(storagePath=storagePath)
+    def __init__(self, restdb):
         self.handler = self.httpHandlerClass(
-                            site.CatalogServiceController(self.storageConfig))
+            site.CatalogServiceController(restdb))
         self.handler.addCallback(errors.ErrorMessageCallback())
-        self.addAuthCallback()
+        self.addAuthCallback(restdb)
         # It is important that the logger callback is always called, so keep
         # this last
         self.handler.addCallback(rlogging.LoggerCallback())
 
-    def addAuthCallback(self):
-        self.handler.addCallback(auth.AuthenticationCallback(self.storageConfig))
+    def addAuthCallback(self, restdb):
+        self.handler.addCallback(auth.AuthenticationCallback(restdb))
 
     def handle(self, req):
         logger = self.getLogger(req)
@@ -60,7 +56,5 @@ def handler(req):
     The function is for testing purposes only.
     """
     coveragehook.install()
-    storageDir = os.path.abspath(os.path.join(req.document_root(),
-        '..', '..', 'storage'))
-    _handler = ApacheRESTHandler('/TOP', storageDir)
+    _handler = ApacheRESTHandler('/TOP', restDb)
     return _handler.handle(req)

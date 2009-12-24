@@ -214,6 +214,8 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     _XmlRpcWrapper = "<methodResponse><params><param>%s</param></params></methodResponse>"
 
+    RBUILDER_BUILD_TYPE = 'XEN_OVA'
+
     @classmethod
     def isDriverFunctional(cls):
         if not XenAPI or not xenprov:
@@ -221,7 +223,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return True
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         if self.XenSessionClass:
             klass = self.XenSessionClass
         else:
@@ -377,7 +379,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         srRef = self.client.xenapi.SR.get_by_uuid(srUuid)
         urlTemplate = 'http://%s:%s@%s/import?task_id=%s&sr_id=%s'
 
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         cloudName = cloudConfig['name']
         creds = self.credentials
         username, password = creds['username'], creds['password']
@@ -451,7 +453,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
 
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
@@ -467,7 +469,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         self.startVm(realId)
         return realId
 
-    def _getImagesFromGrid(self):
+    def getImagesFromTarget(self):
         cloudAlias = self.getCloudAlias()
         instMap  = self.client.xenapi.VM.get_all_records()
 
