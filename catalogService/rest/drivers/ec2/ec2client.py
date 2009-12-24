@@ -366,20 +366,21 @@ class EC2Client(baseDriver.BaseDriver):
                              proxy_port = proxyPort)
 
     def drvGetCloudConfiguration(self, isAdmin = False):
-        store = self._getConfigurationDataStore()
-        if not store.get('enabled'):
+        if not self._mintClient:
+            return {}
+        try:
+            targetData = self._mintClient.getTargetData('ec2', 'aws')
+        except TargetMissing:
+            targetData = {}
+        except PermissionDenied:
+            raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        if not targetData.get('enabled'):
             return {}
         ret = dict(name = 'aws', alias = 'ec2', cloudAlias = 'ec2',
             fullDescription = EC2_DESCRIPTION,
             description = EC2_DESCRIPTION,
             )
-        if self._mintClient and isAdmin:
-            try:
-                targetData = self._mintClient.getTargetData('ec2', 'aws')
-            except TargetMissing:
-                targetData = {}
-            except PermissionDenied:
-                raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        if isAdmin:
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
@@ -393,7 +394,7 @@ class EC2Client(baseDriver.BaseDriver):
     def _getCloudCredentialsForUser(self, cloudName):
         cloudConfig = self.drvGetCloudConfiguration()
         if not cloudConfig:
-            return {}
+            raise errors.InvalidCloudName(cloudName)
         try:
             creds = self._mintClient.getEC2CredentialsForUser(
                                                     self._mintAuth.userId)
@@ -404,8 +405,6 @@ class EC2Client(baseDriver.BaseDriver):
         return creds
 
     def drvRemoveCloud(self):
-        store = self._getConfigurationDataStore()
-        store.delete('enabled')
         try:
             self._mintClient.deleteTarget('ec2', 'aws')
         except TargetMissing:
@@ -414,7 +413,7 @@ class EC2Client(baseDriver.BaseDriver):
     @classmethod
     def _strip(cls, obj):
         if not isinstance(obj, basestring):
-            return None
+            return obj
         return obj.strip()
 
     def _getS3Connection(self, publicAccessKeyId, secretAccessKey):
@@ -465,8 +464,8 @@ class EC2Client(baseDriver.BaseDriver):
         return True
 
     def drvCreateCloud(self, descriptorData):
-        store = self._getConfigurationDataStore()
-        if store.get('enabled'):
+        clouds = self.listClouds()
+        if clouds:
             raise errors.CloudExists()
 
         getField = descriptorData.getField
@@ -491,7 +490,8 @@ class EC2Client(baseDriver.BaseDriver):
             ec2Certificate = fixPEM(getField('certificateData')),
             ec2CertificateKey = fixPEM(getField('certificateKeyData')),
             ec2LaunchUsers = launchUsers,
-            ec2LaunchGroups = launchGroups)
+            ec2LaunchGroups = launchGroups,
+            enabled = True)
         dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
         # Validate credentials
         creds = {
@@ -507,7 +507,6 @@ class EC2Client(baseDriver.BaseDriver):
             self._mintClient.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
             pass
-        store.set('enabled', 1)
         return self.listClouds()[0]
 
     @classmethod
@@ -524,7 +523,11 @@ class EC2Client(baseDriver.BaseDriver):
         return True
 
     def isValidCloudName(self, cloudName):
-        return self.drvGetCloudConfiguration() and cloudName == 'aws'
+        if cloudName != 'aws':
+            return False
+        if self._mintClient is None:
+            return True
+        return bool(self.drvGetCloudConfiguration())
 
     def drvSetUserCredentials(self, fields):
         awsAccountNumber = str(fields.getField('accountId'))
@@ -544,10 +547,11 @@ class EC2Client(baseDriver.BaseDriver):
         return self._nodeFactory.newCredentials(valid = valid)
 
     def _enumerateConfiguredClouds(self):
-        if not self.drvGetCloudConfiguration():
+        cfg = self.drvGetCloudConfiguration()
+        if not cfg:
             # Cloud is not configured
             return []
-        return [ self.drvGetCloudConfiguration() ]
+        return [ cfg ]
 
     def updateCloud(self, parameters):
         parameters = CloudParameters(parameters)
@@ -923,12 +927,6 @@ x509-cert(base64)=%s
                                     CATALOG_DEF_SECURITY_GROUP_PERMS])
         ret.insert(0, defSecurityGroup)
         return ret
-
-    def _getConfigurationDataStore(self):
-        path = os.path.join(self._cfg.storagePath, 'configuration',
-            self.cloudType, 'aws')
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
 
     def _processProductCodeError(self, message):
         if "subscription to productcode" in message.lower():
