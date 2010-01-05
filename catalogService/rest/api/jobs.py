@@ -115,7 +115,7 @@ class JobTypeController(base.BaseController):
         self.jobStore = jobStoreClass(spath)
 
     def _getStorePath(self):
-        return os.path.join(self.cfg.storagePath, self.storagePathSuffix)
+        return os.path.join(self.storageCfg.storagePath, self.storagePathSuffix)
 
     def get(self, request, jobType, jobId):
         if jobType not in self.supportedJobTypes:

@@ -43,7 +43,7 @@ class AllCloudController(BaseController):
                                       {}, {}, ['driver']).driver
             # XXX we should make this a class method
             cloudType = driverClass.cloudType
-            driver = driverClass(self.cfg, driverName, db = self.db)
+            driver = driverClass(self.storageCfg, driverName, db = self.db)
             controller =  CloudTypeController(self, cloudType,
-                                              driver, self.cfg, self.db)
+                                              driver, self.storageCfg, self.db)
             self.urls[cloudType] = controller

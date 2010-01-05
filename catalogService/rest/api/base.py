@@ -11,16 +11,19 @@ class BaseGenericController(controller.RestController):
 
 class BaseController(BaseGenericController):
     def __init__(self, parent, path, cfg, db):
-        self.cfg = cfg
+        self.cfg = db.cfg
+        self.storageCfg = cfg
         self.db = db
         BaseGenericController.__init__(self, parent, path, [ cfg, db ])
 
 class BaseCloudController(BaseGenericController):
     def __init__(self, parent, path, driver, cfg, db):
-        self.cfg = cfg
+        self.cfg = db.cfg
         self.driver = driver
+        self.storageCfg = cfg
         self.db = db
-        BaseGenericController.__init__(self, parent, path, [driver, cfg, db])
+        BaseGenericController.__init__(self, parent, path,
+            [driver, cfg, db])
 
     def PermissionDenied(self, request, msg=''):
         if 'HTTP_X_FLASH_VERSION' in request.headers:

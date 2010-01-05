@@ -16,7 +16,7 @@ class UsersController(BaseController):
     processSuburls = True
 
     def _getUserDataStore(self, request):
-        path = os.sep.join([self.cfg.storagePath, 'userData',
+        path = os.sep.join([self.storageCfg.storagePath, 'userData',
             self._sanitizeKey(request.auth[0])])
         cfg = storage.StorageConfig(storagePath = path)
         return storage.DiskStorage(cfg)
