@@ -18,11 +18,13 @@ from catalogService import descriptor
 from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
 from catalogService import job_models
-from catalogService import job_store
+from catalogService import jobs
 from catalogService import keypairs, securityGroups
 from catalogService import storage
 from catalogService import timeutils
 from catalogService import x509
+
+from rpath_job import api1 as rpath_job
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -50,7 +52,7 @@ class BaseDriver(object):
 
     instanceStorageClass = storage.DiskStorage
 
-    LogEntry = job_store.LogEntry
+    LogEntry = rpath_job.LogEntry
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, mintClient=None, userId = None):
@@ -69,8 +71,8 @@ class BaseDriver(object):
         self._instanceStore = None
         spJobSuffix = 'jobs'
         spath = os.path.join(self._cfg.storagePath, spJobSuffix)
-        self._jobsStore = job_store.ApplianceVersionUpdateJobStore(spath)
-        self._instanceLaunchJobStore = job_store.LaunchJobStore(spath)
+        self._jobsStore = jobs.ApplianceVersionUpdateJobStore(spath)
+        self._instanceLaunchJobStore = jobs.LaunchJobStore(spath)
         #if cloudName:
         #    spath = os.path.join(self._cfg.storagePath, spJobSuffix,
         #        self.cloudType, self._sanitizeKey(cloudName))

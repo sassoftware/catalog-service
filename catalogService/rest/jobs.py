@@ -7,7 +7,7 @@ import os
 
 from catalogService import nodeFactory
 from catalogService import job_models
-from catalogService import job_store
+from catalogService import jobs
 from catalogService import job_types
 from catalogService.rest import base
 from catalogService.rest.response import XmlResponse, XmlStringResponse
@@ -41,9 +41,9 @@ class JobTypeController(base.BaseController):
     modelName = 'jobId'
     supportedJobTypes = {
         'appliance-version-update' : ('Appliance Version Update',
-            job_store.ApplianceVersionUpdateJobStore),
+            jobs.ApplianceVersionUpdateJobStore),
         'instance-launch' : ('Instance Launch',
-            job_store.LaunchJobStore),
+            jobs.LaunchJobStore),
     }
     storagePathSuffix = 'jobs'
     def index(self, request, jobType):
