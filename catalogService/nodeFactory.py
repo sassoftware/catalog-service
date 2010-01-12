@@ -1,12 +1,13 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
 import urllib
 
-from catalogService import clouds
-from catalogService import cloud_types
+from catalogService.rest.models import clouds
+from catalogService.rest.models import cloud_types
 
 class NodeFactory(object):
     __slots__ = [ 'cloudConfigurationDescriptorFactory',
