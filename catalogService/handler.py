@@ -1,5 +1,6 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 """
 Summary
@@ -63,13 +64,13 @@ import BaseHTTPServer
 import logging
 
 from restlib.http import simplehttp
-from catalogService import logger as rlogging
+from catalogService.utils import logger as rlogging
 
 from catalogService import config
 from catalogService import errors
 from catalogService import storage
-from catalogService.rest import auth
-from catalogService.rest import site
+from catalogService.rest.middleware import auth
+from catalogService.rest.api import site
 
 # Monkeypatch BaseHTTPServer for older Python (e.g. the one that
 # rLS1 has) to include a function that we rely on. Yes, this is gross.
@@ -87,10 +88,11 @@ class Request(simplehttp.SimpleHttpRequest):
 class SimpleHttpHandler(simplehttp.SimpleHttpHandler):
     requestClass = Request
 
-def getHandler(storageConfig):
-    handler = SimpleHttpHandler(site.CatalogServiceController(storageConfig))
-    handler.addCallback(auth.AuthenticationCallback(storageConfig))
-    handler.addCallback(errors.ErrorMessageCallback())
+def getHandler(restDb):
+    controller = site.CatalogServiceController(restDb)
+    handler = SimpleHttpHandler(controller)
+    handler.addCallback(auth.AuthenticationCallback(restDb, controller))
+    handler.addCallback(errors.ErrorMessageCallback(controller))
     # It is important that the logger callback is always called, so keep this
     # last
     handler.addCallback(rlogging.LoggerCallback())
@@ -100,14 +102,12 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     pathPrefix = '/TOPLEVEL'
     logLevel = 1
     _logFile = None
-    storageConfig = None
     handler = None
 
     @classmethod
-    def updateHandler(class_, storageConfig):
+    def updateHandler(class_, restDb):
         # Note: this is needed for testing
-        class_.storageConfig = storageConfig
-        class_.handler = getHandler(storageConfig)
+        class_.handler = getHandler(restDb)
 
     def do(self):
         self._logger = self._getLogger(self.address_string())
@@ -133,6 +133,3 @@ class BaseRESTHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_error(self, format, *args):
         return self._log(logging.ERROR, format, *args)
-
-
-BaseRESTHandler.updateHandler(storage.StorageConfig(storagePath = 'storage'))
