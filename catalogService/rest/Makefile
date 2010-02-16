@@ -11,7 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = drivers mixins
+SUBDIRS = api drivers middleware models
 
 python_files =	$(wildcard *.py)
 

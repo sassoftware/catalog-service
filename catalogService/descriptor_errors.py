@@ -1,6 +1,6 @@
-#!/usr/bin/python2.4
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 class Error(Exception):

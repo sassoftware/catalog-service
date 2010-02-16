@@ -15,15 +15,15 @@ from mint import helperfuncs
 from mint.mint_error import EC2Exception as MintEC2Exception
 from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
 
-from catalogService import clouds
-from catalogService import descriptor
 from catalogService import errors
-from catalogService import instances
-from catalogService import images
-from catalogService import keypairs
-from catalogService import securityGroups
 from catalogService import storage
 from catalogService.rest import baseDriver
+from catalogService.rest.models import clouds
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
+from catalogService.rest.models import keypairs
+from catalogService.rest.models import securityGroups
 
 CATALOG_DYN_SECURITY_GROUP = 'dynamic'
 CATALOG_DYN_SECURITY_GROUP_DESC = 'Generated Security Group'
@@ -40,6 +40,7 @@ CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS = (
         ('tcp',  5989,       5989),
 )
 
+EC2_ALIAS = 'ec2'
 EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
 
 EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode=%s"
@@ -307,9 +308,9 @@ class EC2Client(baseDriver.BaseDriver):
     )
 
     _credNameMap = [
-        ('accountId', 'awsAccountNumber'),
-        ('publicAccessKeyId', 'awsPublicAccessKeyId'),
-        ('secretAccessKey', 'awsSecretAccessKey'),
+        ('accountId', 'accountId'),
+        ('publicAccessKeyId', 'publicAccessKeyId'),
+        ('secretAccessKey', 'secretAccessKey'),
      ]
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
@@ -317,12 +318,14 @@ class EC2Client(baseDriver.BaseDriver):
 
     dynamicSecurityGroupPattern = re.compile(baseDriver.BaseDriver._uuid('.' * 32))
 
+    RBUILDER_BUILD_TYPE = 'AMI'
+
     class SecurityGroupHandler(securityGroups.Handler):
         securityGroupClass = EC2_SecurityGroup
 
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
-        proxyUrl = self._mintClient._cfg.proxy.get(proto)
+        proxyUrl = self.db.cfg.proxy.get(proto)
         if not proxyUrl:
             return None, None, None, None
         splitUrl = helperfuncs.urlSplit(proxyUrl)
@@ -354,32 +357,28 @@ class EC2Client(baseDriver.BaseDriver):
         return nodes[0].firstChild.wholeText
 
     def drvCreateCloudClient(self, credentials):
-        for key in ('awsPublicAccessKeyId', 'awsSecretAccessKey'):
+        for key in ('publicAccessKeyId', 'secretAccessKey'):
             if key not in credentials or not credentials[key]:
                 raise errors.MissingCredentials()
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo()
-        return EC2Connection(credentials['awsPublicAccessKeyId'],
-                             credentials['awsSecretAccessKey'],
+        return EC2Connection(credentials['publicAccessKeyId'],
+                             credentials['secretAccessKey'],
                              proxy_user = proxyUser,
                              proxy_pass = proxyPass,
                              proxy = proxy,
                              proxy_port = proxyPort)
 
-    def drvGetCloudConfiguration(self, isAdmin = False):
-        store = self._getConfigurationDataStore()
-        if not store.get('enabled'):
+    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
+        if 'ec2PublicKey' not in targetData:
+            # Not configured
             return {}
-        ret = dict(name = 'aws', alias = 'ec2', cloudAlias = 'ec2',
-            fullDescription = EC2_DESCRIPTION,
-            description = EC2_DESCRIPTION,
+        ret = dict(name = 'aws',
+            alias = targetData.get('alias', EC2_ALIAS),
+            cloudAlias = targetData.get('alias', EC2_ALIAS),
+            fullDescription = targetData.get('description', EC2_DESCRIPTION),
+            description = targetData.get('description', EC2_DESCRIPTION),
             )
-        if self._mintClient and isAdmin:
-            try:
-                targetData = self._mintClient.getTargetData('ec2', 'aws')
-            except TargetMissing:
-                targetData = {}
-            except PermissionDenied:
-                raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        if isAdmin:
             ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
@@ -390,35 +389,14 @@ class EC2Client(baseDriver.BaseDriver):
                 s3Bucket = targetData.get('ec2S3Bucket', '')))
         return ret
 
-    def _getCloudCredentialsForUser(self, cloudName):
-        cloudConfig = self.drvGetCloudConfiguration()
-        if not cloudConfig:
-            return {}
-        try:
-            creds = self._mintClient.getEC2CredentialsForUser(
-                                                    self._mintAuth.userId)
-        except PermissionDenied:
-            raise errors.PermissionDenied
-        if not creds.get('awsPublicAccessKeyId'):
-            return {}
-        return creds
-
-    def drvRemoveCloud(self):
-        store = self._getConfigurationDataStore()
-        store.delete('enabled')
-        try:
-            self._mintClient.deleteTarget('ec2', 'aws')
-        except TargetMissing:
-            pass
-
     @classmethod
     def _strip(cls, obj):
         if not isinstance(obj, basestring):
-            return None
+            return obj
         return obj.strip()
 
     def _getS3Connection(self, publicAccessKeyId, secretAccessKey):
-        proxyUrl = self._mintClient._cfg.proxy.get('https')
+        proxyUrl = self.db.cfg.proxy.get('https')
         if proxyUrl:
             splitUrl = helperfuncs.urlSplit(proxyUrl)
             proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
@@ -464,9 +442,18 @@ class EC2Client(baseDriver.BaseDriver):
             bucket.delete_key(keyName)
         return True
 
+    def drvValidateCredentials(self, creds):
+        cli = self.drvCreateCloudClient(creds)
+        # Do a call to force cred validation
+        try:
+            cli.get_all_regions()
+        except EC2ResponseError, e:
+            return False
+        return True
+
     def drvCreateCloud(self, descriptorData):
-        store = self._getConfigurationDataStore()
-        if store.get('enabled'):
+        clouds = self.listClouds()
+        if clouds:
             raise errors.CloudExists()
 
         getField = descriptorData.getField
@@ -484,6 +471,8 @@ class EC2Client(baseDriver.BaseDriver):
         if launchGroups:
             launchGroups = [ x.strip() for x in launchGroups.split(',') ]
         dataDict = dict(
+            alias = getField('cloudAlias') or EC2_ALIAS,
+            description = getField('fullDescription') or EC2_DESCRIPTION,
             ec2AccountId = getField('accountId'),
             ec2PublicKey = ec2PublicKey,
             ec2PrivateKey = ec2PrivateKey,
@@ -495,8 +484,8 @@ class EC2Client(baseDriver.BaseDriver):
         dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
         # Validate credentials
         creds = {
-           'awsPublicAccessKeyId' : dataDict['ec2PublicKey'],
-           'awsSecretAccessKey' : dataDict['ec2PrivateKey']}
+           'publicAccessKeyId' : dataDict['ec2PublicKey'],
+           'secretAccessKey' : dataDict['ec2PrivateKey']}
         cli = self.drvCreateCloudClient(creds)
         # Do a call to force cred validation
         try:
@@ -504,10 +493,9 @@ class EC2Client(baseDriver.BaseDriver):
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         try:
-            self._mintClient.addTarget('ec2', 'aws', dataDict)
+            self.db.targetMgr.addTarget('ec2', 'aws', dataDict)
         except TargetExists:
             pass
-        store.set('enabled', 1)
         return self.listClouds()[0]
 
     @classmethod
@@ -524,30 +512,17 @@ class EC2Client(baseDriver.BaseDriver):
         return True
 
     def isValidCloudName(self, cloudName):
-        return self.drvGetCloudConfiguration() and cloudName == 'aws'
+        if cloudName != 'aws':
+            return False
+        return baseDriver.BaseDriver.isValidCloudName(self, cloudName)
 
-    def drvSetUserCredentials(self, fields):
-        awsAccountNumber = str(fields.getField('accountId'))
-        awsAccessKeyId = str(fields.getField('publicAccessKeyId'))
-        awsSecretAccessKey = str(fields.getField('secretAccessKey'))
-
-        try:
-            valid = self._mintClient.setEC2CredentialsForUser(
-                self._mintAuth.userId, awsAccountNumber, awsAccessKeyId,
-                awsSecretAccessKey, False)
-        except MintEC2Exception, e:
-            raise errors.PermissionDenied(message = str(e))
-
-        if not valid:
-            raise errors.PermissionDenied(
-                message = "The supplied credentials are invalid")
-        return self._nodeFactory.newCredentials(valid = valid)
-
-    def _enumerateConfiguredClouds(self):
-        if not self.drvGetCloudConfiguration():
-            # Cloud is not configured
-            return []
-        return [ self.drvGetCloudConfiguration() ]
+    def drvGetCredentialsFromDescriptor(self, fields):
+        accountId = str(fields.getField('accountId'))
+        publicAccessKeyId = str(fields.getField('publicAccessKeyId'))
+        secretAccessKey = str(fields.getField('secretAccessKey'))
+        return dict(accountId = accountId,
+            publicAccessKeyId = publicAccessKeyId,
+            secretAccessKey = secretAccessKey)
 
     def updateCloud(self, parameters):
         parameters = CloudParameters(parameters)
@@ -642,11 +617,29 @@ x509-cert(base64)=%s
             insts.extend(self._getInstancesFromReservation(reservation))
         return insts
 
-    def drvGetImages(self, imageIds):
+    def getImagesFromTarget(self, imageIds):
         rs = self.client.get_all_images(image_ids = imageIds)
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]
-        return self._getImagesFromResult(rs)
+
+        imageList = images.BaseImages()
+        for image in rs:
+            productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
+                for x in image.product_codes ]
+            i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
+                                           ownerId=image.ownerId,
+                                           longName=image.location,
+                                           state=image.state,
+                                           isPublic=image.is_public,
+                                           productCode=productCodes)
+            imageList.append(i)
+        return imageList
+
+    def getImageIdFromMintImage(self, imageData):
+        return imageData.get('amiId')
+
+    def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
+        pass
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
@@ -859,7 +852,7 @@ x509-cert(base64)=%s
                                            productCode=productCodes)
             imageList.append(i)
 
-        mintImageList = self._mintClient.getAllBuildsByType('AMI')
+        mintImageList = self.db.db.builds.getAllBuildsByType('AMI')
         mintImageDict = dict((x.get('amiId'), x) for x in mintImageList)
 
         for image in imageList:
@@ -923,12 +916,6 @@ x509-cert(base64)=%s
                                     CATALOG_DEF_SECURITY_GROUP_PERMS])
         ret.insert(0, defSecurityGroup)
         return ret
-
-    def _getConfigurationDataStore(self):
-        path = os.path.join(self._cfg.storagePath, 'configuration',
-            self.cloudType, 'aws')
-        cfg = storage.StorageConfig(storagePath = path)
-        return storage.DiskStorage(cfg)
 
     def _processProductCodeError(self, message):
         if "subscription to productcode" in message.lower():

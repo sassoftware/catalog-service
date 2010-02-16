@@ -11,14 +11,13 @@ import tempfile
 
 from conary.lib import util
 
-from catalogService import clouds
-from catalogService import descriptor
 from catalogService import errors
-from catalogService import images
-from catalogService import instances
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
+from catalogService.rest.models import clouds
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
 
 
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
@@ -122,7 +121,7 @@ class InstanceStorage(storage.DiskStorage):
     def _generateString(cls, length):
         return baseDriver.BaseDriver.uuidgen()
 
-class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class VMwareClient(baseDriver.BaseDriver):
     Image = VMwareImage
     cloudType = 'vmware'
     instanceStorageClass = InstanceStorage
@@ -138,6 +137,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     # an actual server
     VimServiceTransport = None
 
+    RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
@@ -149,8 +150,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return True
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
-        host = self._getCloudNameFromConfig(cloudConfig)
+        cloudConfig = self.getTargetConfiguration()
+        host = self.cloudName
         # This import is expensive!!! Delay it until it is actually needed
         import viclient
         debug = False
@@ -317,31 +318,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
 
-    def drvGetImages(self, imageIds):
-        # currently we return the templates as available images
-        imageList = self._getTemplatesFromInventory()
-        imageList = self.addMintDataToImageList(imageList, 'VMWARE_ESX_IMAGE')
-
-        # FIXME: duplicate code
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is None:
-            # no filtering required
-            return imageList
-
-        # filter the images to those requested
-        imagesById = dict((x.getImageId(), x) for x in imageList)
-        newImageList = images.BaseImages()
-        for imageId in imageIds:
-            if imageId not in imagesById:
-                continue
-            newImageList.append(imagesById[imageId])
-        return newImageList
-
     def getCloudAlias(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         return cloudConfig['alias']
 
     def _buildInstanceList(self, instanceList, instMap):
@@ -448,9 +427,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def getImageIdFromMintImage(cls, image):
         return cls._uuid(image.get('sha1'))
 
-    def _getTemplatesFromInventory(self):
+    def getImagesFromTarget(self, imageIds):
         """
         returns all templates in the inventory
+        currently we return the templates as available images
         """
         cloudAlias = self.getCloudAlias()
         instMap = self.getVirtualMachines()
@@ -460,6 +440,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
 
             imageId = vminfo['config.uuid']
+            if imageIds is not None and imageId not in imageIds:
+                continue
             longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
             image = self._nodeFactory.newImage(
                 id = imageId,
