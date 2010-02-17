@@ -584,6 +584,7 @@ x509-cert(base64)=%s
         params['keyName'] = getField('keyName')
         params['userData'] = getField('userData')
         params['instanceType'] = getField('instanceType')
+        params['availabilityZone'] = getField('availabilityZone')
 
         return params
 
@@ -610,7 +611,8 @@ x509-cert(base64)=%s
                     key_name=launchParams.get('keyName'),
                     security_groups=securityGroups,
                     user_data=self.createUserData(launchParams.get('userData')),
-                    instance_type=launchParams.get('instanceType'))
+                    instance_type=launchParams.get('instanceType'),
+                    placement=launchParams.get('availabilityZone'))
         except EC2ResponseError, e:
             # is this a product code error?
             errorMsg = self._getErrorMessage(e)
@@ -663,6 +665,17 @@ x509-cert(base64)=%s
                   for (x, y) in EC2_InstanceTypes.idMap),
             default = EC2_InstanceTypes.idMap[0][0],
             )
+        descr.addDataField("availabilityZone",
+            descriptions = [
+                ("Availability Zone", None),
+                (u"Zone de disponibilit\u00e9", "fr_FR")],
+            help = [
+                ("launch/availabilityZones.html", None)],
+            type = descriptor.EnumeratedType(
+                descriptor.ValueWithDescription(x[0], descriptions = x[0])
+                for x in self._cliGetAvailabilityZones()
+            ))
+
         descr.addDataField("minCount",
             descriptions = [
                 ("Minimum Number of Instances", None),
@@ -862,6 +875,13 @@ x509-cert(base64)=%s
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         return [ (x.name, x.fingerprint) for x in rs ]
+
+    def _cliGetAvailabilityZones(self):
+        try:
+            rs = self.client.get_all_zones()
+        except EC2ResponseError, e:
+            raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
+        return [ (x.name, x.regionName) for x in rs ]
 
     def _getUnfilteredSecurityGroups(self, groupNames = None):
         ret = []

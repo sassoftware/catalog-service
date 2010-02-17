@@ -118,7 +118,8 @@ class InstanceStorage(storage.DiskStorage):
     """
     VMware instance ids should look like a UUID
     """
-    def _generateString(self, length):
+    @classmethod
+    def _generateString(cls, length):
         return baseDriver.BaseDriver.uuidgen()
 
 class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
@@ -247,6 +248,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                )
         for cr in crToDc.keys():
             cfg = cr.configTarget
+            if cfg is None:
+                continue
             dataStores = []
 
             for ds in cfg.get_element_datastore():
@@ -574,6 +577,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         vm = None
 
+        instanceId = self.instanceStorageClass._generateString(32)
         useTemplate = not self.client.isESX()
         if not image.getIsDeployed():
             if useTemplate:
@@ -582,8 +586,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 vmName = 'template-' + image.getBaseFileName()
                 uuid = image.getImageId()
             else:
-                # otherwise, we'll use the instance name and instace
-                # uuid for deployment
+                # otherwise, we'll use the instance name and
+                # a random instance uuid for deployment
                 vmName = instanceName
                 uuid = instanceId
             vm = self._deployImage(job, image, auth, dataCenter,

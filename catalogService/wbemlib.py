@@ -37,7 +37,8 @@ class WBEMConnection(pywbem.WBEMConnection):
         # method first, then use InvokeMethod.
         if hasattr(self, methodName):
             func = pywbem.WBEMConnection.__getattribute__(self, methodName)
-            if methodName not in [ 'GetInstance' ]:
+            if methodName not in [ 'GetInstance', 'CreateInstance',
+                                   'DeleteInstance' ]:
                 args = (CIMClassName, ) + args
         else:
             # Need to make use of InvokeMethod, prepend CIMClassName and
