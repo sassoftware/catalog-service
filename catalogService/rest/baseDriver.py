@@ -11,18 +11,28 @@ import urllib2
 
 from conary.lib import util, sha1helper
 
-from catalogService import cimupdater
 from catalogService import errors
-from catalogService import nodeFactory
-from catalogService import descriptor
-from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
-from catalogService import job_models
-from catalogService import job_store
-from catalogService import keypairs, securityGroups
+from catalogService import nodeFactory
+from catalogService import instanceStore
+from catalogService import jobs
 from catalogService import storage
-from catalogService import timeutils
-from catalogService import x509
+from catalogService.rest.models import clouds
+from catalogService.rest.models import cloud_types
+from catalogService.rest.models import credentials
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
+from catalogService.rest.models import job_models
+from catalogService.rest.models import keypairs
+from catalogService.rest.models import securityGroups
+from catalogService.utils import cimupdater
+from catalogService.utils import timeutils
+from catalogService.utils import x509
+
+from mint.mint_error import TargetExists
+
+from rpath_job import api1 as rpath_job
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -41,7 +51,10 @@ class BaseDriver(object):
     KeyPair          = keypairs.BaseKeyPair
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
+    # Map descriptor field name to name in internal storage field
     _credNameMap = []
+    # Map descriptor field name to name in internal storage field
+    _configNameMap = []
     cloudType = None
 
     updateStatusStateUpdating = 'updating'
@@ -50,27 +63,27 @@ class BaseDriver(object):
 
     instanceStorageClass = storage.DiskStorage
 
-    LogEntry = job_store.LogEntry
+    LogEntry = rpath_job.LogEntry
 
     def __init__(self, cfg, driverName, cloudName=None,
-                 nodeFactory=None, mintClient=None, userId = None):
+                 nodeFactory=None, userId = None, db = None):
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
         self._cfg = cfg
         self._cloudClient = None
         self._cloudCredentials = None
+        self.db = db
         if nodeFactory is None:
             nodeFactory = self._createNodeFactory()
         self._nodeFactory = nodeFactory
-        self._mintClient = mintClient
         self._nodeFactory.userId = userId
         self._logger = None
         self._instanceStore = None
         spJobSuffix = 'jobs'
         spath = os.path.join(self._cfg.storagePath, spJobSuffix)
-        self._jobsStore = job_store.ApplianceVersionUpdateJobStore(spath)
-        self._instanceLaunchJobStore = job_store.LaunchJobStore(spath)
+        self._jobsStore = jobs.ApplianceVersionUpdateJobStore(spath)
+        self._instanceLaunchJobStore = jobs.LaunchJobStore(spath)
         #if cloudName:
         #    spath = os.path.join(self._cfg.storagePath, spJobSuffix,
         #        self.cloudType, self._sanitizeKey(cloudName))
@@ -116,7 +129,10 @@ class BaseDriver(object):
             return self._logger.exception(*args, **kwargs)
 
     def isValidCloudName(self, cloudName):
-        raise NotImplementedError
+        if self.db is None:
+            return True
+        self.cloudName = cloudName
+        return bool(self.getTargetConfiguration())
 
     def __call__(self, request, cloudName=None):
         # This is a bit of a hack - basically, we're turning this class
@@ -126,8 +142,9 @@ class BaseDriver(object):
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
         drv =  self.__class__(self._cfg, self.driverName, cloudName,
-                              self._nodeFactory, request.mintClient,
-                              userId = request.auth[0])
+                              self._nodeFactory,
+                              userId = request.auth[0],
+                              db = self.db)
         drv.setLogger(request.logger)
         return drv
 
@@ -156,16 +173,18 @@ class BaseDriver(object):
         ret = clouds.BaseClouds()
         if not self.isDriverFunctional():
             return ret
-        for cloudConfig in self._enumerateConfiguredClouds():
-            cloudNode = self._createCloudNode(cloudConfig)
-            creds = self._getCloudCredentialsForUser(cloudNode.getCloudName())
+        for targetName, cloudConfig, userConfig in self._enumerateClouds():
+            cloudNode = self._createCloudNode(targetName, cloudConfig)
             # RBL-4055: no longer erase launch descriptor if the credentials
             # are not set
             ret.append(cloudNode)
         return ret
 
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
+    def _enumerateClouds(self):
+        return self.db.targetMgr.getTargetsForUser(self.cloudType, self.userId)
+
+    def _createCloudNode(self, cloudName, cloudConfig):
+        cld = self._nodeFactory.newCloud(cloudName = cloudName,
                          description = cloudConfig['description'],
                          cloudAlias = cloudConfig['alias'])
         return cld
@@ -187,6 +206,33 @@ class BaseDriver(object):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetImages(imageIds)
+
+    def drvGetImages(self, imageIdsFilter):
+        imageList = self.getImagesFromTarget(imageIdsFilter)
+        imageList = self.addMintDataToImageList(imageList,
+            self.RBUILDER_BUILD_TYPE)
+
+        # now that we've grabbed all the images, we can return only the one
+        # we want.  This is horribly inefficient, but neither the mint call
+        # nor the grid call allow us to filter by image, at least for now
+        if imageIdsFilter is None:
+            # no filtering required. We'll make the filter contain everything
+            imageIdsFilter = sorted(x.getImageId() for x in imageList)
+
+        # filter the images to those requested
+        imagesById = dict((x.getImageId(), x) for x in imageList)
+        newImageList = images.BaseImages()
+        for imageId in imageIdsFilter:
+            imageId = self._imageIdInMap(imageId, imagesById)
+            if imageId is None:
+                continue
+            newImageList.append(imagesById[imageId])
+        return newImageList
+
+    def _imageIdInMap(self, imageId, imageIdMap):
+        if imageId is None:
+            return None
+        return (imageId in imageIdMap and imageId) or None
 
     def getAllInstances(self):
         return self.getInstances(None)
@@ -336,11 +382,20 @@ class BaseDriver(object):
         """
         if self._cloudCredentials is None:
             self._checkAuth()
-            self._cloudCredentials = self._getCloudCredentialsForUser(
-                                                            self.cloudName)
+            self._cloudCredentials = self._getCloudCredentialsForUser()
         return self._cloudCredentials
 
     credentials = property(drvGetCloudCredentialsForUser)
+
+    def _getCloudCredentialsForUser(self):
+        return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
+            self.cloudName, self.userId)
+
+    def drvGetCredentialsFromDescriptor(self, fields):
+        ret = {}
+        for field, key in self._credNameMap:
+            ret[key] = str(fields.getField(field))
+        return ret
 
     def drvGetCloudClient(self):
         """
@@ -356,14 +411,39 @@ class BaseDriver(object):
 
     client = property(drvGetCloudClient)
 
+    def drvValidateCredentials(self, creds):
+        self.drvCreateCloudClient(creds)
+        return True
+
+    def drvCreateCloud(self, descriptorData):
+        cloudName = self.getCloudNameFromDescriptorData(descriptorData)
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        self.cloudName = cloudName
+        self.drvVerifyCloudConfiguration(config)
+        self.saveTarget(config)
+        return self._createCloudNode(cloudName, config)
+
+    @classmethod
+    def getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('name')
+
+    def drvVerifyCloudConfiguration(self, config):
+        pass
+
+    def saveTarget(self, dataDict):
+        try:
+            self.db.targetMgr.addTarget(self.cloudType, self.cloudName, dataDict)
+        except TargetExists:
+            raise errors.CloudExists()
+
     def getCloudAlias(self):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         return cloudConfig['alias']
 
     def _checkAuth(self):
         """rBuilder authentication"""
-        self._mintAuth = self._mintClient.checkAuth()
-        if not self._mintAuth.authorized:
+        if not self.db.auth.auth.authorized:
             raise PermissionDenied
 
     def getUserCredentials(self):
@@ -464,7 +544,7 @@ class BaseDriver(object):
 
     def launchInstanceFromDescriptorData(self, descriptorData, auth, descrXml):
         client = self.client
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
 
         imageId = os.path.basename(descriptorData.getField('imageId'))
 
@@ -531,12 +611,18 @@ class BaseDriver(object):
         return self.drvCreateCloud(descrData)
 
     def removeCloud(self):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         if not cloudConfig:
             # Cloud does not exist
             raise errors.InvalidCloudName(self.cloudName)
         self.drvRemoveCloud()
         return clouds.BaseClouds()
+
+    def drvRemoveCloud(self):
+        try:
+            self.db.targetMgr.deleteTarget(self.cloudType, self.cloudName)
+        except TargetMissing:
+            pass
 
     def setUserCredentials(self, credentialsData):
         # Authenticate
@@ -552,7 +638,16 @@ class BaseDriver(object):
         except descriptor.InvalidXML:
             # XXX
             raise
-        return self.drvSetUserCredentials(descrData)
+        creds = self.drvGetCredentialsFromDescriptor(descrData)
+        if not self.drvValidateCredentials(creds):
+            raise errors.PermissionDenied(
+                message = "The supplied credentials are invalid")
+        self._setUserCredentials(creds)
+        return self._nodeFactory.newCredentials(valid = True)
+
+    def _setUserCredentials(self, creds):
+        self.db.targetMgr.setTargetCredentialsForUser(
+            self.cloudType, self.cloudName, self.userId, creds)
 
     def getConfiguration(self):
         # Authenticate
@@ -562,12 +657,42 @@ class BaseDriver(object):
         descr = self.getCloudConfigurationDescriptor()
         descrData = descriptor.DescriptorData(descriptor = descr)
 
-        cloudConfig = self.drvGetCloudConfiguration(isAdmin = True)
-        for k, v in sorted(cloudConfig.items()):
+        cloudConfig = self.getTargetConfiguration(isAdmin = True)
+        kvlist = []
+        for k, v in cloudConfig.items():
             if k not in descr._dataFieldsHash:
                 continue
+            # We add all field names and values to the list first, so we can
+            # sort them after adding the extra maps
+            kvlist.append((k, v))
+        for field, k in self._configNameMap:
+            kvlist.append((field, cloudConfig.get(k)))
+        kvlist.sort()
+
+        for k, v in kvlist:
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
+
+    def getTargetConfiguration(self, isAdmin = False):
+        if not self.db:
+            return {}
+        if isAdmin and not self.db.auth.auth.admin:
+            raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        try:
+            targetData = self.db.targetMgr.getTargetData(self.cloudType,
+                                                         self.cloudName)
+        except TargetMissing:
+            targetData = {}
+
+        return self.drvGetTargetConfiguration(targetData, isAdmin = isAdmin)
+
+    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
+        if not targetData:
+            return targetData
+        # Add the target name, we don't have to persist it in the target data
+        # section
+        targetData['name'] = self.cloudName
+        return targetData
 
     def getInstanceNameFromImage(self, imageNode):
         if imageNode is None:
@@ -726,7 +851,8 @@ class BaseDriver(object):
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
 
-        mintImages = self._mintClient.getAllBuildsByType(imageType)
+        mintImages = self.db.db.builds.getAllBuildsByType(imageType,
+            self.db.auth.userId)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
         mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
@@ -741,8 +867,28 @@ class BaseDriver(object):
             self.addImageDataFromMintData(image, mintImageData,
                 images.buildToNodeFieldMap)
 
+        self.addExtraImagesFromMint(imageList, mintImages.iteritems(),
+            cloudAlias)
+        return imageList
+
+    @classmethod
+    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        if 'baseFileName' in mintImageData:
+            shortName = os.path.basename(mintImageData['baseFileName'])
+            longName = "%s/%s" % (mintImageData['buildId'], shortName)
+            image.setShortName(shortName)
+            image.setLongName(longName)
+        image.setDownloadUrl(mintImageData.get('downloadUrl'))
+        image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
+        image.setBaseFileName(mintImageData.get('baseFileName'))
+        image.setBuildId(mintImageData.get('buildId'))
+
+        for key, methodName in methodMap.iteritems():
+            getattr(image, methodName)(mintImageData.get(key))
+
+    def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # Add the rest of the images coming from mint
-        for uuid, mintImageData in sorted(mintImages.iteritems()):
+        for uuid, mintImageData in sorted(mintImages):
             image = self._nodeFactory.newImage(id=uuid,
                     imageId=uuid, isDeployed=False,
                     is_rBuilderImage=True,
@@ -751,21 +897,6 @@ class BaseDriver(object):
             self.addImageDataFromMintData(image, mintImageData,
                 images.buildToNodeFieldMap)
             imageList.append(image)
-        return imageList
-
-    @classmethod
-    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
-        shortName = os.path.basename(mintImageData['baseFileName'])
-        longName = "%s/%s" % (mintImageData['buildId'], shortName)
-        image.setShortName(shortName)
-        image.setLongName(longName)
-        image.setDownloadUrl(mintImageData['downloadUrl'])
-        image.setBuildPageUrl(mintImageData['buildPageUrl'])
-        image.setBaseFileName(mintImageData['baseFileName'])
-        image.setBuildId(mintImageData['buildId'])
-
-        for key, methodName in methodMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
 
     def getWbemClientCert(self):
         return self.getWbemX509()[0]
