@@ -851,7 +851,7 @@ class BaseDriver(object):
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
 
-        mintImages = self.db.imageMgr.getAllBuildsByType(imageType)
+        mintImages = self.db.imageMgr.getAllImagesByType(imageType)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
         mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
@@ -869,6 +869,13 @@ class BaseDriver(object):
         self.addExtraImagesFromMint(imageList, mintImages.iteritems(),
             cloudAlias)
         return imageList
+
+    @classmethod
+    def getImageIdFromMintImage(cls, image):
+        files = image.get('files', [])
+        if not files:
+            return None
+        return files[0]['sha1']
 
     @classmethod
     def addImageDataFromMintData(cls, image, mintImageData, methodMap):

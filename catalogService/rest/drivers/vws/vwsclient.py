@@ -474,7 +474,10 @@ class VWSClient(baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return image.get('sha1') + '.gz'
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+        if imageSha1 is None:
+            return imageSha1
+        return imageSha1 + '.gz'
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):

@@ -482,10 +482,6 @@ class XenEntClient(baseDriver.BaseDriver):
             imageList.append(image)
         return imageList
 
-    @classmethod
-    def getImageIdFromMintImage(cls, image):
-        return image.get('sha1')
-
     def _killRunningProcessesForInstances(self, synthesizedInstIds):
         # For synthesized instances, try to kill the pid
         for instId in synthesizedInstIds:

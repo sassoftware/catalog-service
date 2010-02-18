@@ -425,7 +425,10 @@ class VMwareClient(baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return cls._uuid(image.get('sha1'))
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+        if imageSha1 is None:
+            return imageSha1
+        return cls._uuid(imageSha1)
 
     def getImagesFromTarget(self, imageIds):
         """
