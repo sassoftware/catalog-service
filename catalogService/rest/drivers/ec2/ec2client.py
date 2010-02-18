@@ -852,7 +852,7 @@ x509-cert(base64)=%s
                                            productCode=productCodes)
             imageList.append(i)
 
-        mintImageList = self.db.imagemgr.getAllBuildsByType('AMI')
+        mintImageList = self.db.imageMgr.getAllBuildsByType('AMI')
         mintImageDict = dict((x.get('amiId'), x) for x in mintImageList)
 
         for image in imageList:
