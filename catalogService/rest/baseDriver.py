@@ -879,20 +879,21 @@ class BaseDriver(object):
 
     @classmethod
     def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        imageFiles = mintImageData.get('files', [])
+        baseFileName = mintImageData.get('baseFileName')
+        buildId = mintImageData.get('buildId')
+        if baseFileName:
+            shortName = os.path.basename(baseFileName)
+            longName = "%s/%s" % (buildId, shortName)
+            image.setShortName(shortName)
+            image.setLongName(longName)
+            image.setBaseFileName(baseFileName)
         # XXX this overly simplifies the fact that there may be more than one
         # file associated with a build
-        imageFiles = mintImageData.get('files', [])
         if imageFiles:
-            baseFileName = imageFiles[0].get('baseFileName')
-            if baseFileName:
-                shortName = os.path.basename(baseFileName)
-                longName = "%s/%s" % (mintImageData['buildId'], shortName)
-                image.setShortName(shortName)
-                image.setLongName(longName)
-                image.setBaseFileName(baseFileName)
             image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
-        image.setBuildId(mintImageData.get('buildId'))
+        image.setBuildId(buildId)
 
         for key, methodName in methodMap.iteritems():
             getattr(image, methodName)(mintImageData.get(key))
