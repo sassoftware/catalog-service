@@ -511,7 +511,9 @@ class VMwareClient(baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        job.addLog(self.LogEntry('Downloading image'))
+        msg = 'Downloading image'
+        job.addLog(self.LogEntry(msg))
+        self.log_debug(msg)
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
             path = self._downloadImage(image, tmpDir, auth = auth)
@@ -525,10 +527,14 @@ class VMwareClient(baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        job.addLog(self.LogEntry('Extracting image'))
+        msg = 'Extracting image'
+        job.addLog(self.LogEntry(msg))
+        self.log_debug(msg)
         try:
             workdir = self.extractImage(path)
-            job.addLog(self.LogEntry('Uploading image to VMware'))
+            msg = 'Uploading image to VMware'
+            job.addLog(self.LogEntry(msg))
+            self.log_debug(msg)
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
