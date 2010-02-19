@@ -889,9 +889,9 @@ class BaseDriver(object):
                 longName = "%s/%s" % (mintImageData['buildId'], shortName)
                 image.setShortName(shortName)
                 image.setLongName(longName)
+                image.setBaseFileName(baseFileName)
             image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
-        image.setBaseFileName(mintImageData.get('baseFileName'))
         image.setBuildId(mintImageData.get('buildId'))
 
         for key, methodName in methodMap.iteritems():
