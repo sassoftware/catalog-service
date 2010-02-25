@@ -6,6 +6,7 @@
 import os
 
 from restlib.response import Response
+from catalogService import errors
 from catalogService.rest.models import userData
 from catalogService import storage
 from catalogService.rest.api.base import BaseController
@@ -32,7 +33,8 @@ class UsersController(BaseController):
     def update(self, request, userId):
         "update a key"
         if userId != request.auth[0]:
-            raise Exception("XXX 1", userId, request.auth[0])
+            raise errors.ParameterError("Mismatching users %s, %s" %
+                (userId, request.auth[0]))
 
         dataLen = request.getContentLength()
         data = request.read(dataLen)
@@ -47,7 +49,8 @@ class UsersController(BaseController):
 
     def get(self, request, userId):
         if userId != request.auth[0]:
-            raise Exception("XXX 1", userId, request.auth[0])
+            raise errors.ParameterError("Mismatching users %s, %s" %
+                (userId, request.auth[0]))
         keyPath = request.unparsedPath
         key = self._sanitizeKey(keyPath)
         prefix = self.url(request, 'users', '%s/' % (userId))
@@ -85,7 +88,8 @@ class UsersController(BaseController):
 
     def destroy(self, request, userId):
         if userId != request.auth[0]:
-            raise Exception("XXX 1", userId, request.getUser())
+            raise errors.ParameterError("Mismatching users %s, %s" %
+                (userId, request.auth[0]))
 
         store = self._getUserDataStore(request)
         key = request.unparsedPath
@@ -99,7 +103,8 @@ class UsersController(BaseController):
     def process(self, request, userId):
         "create a new key entry in the store"
         if userId != request.auth[0]:
-            raise Exception("XXX 1", userId, request.auth[0])
+            raise errors.ParameterError("Mismatching users %s, %s" %
+                (userId, request.auth[0]))
         key = request.unparsedPath
 
         dataLen = request.getContentLength()
