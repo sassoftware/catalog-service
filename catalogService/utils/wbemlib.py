@@ -3,6 +3,7 @@
 # Copyright (c) 2009 rPath, Inc.
 #
 
+import inspect
 import pywbem
 
 class WBEMException(Exception):
@@ -36,19 +37,20 @@ class WBEMConnection(pywbem.WBEMConnection):
         # us.  We'll look on self.conn to see if there is a wrapper for the
         # method first, then use InvokeMethod.
         if hasattr(self, methodName):
-            func = pywbem.WBEMConnection.__getattribute__(self, methodName)
-            if methodName not in [ 'GetInstance', 'CreateInstance',
-                                   'DeleteInstance' ]:
+            func = getattr(pywbem.WBEMConnection, methodName)
+            argSpec = inspect.getargspec(func)
+            if len(args) > 1 and argSpec.args[1] == 'ClassName':
                 args = (CIMClassName, ) + args
         else:
             # Need to make use of InvokeMethod, prepend CIMClassName and
             # methodName to the front of args.
-            func = pywbem.WBEMConnection.__getattribute__(self, 'InvokeMethod')
-            args = (CIMClassName, ) + args
+            func = getattr(pywbem.WBEMConnection, 'InvokeMethod')
+            if CIMClassName:
+                args = (CIMClassName, ) + args
             args = (methodName,) + args
             self.invokeMethodUsed = True
 
-        return func(*args, **kw)
+        return func(self, *args, **kw)
 
 class _CallableMethod(object):
     '''
@@ -63,9 +65,10 @@ class _CallableMethod(object):
         '''
         self._send = send
         self._name = name
-        self._CIMClassName = name
+        self._CIMClassName = None
 
     def __getattr__(self, attr):
+        self._CIMClassName = self._name
         self._name = attr
         return self
 
@@ -141,5 +144,11 @@ class WBEMServer(object):
 
         return self.returnCodes[(className, methodName)]
 
+    def getError(self, job):
+        returnCode, error = self.GetError(job.path)
 
+        if returnCode != 0:
+            raise WBEMUnexpectedReturnException(0, returnCode, 
+                "Error calling GetError.")
 
+        return error['Error'].properties['Message'].value              

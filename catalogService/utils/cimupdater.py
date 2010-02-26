@@ -18,7 +18,7 @@ class CIMUpdater(object):
 
     DEFAULT_TIMEOUT = 3600
 
-    def __init__(self, host, x509 = None):
+    def __init__(self, host, x509=None, logger=None):
         """
         Connect to the specified host.
         x509 should be a dictionary with cert_file and key_file as keys, and
@@ -29,6 +29,7 @@ class CIMUpdater(object):
         self._jobStates = None
         self._updateCheckReturnValues = None
         self._elementSoftwareStatusValues = None
+        self.logger = logger
 
     def _normalizeValueMap(self, values, valueMap, cimType):
         typeFunc = self._toPythonType(cimType)
@@ -168,11 +169,18 @@ class CIMUpdater(object):
         if job is None:
             return
         if not self.isJobSuccessful(job):
-            self.server.conn.InvokeMethod('GetError', job.path)
+            error = self.server.getError(job)
+            self.log_error(error)
             raise RuntimeError("Error checking for available software")
         job = self.applyUpdate(timeout = timeout)
         if not self.isJobSuccessful(job):
+            error = self.server.getError(job)
+            self.log_error(error)
             raise RuntimeError("Error while applying updates")
+
+    def log_error(self, error):
+        if self.logger:
+            self.logger.error(error)
 
 if __name__ == '__main__':
     host = 'https://ec2-174-129-153-120.compute-1.amazonaws.com'

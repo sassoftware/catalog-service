@@ -790,7 +790,7 @@ class BaseDriver(object):
         certFile, keyFile = self._instanceStore.getX509Files(instanceId)
         self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
         x509Dict = dict(cert_file = certFile, key_file = keyFile)
-        updater = cimupdater.CIMUpdater(host, x509Dict)
+        updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
         try:
             updater.checkAndApplyUpdate()
         except:

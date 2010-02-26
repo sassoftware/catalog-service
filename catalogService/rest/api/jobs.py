@@ -54,11 +54,11 @@ class JobTypeController(base.BaseController):
         self._setStore(jobType)
         # Build filter object, passing in the query arguments
         filter = JobFilter(request.GET)
-        jobs = filter.matchIterator(self.jobStore.enumerate())
-        jobs = (self.jobModelFromJob(request, j, jobType)
-            for j in sorted(jobs, key = lambda x: x.created))
+        storedJobs = filter.matchIterator(self.jobStore.enumerate())
+        storedJobs = (self.jobModelFromJob(request, j, jobType)
+            for j in sorted(storedJobs, key = lambda x: x.created))
         ret = job_models.Jobs()
-        ret.extend(jobs)
+        ret.extend(storedJobs)
         return XmlResponse(ret)
 
     class XmlPassThrough(object):
