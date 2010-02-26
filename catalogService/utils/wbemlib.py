@@ -39,7 +39,7 @@ class WBEMConnection(pywbem.WBEMConnection):
         if hasattr(self, methodName):
             func = getattr(pywbem.WBEMConnection, methodName)
             argSpec = inspect.getargspec(func)
-            if len(args) > 1 and argSpec.args[1] == 'ClassName':
+            if len(argSpec[0]) > 1 and argSpec[0][0] == 'ClassName':
                 args = (CIMClassName, ) + args
         else:
             # Need to make use of InvokeMethod, prepend CIMClassName and
