@@ -291,6 +291,13 @@ class BaseDriver(object):
     class ProbeHostError(Exception):
         pass
 
+    def getAvailableUpdates(self, instanceId):
+        import epdb; epdb.st()
+        client = self.client
+        instance = self.getInstance(instanceId)
+        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
+        cclient = self.db.productMgr.reposMgr.getUserClient()
+
     def runUpdateSoftwareVersion(self, instance, job):
         instanceId = instance.getInstanceId()
         job.pid = os.getpid()

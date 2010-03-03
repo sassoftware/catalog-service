@@ -51,9 +51,17 @@ class SecurityGroupsController(BaseCloudController):
             return XmlStringResponse("", status = 404)
         return XmlResponse(meth(instanceId, *args))
 
+class InstancesAvailableUpdatesController(BaseCloudController):
+    modelName = 'instanceAvailableUpdatesId'
+
+    def index(self, request, cloudName, instanceId):
+        availableUpdates = self.driver(request, cloudName).getAvailableUpdates(instanceId)
+        return XmlResponse(availableUpdates)
+
 class InstancesController(BaseCloudController):
     urls = dict(updates=InstancesUpdateController,
-                securityGroups=SecurityGroupsController)
+                securityGroups=SecurityGroupsController,
+                availableUpdates=InstancesAvailableUpdatesController)
 
     modelName = 'instanceId'
     def index(self, request, cloudName):
