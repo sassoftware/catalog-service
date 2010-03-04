@@ -298,31 +298,48 @@ class BaseDriver(object):
         instance = self.getInstance(instanceId)
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         cclient = self.db.productMgr.reposMgr.getUserClient()
-        n, v, f = conaryclient.cmdline.parseTroveSpec(softwareVersion)
-        version = versions.VersionFromString(v)
-        troves = cclient.repos.findTroves(version, [(n, v, f)])
-        version = troves[(n, v, f)][0][1]
-        flavors = [f[0][2] for f in troves.values()]
 
-        allVersions = cclient.repos.getTroveVersionList(version.getHost(), {n:flavors})
-        allVersions = allVersions[n]
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(softwareVersion)
+        version = versions.VersionFromString(version)
+        label = version.trailingLabel()
+        revision = version.trailingRevision()
+
+        troves = cclient.repos.findTroves(label, [(name, version, flavor)])
+        assert(len(troves) == 1)
+
+        repoVersion = troves[(name, version, flavor)][0][1]
+        repoFlavors = [f[0][2] for f in troves.values()]
+        assert(len(repoFlavors) == 1)
+
+        allVersions = cclient.repos.getTroveVersionList(version.getHost(), 
+                            {name:repoFlavors})
+        assert(len(allVersions) == 1)
+        allVersions = allVersions[name]
+
         newerVersions = {}
-        for ver, flavs in allVersions.iteritems():
-            if ver.branch() == version.branch() and ver > version:
-                newerVersions[ver] = flavs
+        for v, fs in allVersions.iteritems():
+            if v.trailingLabel() == label and v > repoVersion:
+                satisfiedFlavors = []
+                for f in fs:
+                    # XXX: do we want to use flavor or repoFlavor here?
+                    if f.satisfies(flavor):
+                        satisfiedFlavors.append(f)
+                    if satisfiedFlavors:
+                        newerVersions[v] = satisfiedFlavors
 
         if newerVersions:
             content = []
-            for vers, flavs in newerVersions.iteritems():
-                verModel = instances.AvailableUpdateVersion(
-                            full=vers.asString(),
-                            label=vers.versions[0].asString(),
-                            ordering=str(vers.versions[-1].timeStamp),
-                            revision=vers.versions[-1].asString())
+            for v, fs in newerVersions.iteritems():
+                versionModel = instances.AvailableUpdateVersion(
+                                    full=v.asString(),
+                                    label=str(v.trailingLabel()),
+                                    ordering=str(v.versions[-1].timeStamp),
+                                    revision=str(v.trailingRevision()))
                 content.append(instances._AvailableUpdate(
-                                name=n, 
-                                version=verModel,
-                                flavor=str(flavs[0])))
+                                    name=name, 
+                                    version=versionModel,
+                                    # XXX: do we only care about the 1st # flavor?
+                                    flavor=str(fs[0])))
 
             instance.setAvailableUpdate(content)
 
