@@ -9,6 +9,8 @@ import time
 import urllib
 import urllib2
 
+from conary import conaryclient
+from conary import versions
 from conary.lib import util, sha1helper
 
 from catalogService import errors
@@ -292,11 +294,40 @@ class BaseDriver(object):
         pass
 
     def getAvailableUpdates(self, instanceId):
-        import epdb; epdb.st()
         client = self.client
         instance = self.getInstance(instanceId)
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         cclient = self.db.productMgr.reposMgr.getUserClient()
+        n, v, f = conaryclient.cmdline.parseTroveSpec(softwareVersion)
+        version = versions.VersionFromString(v)
+        troves = cclient.repos.findTroves(version, [(n, v, f)])
+        version = troves[(n, v, f)][0][1]
+        flavors = [f[0][2] for f in troves.values()]
+
+        allVersions = cclient.repos.getTroveVersionList(version.getHost(), {n:flavors})
+        allVersions = allVersions[n]
+        newerVersions = {}
+        for ver, flavs in allVersions.iteritems():
+            if ver.branch() == version.branch() and ver > version:
+                newerVersions[ver] = flavs
+
+        if newerVersions:
+            content = []
+            for vers, flavs in newerVersions.iteritems():
+                verModel = instances.AvailableUpdateVersion(
+                            full=vers.asString(),
+                            label=vers.versions[0].asString(),
+                            ordering=str(vers.versions[-1].timeStamp),
+                            revision=vers.versions[-1].asString())
+                content.append(instances._AvailableUpdate(
+                                name=n, 
+                                version=verModel,
+                                flavor=str(flavs[0])))
+
+            instance.setAvailableUpdate(content)
+
+        return instance
+        
 
     def runUpdateSoftwareVersion(self, instance, job):
         instanceId = instance.getInstanceId()

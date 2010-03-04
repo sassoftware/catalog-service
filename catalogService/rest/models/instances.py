@@ -42,6 +42,30 @@ class _ProductCode(xmlNode.BaseNode):
 class _SoftwareVersion(xmlNode.BaseMultiNode):
     tag = "softwareVersion"
 
+class AvailableUpdateVersion(xmlNode.BaseNode):
+    tag = "version"
+
+    __slots__ = [ 'full', 'label', 'ordering', 'revision' ] 
+
+    _slotTypeMap = dict(full = str,
+                        label = str,
+                        ordering = str,
+                        revision = str)
+
+class _AvailableUpdate(xmlNode.BaseNode):
+    tag = 'availableUpdate'
+    multiple = True
+
+    __slots__ = [ 'name', 'version', 'flavor' ]
+
+    _slotTypeMap = dict(name = str,
+                        version = AvailableUpdateVersion,
+                        flavor = str)
+
+    def __init__(self, *args, **kw):
+        xmlNode.BaseNode.__init__(self, *args, **kw)
+        self.name = xmllib.GenericNode().setName("name").characters(kw['name'])
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -53,6 +77,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'reservationId', 'ownerId', 'launchIndex',
                   'cloudName', 'cloudType', 'cloudAlias',
                   'updateStatus',
+                  'availableUpdate',
                   '_xmlNodeHash', 'launchTime', 'productCode',
                   'placement',
                   'softwareVersion',
@@ -65,7 +90,8 @@ class BaseInstance(xmlNode.BaseNode):
                         productCode = _ProductCode,
                         softwareVersionLastChecked = int,
                         softwareVersionNextCheck = int,
-                        softwareVersion = _SoftwareVersion)
+                        softwareVersion = _SoftwareVersion,
+                        availableUpdate = _AvailableUpdate)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -90,6 +116,8 @@ class Handler(xmlNode.Handler):
     instanceTypeClass = InstanceType
     instanceTypesClass = InstanceTypes
     softwareVersionClass = _SoftwareVersion
+    availableUpdateClass = _AvailableUpdate
+    availableUpdateVersionClass = AvailableUpdateVersion
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.launchIndexClass, 'launchIndex')
@@ -105,3 +133,7 @@ class Handler(xmlNode.Handler):
                           self.instanceUpdateStatusTimeClass.tag)
         self.registerType(self.softwareVersionClass,
                           self.softwareVersionClass.tag)
+        self.registerType(self.availableUpdateClass,
+                          self.availableUpdateClass.tag)
+        self.registerType(self.availableUpdateVersionClass,
+                          availableUpdateVersionClass.tag)
