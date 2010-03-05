@@ -78,6 +78,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'cloudName', 'cloudType', 'cloudAlias',
                   'updateStatus',
                   'availableUpdate',
+                  'outOfDate',
                   '_xmlNodeHash', 'launchTime', 'productCode',
                   'placement',
                   'softwareVersion',
@@ -91,7 +92,8 @@ class BaseInstance(xmlNode.BaseNode):
                         softwareVersionLastChecked = int,
                         softwareVersionNextCheck = int,
                         softwareVersion = _SoftwareVersion,
-                        availableUpdate = _AvailableUpdate)
+                        availableUpdate = _AvailableUpdate,
+                        outOfDate = bool)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"

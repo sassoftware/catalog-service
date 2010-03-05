@@ -245,6 +245,7 @@ class BaseDriver(object):
         instances = self.drvGetInstances(instanceIds)
         for instance in instances:
             self._updateSoftwareVersion(instance)
+            self._getAvailableUpdates(instance)
         return instances
 
     def _updateSoftwareVersion(self, instance):
@@ -293,39 +294,59 @@ class BaseDriver(object):
     class ProbeHostError(Exception):
         pass
 
-    def getAvailableUpdates(self, instanceId):
+    def _getAvailableUpdates(self, instance):
         client = self.client
-        instance = self.getInstance(instanceId)
+        instanceId = instance.getInstanceId()
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         cclient = self.db.productMgr.reposMgr.getUserClient()
 
+        # name and version are str's, but flavor is a conary.deps.deps.Flavor.
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(softwareVersion)
         version = versions.VersionFromString(version)
         label = version.trailingLabel()
         revision = version.trailingRevision()
 
+        # Search the label for the trove of the top level item.  It should
+        # only (hopefully) return 1 result.
         troves = cclient.repos.findTroves(label, [(name, version, flavor)])
         assert(len(troves) == 1)
 
+        # findTroves returns a {} with keys of (name, version, flavor), values
+        # of [(name, repoVersion, repoFlavor)], where repoVersion and
+        # repoFlavor are rich objects with the repository metadata.
         repoVersion = troves[(name, version, flavor)][0][1]
         repoFlavors = [f[0][2] for f in troves.values()]
+        # We only asked for 1 flavor, only 1 should be returned.
         assert(len(repoFlavors) == 1)
 
+        # getTroveVersionList searches a repository (NOT by label), for a
+        # given name/flavor combination.
         allVersions = cclient.repos.getTroveVersionList(version.getHost(), 
                             {name:repoFlavors})
+        # We only asked for 1 name/flavor, so we should have only gotten 1
+        # back.
         assert(len(allVersions) == 1)
+        # getTroveVersionList returns a dict with keys of name, values of
+        # (version, [flavors]).
         allVersions = allVersions[name]
 
         newerVersions = {}
         for v, fs in allVersions.iteritems():
+            # getTroveVersionList doesn't search by label, so we need to
+            # compare the results to the label we're interested in, and make
+            # sure the version is newer.
             if v.trailingLabel() == label and v > repoVersion:
+
+                # Check that at least one of the flavors found satisfies the
+                # flavor we're interested in.
                 satisfiedFlavors = []
                 for f in fs:
                     # XXX: do we want to use flavor or repoFlavor here?
+                    # XXX: do we want to use stronglySatisfies here?
                     if f.satisfies(flavor):
                         satisfiedFlavors.append(f)
-                    if satisfiedFlavors:
-                        newerVersions[v] = satisfiedFlavors
+                if satisfiedFlavors:
+                    newerVersions[v] = satisfiedFlavors
 
         if newerVersions:
             content = []
@@ -338,13 +359,13 @@ class BaseDriver(object):
                 content.append(instances._AvailableUpdate(
                                     name=name, 
                                     version=versionModel,
-                                    # XXX: do we only care about the 1st # flavor?
+                                    # XXX: do we only care about the 1st flavor?
                                     flavor=str(fs[0])))
 
             instance.setAvailableUpdate(content)
+            instance.setOutOfDate(True)
 
         return instance
-        
 
     def runUpdateSoftwareVersion(self, instance, job):
         instanceId = instance.getInstanceId()
