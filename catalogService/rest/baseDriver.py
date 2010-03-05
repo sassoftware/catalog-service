@@ -379,7 +379,7 @@ class BaseDriver(object):
                             name=name, 
                             version=versionModel,
                             # XXX: do we only care about the 1st flavor?
-                            flavor=str(repoFlavor)))
+                            flavor=str(repoFlavors[0])))
 
 
         instance.setAvailableUpdate(content)
