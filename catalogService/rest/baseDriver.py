@@ -352,8 +352,9 @@ class BaseDriver(object):
                 if satisfiedFlavors:
                     newerVersions[v] = satisfiedFlavors
 
+        content = []
+
         if newerVersions:
-            content = []
             for v, fs in newerVersions.iteritems():
                 versionModel = instances.AvailableUpdateVersion(
                                     full=v.asString(),
@@ -366,8 +367,22 @@ class BaseDriver(object):
                                     # XXX: do we only care about the 1st flavor?
                                     flavor=str(fs[0])))
 
-            instance.setAvailableUpdate(content)
             instance.setOutOfDate(True)
+
+        # Add the current version as well.
+        versionModel = instances.AvailableUpdateVersion(
+                            full=repoVersion.asString(),
+                            label=str(repoVersion.trailingLabel()),
+                            ordering=str(repoVersion.versions[-1].timeStamp),
+                            revision=str(repoVersion.trailingRevision()))
+        content.append(instances._AvailableUpdate(
+                            name=name, 
+                            version=versionModel,
+                            # XXX: do we only care about the 1st flavor?
+                            flavor=str(repoFlavor)
+
+
+        instance.setAvailableUpdate(content)
 
         return instance
 
