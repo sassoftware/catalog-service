@@ -8,6 +8,7 @@ import urllib
 
 from catalogService.errors import InvalidCloudName
 
+from catalogService.rest.database import commitafter
 from catalogService.rest.api.base import BaseCloudController
 from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse
 
@@ -94,6 +95,7 @@ class CredentialsController(BaseCloudController):
             return self.PermissionDenied(request)
         return XmlResponse(self.driver(request, cloudName).getUserCredentials())
 
+    @commitafter
     def update(self, request, cloudName, userName):
         if userName != request.auth[0]:
             return self.PermissionDenied(request)
@@ -147,8 +149,10 @@ class CloudTypeModelController(BaseCloudController):
     def get(self, request, cloudName):
         return XmlResponse(self.driver(request).getCloud(cloudName))
 
+    @commitafter
     def create(self, request):
         return XmlResponse(self.driver(request).createCloud(request.read()))
 
+    @commitafter
     def destroy(self, request, cloudName):
         return XmlResponse(self.driver(request, cloudName).removeCloud())

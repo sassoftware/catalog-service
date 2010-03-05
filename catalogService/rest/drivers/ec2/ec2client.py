@@ -323,6 +323,8 @@ class EC2Client(baseDriver.BaseDriver):
     class SecurityGroupHandler(securityGroups.Handler):
         securityGroupClass = EC2_SecurityGroup
 
+    DefaultCloudName = 'aws'
+
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
         proxyUrl = self.db.cfg.proxy.get(proto)
@@ -372,7 +374,7 @@ class EC2Client(baseDriver.BaseDriver):
         if 'ec2PublicKey' not in targetData:
             # Not configured
             return {}
-        ret = dict(name = 'aws',
+        ret = dict(name = self.DefaultCloudName,
             alias = targetData.get('alias', EC2_ALIAS),
             cloudAlias = targetData.get('alias', EC2_ALIAS),
             fullDescription = targetData.get('description', EC2_DESCRIPTION),
@@ -452,6 +454,7 @@ class EC2Client(baseDriver.BaseDriver):
         return True
 
     def drvCreateCloud(self, descriptorData):
+        self.cloudName = self.DefaultCloudName
         clouds = self.listClouds()
         if clouds:
             raise errors.CloudExists()
@@ -492,10 +495,7 @@ class EC2Client(baseDriver.BaseDriver):
             cli.get_all_regions()
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
-        try:
-            self.db.targetMgr.addTarget('ec2', 'aws', dataDict)
-        except TargetExists:
-            pass
+        self.saveTarget(dataDict)
         return self.listClouds()[0]
 
     @classmethod
