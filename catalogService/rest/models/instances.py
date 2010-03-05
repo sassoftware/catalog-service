@@ -53,8 +53,7 @@ class AvailableUpdateVersion(xmlNode.BaseNode):
                         revision = str)
 
 class _AvailableUpdate(xmlNode.BaseNode):
-    tag = 'availableUpdate'
-    multiple = True
+    tag = 'trove'
 
     __slots__ = [ 'name', 'version', 'flavor' ]
 
@@ -65,6 +64,14 @@ class _AvailableUpdate(xmlNode.BaseNode):
     def __init__(self, *args, **kw):
         xmlNode.BaseNode.__init__(self, *args, **kw)
         self.name = xmllib.GenericNode().setName("name").characters(kw['name'])
+
+class AvailableUpdate(xmlNode.BaseNode):
+    tag = 'availableUpdate'
+    multiple = True
+
+    __slots__ = [ 'trove' ]
+
+    _slotTypeMap = dict(trove=_AvailableUpdate)
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
@@ -92,7 +99,7 @@ class BaseInstance(xmlNode.BaseNode):
                         softwareVersionLastChecked = int,
                         softwareVersionNextCheck = int,
                         softwareVersion = _SoftwareVersion,
-                        availableUpdate = _AvailableUpdate,
+                        availableUpdate = AvailableUpdate,
                         outOfDate = bool)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):

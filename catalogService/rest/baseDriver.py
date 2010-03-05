@@ -361,11 +361,14 @@ class BaseDriver(object):
                                     label=str(v.trailingLabel()),
                                     ordering=str(v.versions[-1].timeStamp),
                                     revision=str(v.trailingRevision()))
-                content.append(instances._AvailableUpdate(
+                trove = instances._AvailableUpdate(
                                     name=name, 
                                     version=versionModel,
                                     # XXX: do we only care about the 1st flavor?
-                                    flavor=str(fs[0])))
+                                    flavor=str(fs[0]))
+                update = instances.AvailableUpdate()
+                update.setTrove(trove)
+                content.append(update)
 
             instance.setOutOfDate(True)
 
@@ -375,12 +378,14 @@ class BaseDriver(object):
                             label=str(repoVersion.trailingLabel()),
                             ordering=str(repoVersion.versions[-1].timeStamp),
                             revision=str(repoVersion.trailingRevision()))
-        content.append(instances._AvailableUpdate(
+        trove = instances._AvailableUpdate(
                             name=name, 
                             version=versionModel,
                             # XXX: do we only care about the 1st flavor?
-                            flavor=str(repoFlavors[0])))
-
+                            flavor=str(fs[0]))
+        update = instances.AvailableUpdate()
+        update.setTrove(trove)
+        content.append(update)
 
         instance.setAvailableUpdate(content)
 
