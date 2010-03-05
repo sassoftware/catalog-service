@@ -298,6 +298,10 @@ class BaseDriver(object):
         client = self.client
         instanceId = instance.getInstanceId()
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
+    
+        if not softwareVersion:
+            return
+
         cclient = self.db.productMgr.reposMgr.getUserClient()
 
         # name and version are str's, but flavor is a conary.deps.deps.Flavor.
