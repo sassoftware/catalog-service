@@ -138,4 +138,4 @@ class Handler(xmlNode.Handler):
         self.registerType(self.availableUpdateClass,
                           self.availableUpdateClass.tag)
         self.registerType(self.availableUpdateVersionClass,
-                          availableUpdateVersionClass.tag)
+                          self.availableUpdateVersionClass.tag)
