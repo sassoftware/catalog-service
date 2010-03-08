@@ -148,6 +148,7 @@ class BaseDriver(object):
                               userId = request.auth[0],
                               db = self.db)
         drv.setLogger(request.logger)
+        drv.request = request
         return drv
 
     def _createNodeFactory(self):
@@ -257,6 +258,21 @@ class BaseDriver(object):
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         if softwareVersion:
             content = [ x for x in softwareVersion.split('\n') ]
+
+            # XXX: we can only look up version/stage info if there's one top
+            # level
+            if len(content) == 1:
+                vName, vUrl, sName, sUrl = self._getProductVersionAndStage(content[0])
+
+                if vName:
+                    version = instances.Version(href=vUrl)
+                    version.characters(vName)
+                    stage = instances.Stage(href=sUrl)
+                    stage.characters(sName)
+
+                    instance.setVersion(version)
+                    instance.setStage(stage)
+
             troves = [self._troveFactoryFromTroveSpec(c) for c in content]
             versions = []
             for t in troves:
@@ -303,6 +319,47 @@ class BaseDriver(object):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
         version = versions.VersionFromString(version)
         return self._troveFactory(name, version, flavor)
+
+    def _getProductVersionAndStage(self, nvf):
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
+        version = versions.VersionFromString(version)
+        label = version.trailingLabel()
+        branchParts = label.branch.split('-')
+
+        # Simple error checking to see if the branch matches what we expect
+        if len(branchParts) < 3:
+            return None, None, None, None
+
+        version = branchParts[-2:-1][0]
+        stage = branchParts[-1:][0]
+        product = self.db.productMgr.getProduct(label.getHost())
+
+        productVersion = None
+        productVersions = self.db.listProductVersions(product.hostname)
+        for v in productVersions.versions:
+            if v.name == version:
+                productVersion = v
+                break
+
+        versionStage = None
+        versionStages = self.db.getProductVersionStages(product.hostname, version)
+        for s in versionStages.stages:
+            if s.label == label.asString():
+                versionStage = s
+                break
+
+        return productVersion.name, self._buildUrl(productVersion), \
+               versionStage.name, self._buildUrl(versionStage)
+
+    def _buildUrl(self, model):
+        absUrl = model.get_absolute_url()
+        parts = absUrl[0].split('.')
+        vals = absUrl[1:]
+        url = '/'.join(['/'.join((parts[i], vals[i])) for i in range(len(parts))]) 
+        schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
+        url = '/'.join([schemeUrl, 'api', url])
+        
+        return url
 
     def _troveFactory(self, name, version, flavor):
         schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')

@@ -85,6 +85,16 @@ class SoftwareVersion(xmlNode.BaseNode):
 
         return str(nvf)
 
+class StageHref(xmlNode.BaseNode):
+    tag = "stage"
+    __slots__ = ['href']
+    _slotAttributes = set(['href'])
+
+class VersionHref(xmlNode.BaseNode):
+    tag = "version"
+    __slots__ = ['href']
+    _slotAttributes = set(['href'])
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -105,6 +115,8 @@ class BaseInstance(xmlNode.BaseNode):
                   'softwareVersionJobStatus',
                   'softwareVersionLastChecked',
                   'softwareVersionNextCheck',
+                  'version',
+                  'stage'
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
@@ -112,7 +124,9 @@ class BaseInstance(xmlNode.BaseNode):
                         softwareVersionNextCheck = int,
                         softwareVersion = SoftwareVersion,
                         availableUpdate = AvailableUpdate,
-                        outOfDate = bool)
+                        outOfDate = bool,
+                        version = VersionHref,
+                        stage = StageHref)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -140,6 +154,8 @@ class Handler(xmlNode.Handler):
     availableUpdateClass = AvailableUpdate
     troveClass = _Trove
     availableUpdateVersionClass = AvailableUpdateVersion
+    stageHrefClass = StageHref
+    versionHrefClass = VersionHref
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.launchIndexClass, 'launchIndex')
@@ -161,3 +177,7 @@ class Handler(xmlNode.Handler):
                           self.availableUpdateVersionClass.tag)
         self.registerType(self.troveClass,
                           self.troveClass.tag)
+        # self.registerType(self.stageHrefClass,
+                          # self.stageHrefClass.tag)
+        # self.registerType(self.versionHrefClass,
+                          # self.versionHrefClass.tag)
