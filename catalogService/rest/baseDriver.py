@@ -261,7 +261,7 @@ class BaseDriver(object):
             versions = []
             for t in troves:
                 softwareVersion = instances.SoftwareVersion()
-                softwareVersion.setTrove(troves[0])
+                softwareVersion.setTrove(t)
                 versions.append(softwareVersion)
             instance.setSoftwareVersion(versions)
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)

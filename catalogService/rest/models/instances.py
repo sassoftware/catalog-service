@@ -59,7 +59,8 @@ class _Trove(xmlNode.BaseNode):
 
     def __init__(self, *args, **kw):
         xmlNode.BaseNode.__init__(self, *args, **kw)
-        self.name = xmllib.GenericNode().setName("name").characters(kw['name'])
+        if kw.has_key('name'):
+            self.name = xmllib.GenericNode().setName("name").characters(kw['name'])
 
 class AvailableUpdate(xmlNode.BaseNode):
     tag = 'availableUpdate'
@@ -72,6 +73,17 @@ class SoftwareVersion(xmlNode.BaseNode):
     multiple = True
     __slots__ = [ 'trove' ]
     _slotTypeMap = dict(trove=_Trove)
+
+    def getText(self):
+        name = self.getTrove().name.getText()
+        version = self.getTrove().getVersion().getFull()
+        flavor = self.getTrove().getFlavor()
+
+        nvf = "%s=%s" % (name, version)
+        if flavor and flavor != 'None':
+            nvf += "[%s]" % flavor
+
+        return str(nvf)
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
