@@ -39,9 +39,6 @@ class _ProductCode(xmlNode.BaseNode):
     def getId(self):
         return "code:%s;url:%s" % (self.code.getText(), self.url.getText())
 
-class _SoftwareVersion(xmlNode.BaseMultiNode):
-    tag = "softwareVersion"
-
 class AvailableUpdateVersion(xmlNode.BaseNode):
     tag = "version"
 
@@ -52,14 +49,13 @@ class AvailableUpdateVersion(xmlNode.BaseNode):
                         ordering = str,
                         revision = str)
 
-class _AvailableUpdate(xmlNode.BaseNode):
+class _Trove(xmlNode.BaseNode):
     tag = 'trove'
-
-    __slots__ = [ 'name', 'version', 'flavor' ]
-
+    __slots__ = [ 'id', 'name', 'version', 'flavor' ]
     _slotTypeMap = dict(name = str,
                         version = AvailableUpdateVersion,
                         flavor = str)
+    _slotAttributes = set(['id'])
 
     def __init__(self, *args, **kw):
         xmlNode.BaseNode.__init__(self, *args, **kw)
@@ -68,10 +64,14 @@ class _AvailableUpdate(xmlNode.BaseNode):
 class AvailableUpdate(xmlNode.BaseNode):
     tag = 'availableUpdate'
     multiple = True
-
     __slots__ = [ 'trove' ]
+    _slotTypeMap = dict(trove=_Trove)
 
-    _slotTypeMap = dict(trove=_AvailableUpdate)
+class SoftwareVersion(xmlNode.BaseNode):
+    tag = "softwareVersion"
+    multiple = True
+    __slots__ = [ 'trove' ]
+    _slotTypeMap = dict(trove=_Trove)
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
@@ -98,7 +98,7 @@ class BaseInstance(xmlNode.BaseNode):
                         productCode = _ProductCode,
                         softwareVersionLastChecked = int,
                         softwareVersionNextCheck = int,
-                        softwareVersion = _SoftwareVersion,
+                        softwareVersion = SoftwareVersion,
                         availableUpdate = AvailableUpdate,
                         outOfDate = bool)
 
@@ -124,8 +124,9 @@ class Handler(xmlNode.Handler):
     launchIndexClass = IntegerNode
     instanceTypeClass = InstanceType
     instanceTypesClass = InstanceTypes
-    softwareVersionClass = _SoftwareVersion
-    availableUpdateClass = _AvailableUpdate
+    softwareVersionClass = SoftwareVersion
+    availableUpdateClass = AvailableUpdate
+    troveClass = _Trove
     availableUpdateVersionClass = AvailableUpdateVersion
     def __init__(self):
         xmllib.DataBinder.__init__(self)
@@ -146,3 +147,5 @@ class Handler(xmlNode.Handler):
                           self.availableUpdateClass.tag)
         self.registerType(self.availableUpdateVersionClass,
                           self.availableUpdateVersionClass.tag)
+        self.registerType(self.troveClass,
+                          self.troveClass.tag)

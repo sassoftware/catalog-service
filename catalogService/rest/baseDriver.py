@@ -256,9 +256,14 @@ class BaseDriver(object):
         instanceId = instance.getInstanceId()
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         if softwareVersion:
-            content = [ instances._SoftwareVersion(None, None, x)
-                for x in softwareVersion.split('\n') ]
-            instance.setSoftwareVersion(content)
+            content = [ x for x in softwareVersion.split('\n') ]
+            troves = [self._troveFactoryFromTroveSpec(c) for c in content]
+            versions = []
+            for t in troves:
+                softwareVersion = instances.SoftwareVersion()
+                softwareVersion.setTrove(troves[0])
+                versions.append(softwareVersion)
+            instance.setSoftwareVersion(versions)
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
@@ -293,6 +298,30 @@ class BaseDriver(object):
 
     class ProbeHostError(Exception):
         pass
+
+    def _troveFactoryFromTroveSpec(self, nvf):
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
+        version = versions.VersionFromString(version)
+        return self._troveFactory(name, version, flavor)
+
+    def _troveFactory(self, name, version, flavor):
+        schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
+        label = version.trailingLabel()
+        revision = version.trailingRevision()
+        product = self.db.productMgr.getProduct(label.getHost())
+        versionModel = instances.AvailableUpdateVersion(
+                                    full=version.asString(),
+                                    label=str(label),
+                                    ordering=str(version.versions[-1].timeStamp),
+                                    revision=str(version.trailingRevision()))
+        trove = instances._Trove(name=name, version=versionModel,
+                                 flavor=str(flavor))
+        id = "repos/%s/api/trove/%s/%s/%s[%s]" % \
+                     (product.shortname, name, label.asString(),
+                      revision.asString(), str(flavor))
+        trove.id = "%s/%s" % (schemeUrl, urllib.quote(id))
+
+        return trove
 
     def _getAvailableUpdates(self, instance):
         client = self.client
@@ -353,19 +382,10 @@ class BaseDriver(object):
                     newerVersions[v] = satisfiedFlavors
 
         content = []
-
         if newerVersions:
             for v, fs in newerVersions.iteritems():
-                versionModel = instances.AvailableUpdateVersion(
-                                    full=v.asString(),
-                                    label=str(v.trailingLabel()),
-                                    ordering=str(v.versions[-1].timeStamp),
-                                    revision=str(v.trailingRevision()))
-                trove = instances._AvailableUpdate(
-                                    name=name, 
-                                    version=versionModel,
-                                    # XXX: do we only care about the 1st flavor?
-                                    flavor=str(fs[0]))
+                # XXX: do we only care about the 1st flavor?
+                trove = self._troveFactory(name, version, fs[0])
                 update = instances.AvailableUpdate()
                 update.setTrove(trove)
                 content.append(update)
@@ -373,16 +393,7 @@ class BaseDriver(object):
             instance.setOutOfDate(True)
 
         # Add the current version as well.
-        versionModel = instances.AvailableUpdateVersion(
-                            full=repoVersion.asString(),
-                            label=str(repoVersion.trailingLabel()),
-                            ordering=str(repoVersion.versions[-1].timeStamp),
-                            revision=str(repoVersion.trailingRevision()))
-        trove = instances._AvailableUpdate(
-                            name=name, 
-                            version=versionModel,
-                            # XXX: do we only care about the 1st flavor?
-                            flavor=str(fs[0]))
+        trove = self._troveFactory(name, repoVersion, flavor)
         update = instances.AvailableUpdate()
         update.setTrove(trove)
         content.append(update)
@@ -458,6 +469,7 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         instance = self.drvGetInstance(instanceId)
         self._updateSoftwareVersion(instance)
+        self._getAvailableUpdates(instance)
         return instance
 
     def drvGetInstance(self, instanceId):
