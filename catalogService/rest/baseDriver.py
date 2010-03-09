@@ -455,7 +455,7 @@ class BaseDriver(object):
             if newerVersions:
                 for v, fs in newerVersions.iteritems():
                     # XXX: do we only care about the 1st flavor?
-                    trove = self._troveFactory(name, version, fs[0])
+                    trove = self._troveFactory(name, v, fs[0])
                     update = instances.AvailableUpdate()
                     update.setTrove(trove)
                     content.append(update)
