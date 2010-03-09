@@ -247,6 +247,7 @@ class BaseDriver(object):
         for instance in instances:
             self._updateSoftwareVersion(instance)
             self._getAvailableUpdates(instance)
+            self._setVersionAndStage(instance)
         return instances
 
     def _updateSoftwareVersion(self, instance):
@@ -258,21 +259,6 @@ class BaseDriver(object):
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         if softwareVersion:
             content = [ x for x in softwareVersion.split('\n') ]
-
-            # XXX: we can only look up version/stage info if there's one top
-            # level
-            if len(content) == 1:
-                vName, vUrl, sName, sUrl = self._getProductVersionAndStage(content[0])
-
-                if vName:
-                    version = instances.Version(href=vUrl)
-                    version.characters(vName)
-                    stage = instances.Stage(href=sUrl)
-                    stage.characters(sName)
-
-                    instance.setVersion(version)
-                    instance.setStage(stage)
-
             troves = [self._troveFactoryFromTroveSpec(c) for c in content]
             versions = []
             for t in troves:
@@ -319,6 +305,29 @@ class BaseDriver(object):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
         version = versions.VersionFromString(version)
         return self._troveFactory(name, version, flavor)
+
+    def _setVersionAndStage(self, instance):
+        # XXX: we can only look up version/stage info if there's one top
+        # level
+        instanceId = instance.getInstanceId()
+        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
+        if softwareVersion is None:
+            return
+        content = [ x for x in softwareVersion.split('\n') ]
+        if len(content) != 1:
+            return
+
+        vName, vUrl, sName, sUrl = self._getProductVersionAndStage(softwareVersion)
+
+        if vName:
+            version = instances.VersionHref(href=vUrl)
+            version.characters(vName)
+            stage = instances.StageHref(href=sUrl)
+            stage.characters(sName)
+
+            instance.setVersion(version)
+            instance.setStage(stage)
+
 
     def _getProductVersionAndStage(self, nvf):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
@@ -527,6 +536,7 @@ class BaseDriver(object):
         instance = self.drvGetInstance(instanceId)
         self._updateSoftwareVersion(instance)
         self._getAvailableUpdates(instance)
+        self._setVersionAndStage(instance)
         return instance
 
     def drvGetInstance(self, instanceId):

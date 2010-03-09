@@ -177,7 +177,3 @@ class Handler(xmlNode.Handler):
                           self.availableUpdateVersionClass.tag)
         self.registerType(self.troveClass,
                           self.troveClass.tag)
-        # self.registerType(self.stageHrefClass,
-                          # self.stageHrefClass.tag)
-        # self.registerType(self.versionHrefClass,
-                          # self.versionHrefClass.tag)
