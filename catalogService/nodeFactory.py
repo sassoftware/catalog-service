@@ -129,19 +129,6 @@ class NodeFactory(object):
                     helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
         return descriptor
 
-    def newJobType(self, *args, **kwargs):
-        node = self.jobTypeFactory(*args, **kwargs)
-        cloudTypeId = self._getCloudTypeUrl(self.cloudType)
-        node.setId(cloudTypeId)
-        node.setCloudInstances(cloud_types.CloudInstances(
-            href = self.join(cloudTypeId, 'instances')))
-        node.setDescriptorCredentials(cloud_types.DescriptorCredentials(
-            href = self.join(cloudTypeId, 'descriptor', 'credentials')))
-        node.setDescriptorInstanceConfiguration(
-            cloud_types.DescriptorInstanceConfiguration(
-                href = self.join(cloudTypeId, 'descriptor', 'configuration')))
-        return node
-
     def newSecurityGroup(self, instanceId, secGroup):
         sgId = self.join(self._getCloudUrl(self.cloudType, self.cloudName),
             'instances', instanceId, 'securityGroups',

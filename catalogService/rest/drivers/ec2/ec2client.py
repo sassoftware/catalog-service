@@ -839,29 +839,6 @@ x509-cert(base64)=%s
                                           **properties)
         return i
 
-    def _getImagesFromResult(self, results):
-        imageList = images.BaseImages()
-        for image in results:
-            productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
-                for x in image.product_codes ]
-            i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
-                                           ownerId=image.ownerId,
-                                           longName=image.location,
-                                           state=image.state,
-                                           isPublic=image.is_public,
-                                           productCode=productCodes)
-            imageList.append(i)
-
-        mintImageList = self.db.imageMgr.getAllImagesByType('AMI')
-        mintImageDict = dict((x.get('amiId'), x) for x in mintImageList)
-
-        for image in imageList:
-            imageData = mintImageDict.get(image.imageId.getText(), {})
-            image.setIs_rBuilderImage(bool(imageData))
-            for key, methodName in images.buildToNodeFieldMap.iteritems():
-                getattr(image, methodName)(imageData.get(key))
-        return imageList
-
     def _cliGetKeyPairs(self, keynames = None):
         try:
             rs = self.client.get_all_key_pairs(keynames = keynames)

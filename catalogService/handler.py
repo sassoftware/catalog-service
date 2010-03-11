@@ -72,15 +72,6 @@ from catalogService import storage
 from catalogService.rest.middleware import auth
 from catalogService.rest.api import site
 
-# Monkeypatch BaseHTTPServer for older Python (e.g. the one that
-# rLS1 has) to include a function that we rely on. Yes, this is gross.
-if not hasattr(BaseHTTPServer, '_quote_html'):
-    def _quote_html(html):
-        # XXX this data is needed unre-formed by the flex frontend
-        return html
-        return html.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    BaseHTTPServer._quote_html = _quote_html
-
 class Request(simplehttp.SimpleHttpRequest):
     _helpDir = '/usr/share/catalog-service/help'
     _driverHelpDir = 'drivers/%(driverName)s'
