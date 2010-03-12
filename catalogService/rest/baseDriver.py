@@ -336,7 +336,7 @@ class BaseDriver(object):
         branchParts = label.branch.split('-')
 
         # Simple error checking to see if the branch matches what we expect
-        if len(versionAndStage) < 3:
+        if len(branchParts) < 3:
             return None, None, None, None
 
         version = branchParts[-2:-1][0]
