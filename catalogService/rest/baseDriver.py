@@ -304,7 +304,7 @@ class BaseDriver(object):
     def _troveFactoryFromTroveSpec(self, nvf):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
         version = versions.VersionFromString(version)
-        return self._troveFactory(name, version, flavor)
+        return self._troveModelFactory(name, version, flavor)
 
     def _setVersionAndStage(self, instance):
         # XXX: we can only look up version/stage info if there's one top
@@ -336,7 +336,7 @@ class BaseDriver(object):
         branchParts = label.branch.split('-')
 
         # Simple error checking to see if the branch matches what we expect
-        if len(branchParts) < 3:
+        if len(versionAndStage) < 3:
             return None, None, None, None
 
         version = branchParts[-2:-1][0]
@@ -370,7 +370,7 @@ class BaseDriver(object):
         
         return url
 
-    def _troveFactory(self, name, version, flavor):
+    def _troveModelFactory(self, name, version, flavor):
         schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
         label = version.trailingLabel()
         revision = version.trailingRevision()
@@ -382,7 +382,7 @@ class BaseDriver(object):
                                     revision=str(version.trailingRevision()))
         trove = instances._Trove(name=name, version=versionModel,
                                  flavor=str(flavor))
-        id = "repos/%s/api/trove/%s/%s/%s[%s]" % \
+        id = "repos/%s/api/trove/%s=/%s/%s[%s]" % \
                      (product.shortname, name, label.asString(),
                       revision.asString(), str(flavor))
         trove.id = "%s/%s" % (schemeUrl, urllib.quote(id))
@@ -455,7 +455,7 @@ class BaseDriver(object):
             if newerVersions:
                 for v, fs in newerVersions.iteritems():
                     # XXX: do we only care about the 1st flavor?
-                    trove = self._troveFactory(name, v, fs[0])
+                    trove = self._troveModelFactory(name, v, fs[0])
                     update = instances.AvailableUpdate()
                     update.setTrove(trove)
                     content.append(update)
@@ -463,7 +463,7 @@ class BaseDriver(object):
                 instance.setOutOfDate(True)
 
             # Add the current version as well.
-            trove = self._troveFactory(name, repoVersion, flavor)
+            trove = self._troveModelFactory(name, repoVersion, flavor)
             update = instances.AvailableUpdate()
             update.setTrove(trove)
             content.append(update)
