@@ -10,7 +10,7 @@ from catalogService.errors import InvalidCloudName
 
 from catalogService.rest.database import commitafter
 from catalogService.rest.api.base import BaseCloudController
-from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse
+from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse, XmlSerializableObjectResponse
 
 class ImagesController(BaseCloudController):
     modelName = 'imageId'
@@ -93,7 +93,8 @@ class CredentialsController(BaseCloudController):
     def index(self, request, cloudName, userName):
         if userName != request.auth[0]:
             return self.PermissionDenied(request)
-        return XmlResponse(self.driver(request, cloudName).getUserCredentials())
+        ddata = self.driver(request, cloudName).getUserCredentials()
+        return XmlSerializableObjectResponse(ddata)
 
     @commitafter
     def update(self, request, cloudName, userName):
@@ -107,11 +108,13 @@ class CredentialsController(BaseCloudController):
 
 class ConfigurationController(BaseCloudController):
     def index(self, request, cloudName):
-        return XmlResponse(self.driver(request, cloudName).getConfiguration())
+        ddata = self.driver(request, cloudName).getConfiguration()
+        return XmlSerializableObjectResponse(ddata)
 
 class LaunchDescriptorController(BaseCloudController):
     def index(self, request, cloudName):
-        return XmlResponse(self.driver(request, cloudName).getLaunchDescriptor())
+        descr = self.driver(request, cloudName).getLaunchDescriptor()
+        return XmlSerializableObjectResponse(descr)
 
 class DescriptorController(BaseCloudController):
     urls = dict(launch = LaunchDescriptorController)

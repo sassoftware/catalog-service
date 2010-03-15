@@ -61,7 +61,7 @@ class NodeFactory(object):
     def newCloudConfigurationDescriptor(self, descr):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
-        for field in descr.iterRawDataFields():
+        for field in descr.getDataFields():
             for helpNode in (field.help or []):
                 href = helpNode.href
                 if '://' not in href:
@@ -122,7 +122,7 @@ class NodeFactory(object):
     def newLaunchDescriptor(self, descriptor):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
-        for field in descriptor.iterRawDataFields():
+        for field in descriptor.getDataFields():
             for helpNode in field.help:
                 href = helpNode.href
                 if '://' not in href:

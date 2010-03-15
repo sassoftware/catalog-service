@@ -788,7 +788,7 @@ class BaseDriver(object):
             descrData = descriptor.DescriptorData(
                 fromStream = cloudConfigurationData,
                 descriptor = descr)
-        except descriptor.InvalidXML:
+        except descriptor.errors.InvalidXML:
             # XXX
             raise
         return self.drvCreateCloud(descrData)
@@ -818,7 +818,7 @@ class BaseDriver(object):
             descrData = descriptor.DescriptorData(
                 fromStream = credentialsData,
                 descriptor = descr)
-        except descriptor.InvalidXML:
+        except descriptor.errors.InvalidXML:
             # XXX
             raise
         creds = self.drvGetCredentialsFromDescriptor(descrData)
@@ -843,7 +843,8 @@ class BaseDriver(object):
         cloudConfig = self.getTargetConfiguration(isAdmin = True)
         kvlist = []
         for k, v in cloudConfig.items():
-            if k not in descr._dataFieldsHash:
+            df = descr.getDataField(k)
+            if df is None:
                 continue
             # We add all field names and values to the list first, so we can
             # sort them after adding the extra maps

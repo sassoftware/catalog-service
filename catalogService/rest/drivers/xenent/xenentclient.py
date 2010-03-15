@@ -15,7 +15,6 @@ from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
-from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 
@@ -295,8 +294,8 @@ class XenEntClient(baseDriver.BaseDriver):
             help = [
                 ("launch/storageRepository.html", None)
             ],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[1][0])
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1][0])
                 for x in storageRepos),
             default = storageRepos[0][0],
             )

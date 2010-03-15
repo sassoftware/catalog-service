@@ -19,7 +19,6 @@ from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
-from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import keypairs
@@ -652,8 +651,8 @@ x509-cert(base64)=%s
                 ("launch/instanceTypes.html", None)
             ],
             required = True,
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in EC2_InstanceTypes.idMap),
             default = EC2_InstanceTypes.idMap[0][0],
@@ -664,8 +663,8 @@ x509-cert(base64)=%s
                 (u"Zone de disponibilit\u00e9", "fr_FR")],
             help = [
                 ("launch/availabilityZones.html", None)],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[0])
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetAvailabilityZones()
             ))
 
@@ -694,8 +693,8 @@ x509-cert(base64)=%s
             help = [
                 ("launch/keyPair.html", None)
             ],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[0])
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
         sgList = self._cliGetSecurityGroups()
@@ -706,8 +705,8 @@ x509-cert(base64)=%s
                 ("launch/securityGroups.html", None)
             ],
             required = True, multiple = True,
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[1])
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1])
                 for x in sgList),
             default = sgList[0][0],
             )

@@ -16,7 +16,6 @@ from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
-from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 
@@ -220,8 +219,8 @@ class VMwareClient(baseDriver.BaseDriver):
                            help = [
                                ('launch/dataCenter.html', None)
                            ],
-                           type = descriptor.EnumeratedType(
-            descriptor.ValueWithDescription(x.obj,
+                           type = descr.EnumeratedType(
+            descr.ValueWithDescription(x.obj,
                                             descriptions=x.properties['name'])
             for x in dataCenters),
                            default = dataCenters[0].obj,
@@ -238,15 +237,15 @@ class VMwareClient(baseDriver.BaseDriver):
                                help = [
                                    ('launch/computeResource.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(
                 x.obj, descriptions=x.properties['name'])
                 for x in crs),
                                default = crs[0].obj,
-                               conditional = descriptor.Conditional(
-                fieldName='dataCenter',
-                operator='eq',
-                value=dc.obj)
+                               conditional = descr.Conditional(
+                                    fieldName='dataCenter',
+                                    operator='eq',
+                                    fieldValue=dc.obj)
                                )
         for cr in crToDc.keys():
             cfg = cr.configTarget
@@ -268,19 +267,19 @@ class VMwareClient(baseDriver.BaseDriver):
                                help = [
                                    ('launch/dataStore.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[1])
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1])
                 for x in dataStores),
                                default = dataStores[0][0],
-                               conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.obj,
-                operator='eq',
-                value=cr.obj)
+                               conditional = descr.Conditional(
+                                    fieldName='cr-%s' %dc.obj,
+                                    operator='eq',
+                                    fieldValue=cr.obj)
                                )
-            # FIXME: add (descriptor.Conditional(
+            # FIXME: add (descr.Conditional(
             #fieldName='dataCenter',
             #    operator='eq',
-            #    value=dc.obj),
+            #    fieldValue=dc.obj),
 
         for cr in crToDc.keys():
             # sort a list of mor, name tuples based on name
@@ -294,15 +293,15 @@ class VMwareClient(baseDriver.BaseDriver):
                                help = [
                                    ('launch/resourcePool.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(str(x[0]),
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(str(x[0]),
                                                 descriptions=x[1]['name'])
                 for x in cr.resourcePools.iteritems()),
                                default = defaultRp,
-                               conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.obj,
-                operator='eq',
-                value=cr.obj)
+                               conditional = descr.Conditional(
+                                    fieldName='cr-%s' %dc.obj,
+                                    operator='eq',
+                                    fieldValue=cr.obj)
                                )
 
         return descr

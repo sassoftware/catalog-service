@@ -11,7 +11,6 @@ from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
-from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 
@@ -267,8 +266,8 @@ class VWSClient(baseDriver.BaseDriver):
         descr.addDescription("Globus Workspaces Launch Parameters")
         descr.addDataField("instanceType",
             descriptions = "Instance Size", required = True,
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in VWS_InstanceTypes.idMap),
             help = [

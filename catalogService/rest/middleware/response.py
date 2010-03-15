@@ -1,3 +1,4 @@
+import StringIO
 from restlib import response
 
 from catalogService.rest.models import xmlNode
@@ -13,6 +14,12 @@ class XmlResponse(XmlStringResponse):
         hndlr = xmlNode.Handler()
         newContent = hndlr.toXml(content)
         XmlStringResponse.__init__(self, newContent, *args, **kw)
+
+class XmlSerializableObjectResponse(XmlStringResponse):
+    def __init__(self, content, *args, **kw):
+        sio = StringIO.StringIO()
+        content.serialize(sio)
+        XmlStringResponse.__init__(self, sio.getvalue(), *args, **kw)
 
 class HtmlFileResponse(response.Response):
     def __init__(self, fileName, *args, **kw):
