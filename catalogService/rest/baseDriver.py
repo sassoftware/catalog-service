@@ -9,20 +9,32 @@ import time
 import urllib
 import urllib2
 
+from conary import conaryclient
+from conary import versions
 from conary.lib import util, sha1helper
 
-from catalogService import cimupdater
 from catalogService import errors
-from catalogService import nodeFactory
-from catalogService import descriptor
-from catalogService import cloud_types, clouds, credentials, images, instances
 from catalogService import instanceStore
-from catalogService import job_models
-from catalogService import job_store
-from catalogService import keypairs, securityGroups
+from catalogService import nodeFactory
+from catalogService import instanceStore
+from catalogService import jobs
 from catalogService import storage
-from catalogService import timeutils
-from catalogService import x509
+from catalogService.rest.models import clouds
+from catalogService.rest.models import cloud_types
+from catalogService.rest.models import credentials
+from catalogService.rest.models import descriptor
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
+from catalogService.rest.models import job_models
+from catalogService.rest.models import keypairs
+from catalogService.rest.models import securityGroups
+from catalogService.utils import cimupdater
+from catalogService.utils import timeutils
+from catalogService.utils import x509
+
+from mint.mint_error import TargetExists
+
+from rpath_job import api1 as rpath_job
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -41,7 +53,10 @@ class BaseDriver(object):
     KeyPair          = keypairs.BaseKeyPair
     SecurityGroup    = securityGroups.BaseSecurityGroup
 
+    # Map descriptor field name to name in internal storage field
     _credNameMap = []
+    # Map descriptor field name to name in internal storage field
+    _configNameMap = []
     cloudType = None
 
     updateStatusStateUpdating = 'updating'
@@ -50,27 +65,27 @@ class BaseDriver(object):
 
     instanceStorageClass = storage.DiskStorage
 
-    LogEntry = job_store.LogEntry
+    LogEntry = rpath_job.LogEntry
 
     def __init__(self, cfg, driverName, cloudName=None,
-                 nodeFactory=None, mintClient=None, userId = None):
+                 nodeFactory=None, userId = None, db = None):
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
         self._cfg = cfg
         self._cloudClient = None
         self._cloudCredentials = None
+        self.db = db
         if nodeFactory is None:
             nodeFactory = self._createNodeFactory()
         self._nodeFactory = nodeFactory
-        self._mintClient = mintClient
         self._nodeFactory.userId = userId
         self._logger = None
         self._instanceStore = None
         spJobSuffix = 'jobs'
         spath = os.path.join(self._cfg.storagePath, spJobSuffix)
-        self._jobsStore = job_store.ApplianceVersionUpdateJobStore(spath)
-        self._instanceLaunchJobStore = job_store.LaunchJobStore(spath)
+        self._jobsStore = jobs.ApplianceVersionUpdateJobStore(spath)
+        self._instanceLaunchJobStore = jobs.LaunchJobStore(spath)
         #if cloudName:
         #    spath = os.path.join(self._cfg.storagePath, spJobSuffix,
         #        self.cloudType, self._sanitizeKey(cloudName))
@@ -116,7 +131,10 @@ class BaseDriver(object):
             return self._logger.exception(*args, **kwargs)
 
     def isValidCloudName(self, cloudName):
-        raise NotImplementedError
+        if self.db is None:
+            return True
+        self.cloudName = cloudName
+        return bool(self.getTargetConfiguration())
 
     def __call__(self, request, cloudName=None):
         # This is a bit of a hack - basically, we're turning this class
@@ -126,9 +144,11 @@ class BaseDriver(object):
         self._nodeFactory.baseUrl = request.baseUrl
         self._nodeFactory.cloudName = cloudName
         drv =  self.__class__(self._cfg, self.driverName, cloudName,
-                              self._nodeFactory, request.mintClient,
-                              userId = request.auth[0])
+                              self._nodeFactory,
+                              userId = request.auth[0],
+                              db = self.db)
         drv.setLogger(request.logger)
+        drv.request = request
         return drv
 
     def _createNodeFactory(self):
@@ -156,16 +176,18 @@ class BaseDriver(object):
         ret = clouds.BaseClouds()
         if not self.isDriverFunctional():
             return ret
-        for cloudConfig in self._enumerateConfiguredClouds():
-            cloudNode = self._createCloudNode(cloudConfig)
-            creds = self._getCloudCredentialsForUser(cloudNode.getCloudName())
+        for targetName, cloudConfig, userConfig in self._enumerateClouds():
+            cloudNode = self._createCloudNode(targetName, cloudConfig)
             # RBL-4055: no longer erase launch descriptor if the credentials
             # are not set
             ret.append(cloudNode)
         return ret
 
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['name'],
+    def _enumerateClouds(self):
+        return self.db.targetMgr.getTargetsForUser(self.cloudType, self.userId)
+
+    def _createCloudNode(self, cloudName, cloudConfig):
+        cld = self._nodeFactory.newCloud(cloudName = cloudName,
                          description = cloudConfig['description'],
                          cloudAlias = cloudConfig['alias'])
         return cld
@@ -188,6 +210,33 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         return self.drvGetImages(imageIds)
 
+    def drvGetImages(self, imageIdsFilter):
+        imageList = self.getImagesFromTarget(imageIdsFilter)
+        imageList = self.addMintDataToImageList(imageList,
+            self.RBUILDER_BUILD_TYPE)
+
+        # now that we've grabbed all the images, we can return only the one
+        # we want.  This is horribly inefficient, but neither the mint call
+        # nor the grid call allow us to filter by image, at least for now
+        if imageIdsFilter is None:
+            # no filtering required. We'll make the filter contain everything
+            imageIdsFilter = sorted(x.getImageId() for x in imageList)
+
+        # filter the images to those requested
+        imagesById = dict((x.getImageId(), x) for x in imageList)
+        newImageList = images.BaseImages()
+        for imageId in imageIdsFilter:
+            imageId = self._imageIdInMap(imageId, imagesById)
+            if imageId is None:
+                continue
+            newImageList.append(imagesById[imageId])
+        return newImageList
+
+    def _imageIdInMap(self, imageId, imageIdMap):
+        if imageId is None:
+            return None
+        return (imageId in imageIdMap and imageId) or None
+
     def getAllInstances(self):
         return self.getInstances(None)
 
@@ -197,6 +246,8 @@ class BaseDriver(object):
         instances = self.drvGetInstances(instanceIds)
         for instance in instances:
             self._updateSoftwareVersion(instance)
+            self._getAvailableUpdates(instance)
+            self._setVersionAndStage(instance)
         return instances
 
     def _updateSoftwareVersion(self, instance):
@@ -207,9 +258,14 @@ class BaseDriver(object):
         instanceId = instance.getInstanceId()
         softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
         if softwareVersion:
-            content = [ instances._SoftwareVersion(None, None, x)
-                for x in softwareVersion.split('\n') ]
-            instance.setSoftwareVersion(content)
+            content = [ x for x in softwareVersion.split('\n') ]
+            troves = [self._troveFactoryFromTroveSpec(c) for c in content]
+            versions = []
+            for t in troves:
+                softwareVersion = instances.SoftwareVersion()
+                softwareVersion.setTrove(t)
+                versions.append(softwareVersion)
+            instance.setSoftwareVersion(versions)
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
@@ -244,6 +300,177 @@ class BaseDriver(object):
 
     class ProbeHostError(Exception):
         pass
+
+    def _troveFactoryFromTroveSpec(self, nvf):
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
+        version = versions.VersionFromString(version)
+        return self._troveModelFactory(name, version, flavor)
+
+    def _setVersionAndStage(self, instance):
+        # XXX: we can only look up version/stage info if there's one top
+        # level
+        instanceId = instance.getInstanceId()
+        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
+        if softwareVersion is None:
+            return
+        content = [ x for x in softwareVersion.split('\n') ]
+        if len(content) != 1:
+            return
+
+        vName, vUrl, sName, sUrl = self._getProductVersionAndStage(softwareVersion)
+
+        if vName:
+            version = instances.VersionHref(href=vUrl)
+            version.characters(vName)
+            stage = instances.StageHref(href=sUrl)
+            stage.characters(sName)
+
+            instance.setVersion(version)
+            instance.setStage(stage)
+
+
+    def _getProductVersionAndStage(self, nvf):
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
+        version = versions.VersionFromString(version)
+        label = version.trailingLabel()
+        branchParts = label.branch.split('-')
+
+        # Simple error checking to see if the branch matches what we expect
+        if len(branchParts) < 3:
+            return None, None, None, None
+
+        version = branchParts[-2:-1][0]
+        stage = branchParts[-1:][0]
+        product = self.db.productMgr.getProduct(label.getHost())
+
+        productVersion = None
+        productVersions = self.db.listProductVersions(product.hostname)
+        for v in productVersions.versions:
+            if v.name == version:
+                productVersion = v
+                break
+
+        versionStage = None
+        versionStages = self.db.getProductVersionStages(product.hostname, version)
+        for s in versionStages.stages:
+            if s.label == label.asString():
+                versionStage = s
+                break
+
+        return productVersion.name, self._buildUrl(productVersion), \
+               versionStage.name, self._buildUrl(versionStage)
+
+    def _buildUrl(self, model):
+        absUrl = model.get_absolute_url()
+        parts = absUrl[0].split('.')
+        vals = absUrl[1:]
+        url = '/'.join(['/'.join((parts[i], vals[i])) for i in range(len(parts))]) 
+        schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
+        url = '/'.join([schemeUrl, 'api', url])
+        
+        return url
+
+    def _troveModelFactory(self, name, version, flavor):
+        schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
+        label = version.trailingLabel()
+        revision = version.trailingRevision()
+        product = self.db.productMgr.getProduct(label.getHost())
+        versionModel = instances.AvailableUpdateVersion(
+                                    full=version.asString(),
+                                    label=str(label),
+                                    ordering=str(version.versions[-1].timeStamp),
+                                    revision=str(version.trailingRevision()))
+        trove = instances._Trove(name=name, version=versionModel,
+                                 flavor=str(flavor))
+        id = "repos/%s/api/trove/%s=/%s/%s[%s]" % \
+                     (product.shortname, name, label.asString(),
+                      revision.asString(), str(flavor))
+        trove.id = "%s/%s" % (schemeUrl, urllib.quote(id))
+
+        return trove
+
+    def _getAvailableUpdates(self, instance):
+        client = self.client
+        instanceId = instance.getInstanceId()
+        softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
+    
+        if not softwareVersions:
+            return
+
+        topLevels = [ x for x in softwareVersions.split('\n') ]
+        content = []
+
+        for softwareVersion in topLevels:
+
+            cclient = self.db.productMgr.reposMgr.getUserClient()
+
+            # name and version are str's, but flavor is a conary.deps.deps.Flavor.
+            name, version, flavor = conaryclient.cmdline.parseTroveSpec(softwareVersion)
+            version = versions.VersionFromString(version)
+            label = version.trailingLabel()
+            revision = version.trailingRevision()
+
+            # Search the label for the trove of the top level item.  It should
+            # only (hopefully) return 1 result.
+            troves = cclient.repos.findTroves(label, [(name, version, flavor)])
+            assert(len(troves) == 1)
+
+            # findTroves returns a {} with keys of (name, version, flavor), values
+            # of [(name, repoVersion, repoFlavor)], where repoVersion and
+            # repoFlavor are rich objects with the repository metadata.
+            repoVersion = troves[(name, version, flavor)][0][1]
+            repoFlavors = [f[0][2] for f in troves.values()]
+            # We only asked for 1 flavor, only 1 should be returned.
+            assert(len(repoFlavors) == 1)
+
+            # getTroveVersionList searches a repository (NOT by label), for a
+            # given name/flavor combination.
+            allVersions = cclient.repos.getTroveVersionList(version.getHost(), 
+                                {name:repoFlavors})
+            # We only asked for 1 name/flavor, so we should have only gotten 1
+            # back.
+            assert(len(allVersions) == 1)
+            # getTroveVersionList returns a dict with keys of name, values of
+            # (version, [flavors]).
+            allVersions = allVersions[name]
+
+            newerVersions = {}
+            for v, fs in allVersions.iteritems():
+                # getTroveVersionList doesn't search by label, so we need to
+                # compare the results to the label we're interested in, and make
+                # sure the version is newer.
+                if v.trailingLabel() == label and v > repoVersion:
+
+                    # Check that at least one of the flavors found satisfies the
+                    # flavor we're interested in.
+                    satisfiedFlavors = []
+                    for f in fs:
+                        # XXX: do we want to use flavor or repoFlavor here?
+                        # XXX: do we want to use stronglySatisfies here?
+                        if f.satisfies(flavor):
+                            satisfiedFlavors.append(f)
+                    if satisfiedFlavors:
+                        newerVersions[v] = satisfiedFlavors
+
+            if newerVersions:
+                for v, fs in newerVersions.iteritems():
+                    # XXX: do we only care about the 1st flavor?
+                    trove = self._troveModelFactory(name, v, fs[0])
+                    update = instances.AvailableUpdate()
+                    update.setTrove(trove)
+                    content.append(update)
+
+                instance.setOutOfDate(True)
+
+            # Add the current version as well.
+            trove = self._troveModelFactory(name, repoVersion, flavor)
+            update = instances.AvailableUpdate()
+            update.setTrove(trove)
+            content.append(update)
+
+        instance.setAvailableUpdate(content)
+
+        return instance
 
     def runUpdateSoftwareVersion(self, instance, job):
         instanceId = instance.getInstanceId()
@@ -312,6 +539,8 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         instance = self.drvGetInstance(instanceId)
         self._updateSoftwareVersion(instance)
+        self._getAvailableUpdates(instance)
+        self._setVersionAndStage(instance)
         return instance
 
     def drvGetInstance(self, instanceId):
@@ -336,11 +565,20 @@ class BaseDriver(object):
         """
         if self._cloudCredentials is None:
             self._checkAuth()
-            self._cloudCredentials = self._getCloudCredentialsForUser(
-                                                            self.cloudName)
+            self._cloudCredentials = self._getCloudCredentialsForUser()
         return self._cloudCredentials
 
     credentials = property(drvGetCloudCredentialsForUser)
+
+    def _getCloudCredentialsForUser(self):
+        return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
+            self.cloudName, self.userId)
+
+    def drvGetCredentialsFromDescriptor(self, fields):
+        ret = {}
+        for field, key in self._credNameMap:
+            ret[key] = str(fields.getField(field))
+        return ret
 
     def drvGetCloudClient(self):
         """
@@ -356,14 +594,39 @@ class BaseDriver(object):
 
     client = property(drvGetCloudClient)
 
+    def drvValidateCredentials(self, creds):
+        self.drvCreateCloudClient(creds)
+        return True
+
+    def drvCreateCloud(self, descriptorData):
+        cloudName = self.getCloudNameFromDescriptorData(descriptorData)
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        self.cloudName = cloudName
+        self.drvVerifyCloudConfiguration(config)
+        self.saveTarget(config)
+        return self._createCloudNode(cloudName, config)
+
+    @classmethod
+    def getCloudNameFromDescriptorData(cls, descriptorData):
+        return descriptorData.getField('name')
+
+    def drvVerifyCloudConfiguration(self, config):
+        pass
+
+    def saveTarget(self, dataDict):
+        try:
+            self.db.targetMgr.addTarget(self.cloudType, self.cloudName, dataDict)
+        except TargetExists:
+            raise errors.CloudExists()
+
     def getCloudAlias(self):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         return cloudConfig['alias']
 
     def _checkAuth(self):
         """rBuilder authentication"""
-        self._mintAuth = self._mintClient.checkAuth()
-        if not self._mintAuth.authorized:
+        if not self.db.auth.auth.authorized:
             raise PermissionDenied
 
     def getUserCredentials(self):
@@ -464,7 +727,7 @@ class BaseDriver(object):
 
     def launchInstanceFromDescriptorData(self, descriptorData, auth, descrXml):
         client = self.client
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
 
         imageId = os.path.basename(descriptorData.getField('imageId'))
 
@@ -525,18 +788,24 @@ class BaseDriver(object):
             descrData = descriptor.DescriptorData(
                 fromStream = cloudConfigurationData,
                 descriptor = descr)
-        except descriptor.InvalidXML:
+        except descriptor.errors.InvalidXML:
             # XXX
             raise
         return self.drvCreateCloud(descrData)
 
     def removeCloud(self):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         if not cloudConfig:
             # Cloud does not exist
             raise errors.InvalidCloudName(self.cloudName)
         self.drvRemoveCloud()
         return clouds.BaseClouds()
+
+    def drvRemoveCloud(self):
+        try:
+            self.db.targetMgr.deleteTarget(self.cloudType, self.cloudName)
+        except TargetMissing:
+            pass
 
     def setUserCredentials(self, credentialsData):
         # Authenticate
@@ -549,10 +818,19 @@ class BaseDriver(object):
             descrData = descriptor.DescriptorData(
                 fromStream = credentialsData,
                 descriptor = descr)
-        except descriptor.InvalidXML:
+        except descriptor.errors.InvalidXML:
             # XXX
             raise
-        return self.drvSetUserCredentials(descrData)
+        creds = self.drvGetCredentialsFromDescriptor(descrData)
+        if not self.drvValidateCredentials(creds):
+            raise errors.PermissionDenied(
+                message = "The supplied credentials are invalid")
+        self._setUserCredentials(creds)
+        return self._nodeFactory.newCredentials(valid = True)
+
+    def _setUserCredentials(self, creds):
+        self.db.targetMgr.setTargetCredentialsForUser(
+            self.cloudType, self.cloudName, self.userId, creds)
 
     def getConfiguration(self):
         # Authenticate
@@ -562,12 +840,43 @@ class BaseDriver(object):
         descr = self.getCloudConfigurationDescriptor()
         descrData = descriptor.DescriptorData(descriptor = descr)
 
-        cloudConfig = self.drvGetCloudConfiguration(isAdmin = True)
-        for k, v in sorted(cloudConfig.items()):
-            if k not in descr._dataFieldsHash:
+        cloudConfig = self.getTargetConfiguration(isAdmin = True)
+        kvlist = []
+        for k, v in cloudConfig.items():
+            df = descr.getDataField(k)
+            if df is None:
                 continue
+            # We add all field names and values to the list first, so we can
+            # sort them after adding the extra maps
+            kvlist.append((k, v))
+        for field, k in self._configNameMap:
+            kvlist.append((field, cloudConfig.get(k)))
+        kvlist.sort()
+
+        for k, v in kvlist:
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
+
+    def getTargetConfiguration(self, isAdmin = False):
+        if not self.db:
+            return {}
+        if isAdmin and not self.db.auth.auth.admin:
+            raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        try:
+            targetData = self.db.targetMgr.getTargetData(self.cloudType,
+                                                         self.cloudName)
+        except TargetMissing:
+            targetData = {}
+
+        return self.drvGetTargetConfiguration(targetData, isAdmin = isAdmin)
+
+    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
+        if not targetData:
+            return targetData
+        # Add the target name, we don't have to persist it in the target data
+        # section
+        targetData['name'] = self.cloudName
+        return targetData
 
     def getInstanceNameFromImage(self, imageNode):
         if imageNode is None:
@@ -665,7 +974,7 @@ class BaseDriver(object):
         certFile, keyFile = self._instanceStore.getX509Files(instanceId)
         self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
         x509Dict = dict(cert_file = certFile, key_file = keyFile)
-        updater = cimupdater.CIMUpdater(host, x509Dict)
+        updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
         try:
             updater.checkAndApplyUpdate()
         except:
@@ -726,7 +1035,7 @@ class BaseDriver(object):
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
 
-        mintImages = self._mintClient.getAllBuildsByType(imageType)
+        mintImages = self.db.imageMgr.getAllImagesByType(imageType)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
         mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
@@ -741,8 +1050,41 @@ class BaseDriver(object):
             self.addImageDataFromMintData(image, mintImageData,
                 images.buildToNodeFieldMap)
 
+        self.addExtraImagesFromMint(imageList, mintImages.iteritems(),
+            cloudAlias)
+        return imageList
+
+    @classmethod
+    def getImageIdFromMintImage(cls, image):
+        files = image.get('files', [])
+        if not files:
+            return None
+        return files[0]['sha1']
+
+    @classmethod
+    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        imageFiles = mintImageData.get('files', [])
+        baseFileName = mintImageData.get('baseFileName')
+        buildId = mintImageData.get('buildId')
+        if baseFileName:
+            shortName = os.path.basename(baseFileName)
+            longName = "%s/%s" % (buildId, shortName)
+            image.setShortName(shortName)
+            image.setLongName(longName)
+            image.setBaseFileName(baseFileName)
+        # XXX this overly simplifies the fact that there may be more than one
+        # file associated with a build
+        if imageFiles:
+            image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
+        image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
+        image.setBuildId(buildId)
+
+        for key, methodName in methodMap.iteritems():
+            getattr(image, methodName)(mintImageData.get(key))
+
+    def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # Add the rest of the images coming from mint
-        for uuid, mintImageData in sorted(mintImages.iteritems()):
+        for uuid, mintImageData in sorted(mintImages):
             image = self._nodeFactory.newImage(id=uuid,
                     imageId=uuid, isDeployed=False,
                     is_rBuilderImage=True,
@@ -751,21 +1093,6 @@ class BaseDriver(object):
             self.addImageDataFromMintData(image, mintImageData,
                 images.buildToNodeFieldMap)
             imageList.append(image)
-        return imageList
-
-    @classmethod
-    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
-        shortName = os.path.basename(mintImageData['baseFileName'])
-        longName = "%s/%s" % (mintImageData['buildId'], shortName)
-        image.setShortName(shortName)
-        image.setLongName(longName)
-        image.setDownloadUrl(mintImageData['downloadUrl'])
-        image.setBuildPageUrl(mintImageData['buildPageUrl'])
-        image.setBaseFileName(mintImageData['baseFileName'])
-        image.setBuildId(mintImageData['buildId'])
-
-        for key, methodName in methodMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
 
     def getWbemClientCert(self):
         return self.getWbemX509()[0]
