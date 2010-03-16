@@ -317,48 +317,32 @@ class BaseDriver(object):
         if len(content) != 1:
             return
 
-        vName, vUrl, sName, sUrl = self._getProductVersionAndStage(softwareVersion)
+        version, stage = self._getProductVersionAndStage(softwareVersion)
 
-        if vName:
-            version = instances.VersionHref(href=vUrl)
-            version.characters(vName)
-            stage = instances.StageHref(href=sUrl)
-            stage.characters(sName)
+        if version and stage:
+            versionModel = instances.VersionHref(href=self._buildUrl(version))
+            versionModel.characters(version.name)
+            stageModel = instances.StageHref(href=self._buildUrl(stage))
+            stageModel.characters(stage.name)
 
-            instance.setVersion(version)
-            instance.setStage(stage)
-
+            instance.setVersion(versionModel)
+            instance.setStage(stageModel)
 
     def _getProductVersionAndStage(self, nvf):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
         version = versions.VersionFromString(version)
         label = version.trailingLabel()
-        branchParts = label.branch.split('-')
-
-        # Simple error checking to see if the branch matches what we expect
-        if len(branchParts) < 3:
-            return None, None, None, None
-
-        version = branchParts[-2:-1][0]
-        stage = branchParts[-1:][0]
         product = self.db.productMgr.getProduct(label.getHost())
 
-        productVersion = None
-        productVersions = self.db.listProductVersions(product.hostname)
-        for v in productVersions.versions:
-            if v.name == version:
-                productVersion = v
-                break
+        version = stage = None
+        prodVersions = self.db.listProductVersions(product.hostname)
+        for version in prodVersions.versions:
+            stages = self.db.getProductVersionStages(product.hostname, version.name)
+            for stage in stages.stages:
+                if stage.label == label.asString():
+                    return version, stage
 
-        versionStage = None
-        versionStages = self.db.getProductVersionStages(product.hostname, version)
-        for s in versionStages.stages:
-            if s.label == label.asString():
-                versionStage = s
-                break
-
-        return productVersion.name, self._buildUrl(productVersion), \
-               versionStage.name, self._buildUrl(versionStage)
+        return version, stage
 
     def _buildUrl(self, model):
         absUrl = model.get_absolute_url()
@@ -473,6 +457,13 @@ class BaseDriver(object):
         return instance
 
     def runUpdateSoftwareVersion(self, instance, job):
+
+        # RBL-5979 fix race condition. just because the instance is in the
+        # 'running' state, doesn't mean sfcb is started.  If the instance was
+        # launched within the last minute, wait 5 seconds.
+        if (time.time() - instance.getLaunchTime()) < 60:
+            time.sleep(5)
+
         instanceId = instance.getInstanceId()
         job.pid = os.getpid()
         job.status = job.STATUS_RUNNING
