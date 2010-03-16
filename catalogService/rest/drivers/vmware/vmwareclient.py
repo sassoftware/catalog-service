@@ -8,6 +8,7 @@ import os
 import signal
 import time
 import tempfile
+import StringIO
 
 from conary.lib import util
 
@@ -319,7 +320,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
-        imageList = self._getTemplatesFromInventory()
+        imageList = self._getTemplatesFromInventory(imageIds)
         imageList = self.addMintDataToImageList(imageList, 'VMWARE_ESX_IMAGE')
 
         # FIXME: duplicate code
@@ -448,7 +449,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def getImageIdFromMintImage(cls, image):
         return cls._uuid(image.get('sha1'))
 
-    def _getTemplatesFromInventory(self):
+    def _getTemplatesFromInventory(self, imageIds = None):
         """
         returns all templates in the inventory
         """
@@ -460,7 +461,16 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 continue
 
             imageId = vminfo['config.uuid']
-            longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
+            templateId = self._extractRbaUUID(vminfo.get('config.annotation'))
+            if imageIds is not None and not (
+                    imageId in imageIds or templateId in imageIds):
+                continue
+            if templateId:
+                longName = vminfo['name']
+                imageId = templateId
+            else:
+                longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
+
             image = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
@@ -473,6 +483,19 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
+
+    def _extractRbaUUID(self, annotation):
+        # Extract the rbuilder uuid from the annotation field
+        if not annotation:
+            return None
+        sio = StringIO.StringIO(annotation)
+        for r in sio:
+            arr = r.strip().split(':', 1)
+            if len(arr) != 2:
+                continue
+            if arr[0].strip().lower() == 'rba-uuid':
+                return arr[1].strip().lower()
+        return None
 
     def _cloneTemplate(self, job, imageId, instanceName, instanceDescription,
                        dataCenter, computeResource, dataStore,
@@ -556,7 +579,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
                                             vmName, asTemplate=False,
                                             host=host, pool=rp)
-                self.client.reconfigVM(vm, {'uuid': uuid})
+                # Reconfiguring the uuid is unreliable, we're using the
+                # annotation field for now
+                self.client.reconfigVM(vm,
+                    dict(annotation = "rba-uuid: %s" % uuid))
             except viclient.Error, e:
                 raise RuntimeError('An error occurred when registering the '
                                    'VM: %s' %str(e))
