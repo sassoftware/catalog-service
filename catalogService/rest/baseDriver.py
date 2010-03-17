@@ -795,7 +795,10 @@ class BaseDriver(object):
         netloc = urllib2.urlparse.urlparse(self._nodeFactory.baseUrl)[1]
         host, port = urllib.splitnport(netloc)
 
-        commonName = 'Client certificate for %s' % host
+        byteCount = 4
+        ident = ("%02x" * byteCount) % tuple(ord(x)
+            for x in file('/dev/urandom').read(byteCount))
+        commonName = 'Client certificate for %s, id: %s' % (host, ident)
         util.mkdirChain(certDir)
         return x509.X509.new(commonName, certDir = certDir)
 
