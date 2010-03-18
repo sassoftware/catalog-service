@@ -18,7 +18,10 @@ class XmlResponse(XmlStringResponse):
 class XmlSerializableObjectResponse(XmlStringResponse):
     def __init__(self, content, *args, **kw):
         sio = StringIO.StringIO()
-        content.serialize(sio)
+        # XXX FIXME: 20100318: temporary workaround for ActionScript's default
+        # namespace bug
+        content.defaultNamespace = None
+        content.serialize(sio, validate = False)
         XmlStringResponse.__init__(self, sio.getvalue(), *args, **kw)
 
 class HtmlFileResponse(response.Response):
