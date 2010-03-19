@@ -250,16 +250,28 @@ class BaseDriver(object):
             self._setVersionAndStage(instance)
         return instances
 
+    def _getSoftwareVersionsForInstance(self, instanceId):
+        softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
+        if not softwareVersions:
+            return []
+        return [ self._getNVF(x) for x in softwareVersions.split('\n') ]
+
+    @classmethod
+    def _getNVF(cls, troveSpec):
+        name, version, flavor = conaryclient.cmdline.parseTroveSpec(troveSpec)
+        version = versions.ThawVersion(version)
+        return (name, version, flavor)
+
     def _updateSoftwareVersion(self, instance):
         state = instance.getState()
         # XXX we really should normalize the states across drivers
         if not state or state.lower() not in ['running', 'poweredon']:
             return
         instanceId = instance.getInstanceId()
-        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
-        if softwareVersion:
-            content = [ x for x in softwareVersion.split('\n') ]
-            troves = [self._troveFactoryFromTroveSpec(c) for c in content]
+        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
+        if softwareVersions:
+            troves = [self._troveFactoryFromTroveTuple(c)
+                for c in softwareVersions]
             versions = []
             for t in troves:
                 softwareVersion = instances.SoftwareVersion()
@@ -301,22 +313,18 @@ class BaseDriver(object):
     class ProbeHostError(Exception):
         pass
 
-    def _troveFactoryFromTroveSpec(self, nvf):
-        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
-        version = versions.VersionFromString(version)
+    def _troveFactoryFromTroveTuple(self, (name, version, flavor)):
         return self._troveModelFactory(name, version, flavor)
 
     def _setVersionAndStage(self, instance):
         # XXX: we can only look up version/stage info if there's one top
         # level
         instanceId = instance.getInstanceId()
-        softwareVersion = self._instanceStore.getSoftwareVersion(instanceId)
-        if softwareVersion is None:
-            return
-        content = [ x for x in softwareVersion.split('\n') ]
-        if len(content) != 1:
+        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
+        if len(softwareVersions) != 1:
             return
 
+        softwareVersion = softwareVersions[0]
         version, stage = self._getProductVersionAndStage(softwareVersion)
 
         if version and stage:
@@ -373,50 +381,49 @@ class BaseDriver(object):
 
         return trove
 
+    def _getConaryClient(self):
+        return self.db.productMgr.reposMgr.getUserClient()
+
     def _getAvailableUpdates(self, instance):
         client = self.client
         instanceId = instance.getInstanceId()
-        softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
+        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
     
         if not softwareVersions:
             return
 
-        topLevels = [ x for x in softwareVersions.split('\n') ]
         content = []
-
-        for softwareVersion in topLevels:
-
-            cclient = self.db.productMgr.reposMgr.getUserClient()
+        for trvName, trvVersion, trvFlavor in softwareVersions:
+            cclient = self._getConaryClient()
 
             # name and version are str's, but flavor is a conary.deps.deps.Flavor.
-            name, version, flavor = conaryclient.cmdline.parseTroveSpec(softwareVersion)
-            version = versions.VersionFromString(version)
-            label = version.trailingLabel()
-            revision = version.trailingRevision()
+            label = trvVersion.trailingLabel()
+            revision = trvVersion.trailingRevision()
 
             # Search the label for the trove of the top level item.  It should
             # only (hopefully) return 1 result.
-            troves = cclient.repos.findTroves(label, [(name, version, flavor)])
+            troves = cclient.repos.findTroves(label,
+                [(trvName, trvVersion, trvFlavor)])
             assert(len(troves) == 1)
 
             # findTroves returns a {} with keys of (name, version, flavor), values
             # of [(name, repoVersion, repoFlavor)], where repoVersion and
             # repoFlavor are rich objects with the repository metadata.
-            repoVersion = troves[(name, version, flavor)][0][1]
+            repoVersion = troves[(trvName, trvVersion, trvFlavor)][0][1]
             repoFlavors = [f[0][2] for f in troves.values()]
             # We only asked for 1 flavor, only 1 should be returned.
             assert(len(repoFlavors) == 1)
 
             # getTroveVersionList searches a repository (NOT by label), for a
             # given name/flavor combination.
-            allVersions = cclient.repos.getTroveVersionList(version.getHost(), 
-                                {name:repoFlavors})
+            allVersions = cclient.repos.getTroveVersionList(
+                trvVersion.getHost(), {trvName:repoFlavors})
             # We only asked for 1 name/flavor, so we should have only gotten 1
             # back.
             assert(len(allVersions) == 1)
             # getTroveVersionList returns a dict with keys of name, values of
             # (version, [flavors]).
-            allVersions = allVersions[name]
+            allVersions = allVersions[trvName]
 
             newerVersions = {}
             for v, fs in allVersions.iteritems():
@@ -431,7 +438,7 @@ class BaseDriver(object):
                     for f in fs:
                         # XXX: do we want to use flavor or repoFlavor here?
                         # XXX: do we want to use stronglySatisfies here?
-                        if f.satisfies(flavor):
+                        if f.satisfies(trvFlavor):
                             satisfiedFlavors.append(f)
                     if satisfiedFlavors:
                         newerVersions[v] = satisfiedFlavors
@@ -439,7 +446,7 @@ class BaseDriver(object):
             if newerVersions:
                 for v, fs in newerVersions.iteritems():
                     # XXX: do we only care about the 1st flavor?
-                    trove = self._troveModelFactory(name, v, fs[0])
+                    trove = self._troveModelFactory(trvName, v, fs[0])
                     update = instances.AvailableUpdate()
                     update.setTrove(trove)
                     content.append(update)
@@ -447,7 +454,7 @@ class BaseDriver(object):
                 instance.setOutOfDate(True)
 
             # Add the current version as well.
-            trove = self._troveModelFactory(name, repoVersion, flavor)
+            trove = self._troveModelFactory(trvName, repoVersion, trvFlavor)
             update = instances.AvailableUpdate()
             update.setTrove(trove)
             content.append(update)
