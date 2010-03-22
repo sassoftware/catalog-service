@@ -33,6 +33,7 @@ from catalogService.utils import timeutils
 from catalogService.utils import x509
 
 from mint.mint_error import TargetExists
+from mint.rest import errors as mint_rest_errors
 
 from rpath_job import api1 as rpath_job
 
@@ -355,7 +356,11 @@ class BaseDriver(object):
     def _getProductVersionAndStage(self, nvf):
         name, version, flavor = nvf
         label = version.trailingLabel()
-        product = self.db.productMgr.getProduct(label.getHost())
+        try:
+            product = self.db.productMgr.getProduct(label.getHost())
+        except mint_rest_errors.ProductNotFound:
+            # Not a product that lives on this rba
+            return None, None
 
         prodVersions = self.db.listProductVersions(product.hostname)
         for version in prodVersions.versions:
@@ -380,7 +385,6 @@ class BaseDriver(object):
         schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
         label = version.trailingLabel()
         revision = version.trailingRevision()
-        product = self.db.productMgr.getProduct(label.getHost())
         versionModel = instances.AvailableUpdateVersion(
                                     full=version.asString(),
                                     label=str(label),
@@ -388,10 +392,15 @@ class BaseDriver(object):
                                     revision=str(version.trailingRevision()))
         trove = instances._Trove(name=name, version=versionModel,
                                  flavor=str(flavor))
-        id = "repos/%s/api/trove/%s=/%s/%s[%s]" % \
-                     (product.shortname, name, label.asString(),
-                      revision.asString(), str(flavor))
-        trove.id = "%s/%s" % (schemeUrl, urllib.quote(id))
+        try:
+            product = self.db.productMgr.getProduct(label.getHost())
+            id = "repos/%s/api/trove/%s=/%s/%s[%s]" % \
+                         (product.shortname, name, label.asString(),
+                          revision.asString(), str(flavor))
+            trove.id = "%s/%s" % (schemeUrl, urllib.quote(id))
+        except mint_rest_errors.ProductNotFound:
+            # Not a product that lives on this rba
+            pass
 
         return trove
 
