@@ -259,6 +259,14 @@ class Handler(xmllib.DataBinder):
         xmllib.DataBinder.registerType(self, typeClass, *args, **kwargs)
         if not hasattr(typeClass, '_slotTypeMap'):
             return
-        for name, valType in typeClass._slotTypeMap.items():
-            if issubclass(valType, BaseNode):
-                xmllib.DataBinder.registerType(self, valType, valType.tag)
+        registered = set()
+        toRegister = [typeClass]
+        while toRegister:
+            tClass = toRegister.pop()
+            for name, valType in tClass._slotTypeMap.items():
+                if valType in registered:
+                    continue
+                if issubclass(valType, BaseNode):
+                    xmllib.DataBinder.registerType(self, valType, valType.tag)
+                    toRegister.append(valType)
+                    registered.add(valType)
