@@ -240,26 +240,35 @@ class BaseDriver(object):
     def getAllInstances(self):
         return self.getInstances(None)
 
+    def _addSoftwareVersionInfo(self, instance):
+        self._updateSoftwareVersion(instance)
+        self._getAvailableUpdates(instance)
+        self._setVersionAndStage(instance)
+
     def getInstances(self, instanceIds):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
         instances = self.drvGetInstances(instanceIds)
         for instance in instances:
-            self._updateSoftwareVersion(instance)
-            self._getAvailableUpdates(instance)
-            self._setVersionAndStage(instance)
+            self._addSoftwareVersionInfo(instance)
         return instances
 
     def _getSoftwareVersionsForInstance(self, instanceId):
         softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
         if not softwareVersions:
             return []
-        return [ self._getNVF(x) for x in softwareVersions.split('\n') ]
+        ret = [ self._getNVF(x) for x in softwareVersions.split('\n') ]
+        return [ x for x in ret if x is not None ]
 
     @classmethod
     def _getNVF(cls, troveSpec):
         name, version, flavor = conaryclient.cmdline.parseTroveSpec(troveSpec)
-        version = versions.ThawVersion(version)
+        try:
+            version = versions.ThawVersion(version)
+        except ValueError:
+            # We may need to catch additional exceptions here.
+            # This was for the change from VersionToString to ThawVersion
+            return None
         return (name, version, flavor)
 
     def _updateSoftwareVersion(self, instance):
@@ -321,28 +330,33 @@ class BaseDriver(object):
         # level
         instanceId = instance.getInstanceId()
         softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
-        if len(softwareVersions) != 1:
+
+        for softwareVersion in softwareVersions:
+            self._addVersionAndStage(instance, softwareVersion)
+
+    def _isTopLevelGroup(self, nvf):
+        name = nvf[0]
+        return name.startswith('group-') and name.endswith('-appliance')
+
+    def _addVersionAndStage(self, instance, nvf):
+        if not self._isTopLevelGroup(nvf):
             return
+        version, stage = self._getProductVersionAndStage(nvf)
+        if not (version and stage):
+            return
+        versionModel = instances.VersionHref(href=self._buildUrl(version))
+        versionModel.characters(version.name)
+        stageModel = instances.StageHref(href=self._buildUrl(stage))
+        stageModel.characters(stage.name)
 
-        softwareVersion = softwareVersions[0]
-        version, stage = self._getProductVersionAndStage(softwareVersion)
-
-        if version and stage:
-            versionModel = instances.VersionHref(href=self._buildUrl(version))
-            versionModel.characters(version.name)
-            stageModel = instances.StageHref(href=self._buildUrl(stage))
-            stageModel.characters(stage.name)
-
-            instance.setVersion(versionModel)
-            instance.setStage(stageModel)
+        instance.setVersion(versionModel)
+        instance.setStage(stageModel)
 
     def _getProductVersionAndStage(self, nvf):
-        name, version, flavor = conaryclient.cmdline.parseTroveSpec(nvf)
-        version = versions.VersionFromString(version)
+        name, version, flavor = nvf
         label = version.trailingLabel()
         product = self.db.productMgr.getProduct(label.getHost())
 
-        version = stage = None
         prodVersions = self.db.listProductVersions(product.hostname)
         for version in prodVersions.versions:
             stages = self.db.getProductVersionStages(product.hostname, version.name)
@@ -350,7 +364,7 @@ class BaseDriver(object):
                 if stage.label == label.asString():
                     return version, stage
 
-        return version, stage
+        return None, None
 
     def _buildUrl(self, model):
         absUrl = model.get_absolute_url()
@@ -536,9 +550,7 @@ class BaseDriver(object):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
         instance = self.drvGetInstance(instanceId)
-        self._updateSoftwareVersion(instance)
-        self._getAvailableUpdates(instance)
-        self._setVersionAndStage(instance)
+        self._addSoftwareVersionInfo(instance)
         return instance
 
     def drvGetInstance(self, instanceId):
