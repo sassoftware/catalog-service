@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+# Copyright (c) 2008-2010 rPath, Inc.  All Rights Reserved.
 #
 
 import os
@@ -10,6 +10,7 @@ from catalogService.errors import InvalidCloudName
 
 from catalogService.rest.database import commitafter
 from catalogService.rest.api.base import BaseCloudController
+from catalogService.rest.api import trove_change
 from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse, XmlSerializableObjectResponse
 
 class ImagesController(BaseCloudController):
@@ -52,9 +53,15 @@ class SecurityGroupsController(BaseCloudController):
             return XmlStringResponse("", status = 404)
         return XmlResponse(meth(instanceId, *args))
 
+class AvailableUpdatesController(BaseCloudController):
+    modelName = 'troveSpec'
+
+    urls = dict(troveChanges=trove_change.TroveChangesController)
+
 class InstancesController(BaseCloudController):
     urls = dict(updates=InstancesUpdateController,
-                securityGroups=SecurityGroupsController)
+                securityGroups=SecurityGroupsController,
+                availableUpdates=AvailableUpdatesController,)
 
     modelName = 'instanceId'
     def index(self, request, cloudName):

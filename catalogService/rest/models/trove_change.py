@@ -3,12 +3,15 @@
 #
 
 import generateds_trove_diff
-from generatedsBase import Base
+from generateds_base import Base
 
 class TroveChange(generateds_trove_diff.troveChangeType, Base):
     defaultNamespace = "http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
     xmlSchemaLocation = defaultNamespace
     RootNode = 'troveChange'
+
+simpleChangeType = generateds_trove_diff.simpleChangeType
+troveSpecType = generateds_trove_diff.troveSpecType
 
 if __name__ == '__main__':
     tc = TroveChange()

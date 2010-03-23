@@ -52,5 +52,5 @@ class Base(object):
         tree = self.getElementTree(attrs)
         tree.write(stream, encoding = 'UTF-8', pretty_print = True,
             xml_declaration = True)
-        return sio
+        return tree
 
