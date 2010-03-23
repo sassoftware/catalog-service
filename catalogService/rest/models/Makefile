@@ -12,6 +12,8 @@
 # full details.
 #
 python_files =	$(wildcard *.py)
+GENERATE_DS=~/hg/generateDS/generateDS.py
+XSD_DIR=../../../xsd
 
 dist_files = Makefile $(python_files)
 
@@ -22,6 +24,17 @@ install: all pyfiles-install default-install install-subdirs pyfiles-compile
 dist: default-dist
 
 clean: default-clean
+
+generate: $(patsubst $(XSD_DIR)/%.xsd,rule-%,$(wildcard $(XSD_DIR)/*.xsd))
+
+rule-%:
+	$(GENERATE_DS) -f --silence \
+                --no-dates \
+                --no-versions \
+                --member-specs=list \
+                --external-encoding=utf-8 \
+                -o generateds_$(subst -,_,$(patsubst rule-%,%,$@)).py \
+                $(XSD_DIR)/$(patsubst rule-%,%,$@).xsd
 
 include ../../../Make.rules
 include ../../../Make.defs

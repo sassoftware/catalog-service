@@ -62,28 +62,77 @@ class _Trove(xmlNode.BaseNode):
         if kw.has_key('name'):
             self.name = xmllib.GenericNode().setName("name").characters(kw['name'])
 
-class AvailableUpdate(xmlNode.BaseNode):
+class _TroveChangesHref(xmlNode.BaseNode):
+    tag = "troveChanges"
+    __slots__ = ['href']
+    _slotAttributes = set(['href'])
+
+class _VersionChange(xmlNode.BaseNode):
+    tag = "versionChange"
+    __slots__ = [ 'from', 'to' ]
+
+class _FlavorChange(xmlNode.BaseNode):
+    tag = "flavorChange"
+    __slots__ = [ 'from', 'to' ]
+
+class _TroveChangeMinimal(xmlNode.BaseNode):
+    tag = 'troveChange'
+    __slots__ = [ 'versionChange', 'flavorChange' ]
+    _slotTypeMap = dict(versionChange = _VersionChange,
+        flavorChange = _FlavorChange)
+
+class SoftwareMixIn(object):
+    def setTroveChangesHref(self, href):
+        node = _TroveChangesHref()
+        node.setHref(href)
+        self.setTroveChanges(node)
+
+    def setTroveChangeNode(self, fromVersion = None, toVersion = None,
+            fromFlavor = None, toFlavor = None):
+        versionChange = None
+        flavorChange = None
+        if not (fromVersion is None and toVersion is None):
+            versionChange = _VersionChange()
+            versionChange.setFrom(fromVersion)
+            versionChange.setTo(toVersion)
+        if not (fromFlavor is None and toFlavor is None):
+            flavorChange = _FlavorChange()
+            flavorChange.setFrom(fromFlavor)
+            flavorChange.setTo(toFlavor)
+        if versionChange is None and flavorChange is None:
+            return
+        tc = _TroveChangeMinimal()
+        tc.setVersionChange(versionChange)
+        tc.setFlavorChange(flavorChange)
+        self.setTroveChange(tc)
+
+
+class InstalledSoftware(xmlNode.BaseNode, SoftwareMixIn):
+    tag = "installedSoftware"
+    multiple = True
+    __slots__ = [ 'id', 'href', 'isTopLevel', 'troveChanges', 'troveChange', 'trove' ]
+    _slotTypeMap = dict(trove = _Trove,
+        troveChange = _TroveChangeMinimal,
+        troveChanges = _TroveChangesHref,
+        isTopLevel = bool,
+    )
+    _slotAttributes = set(['id', 'href'])
+
+class AvailableUpdate(xmlNode.BaseNode, SoftwareMixIn):
     tag = 'availableUpdate'
     multiple = True
-    __slots__ = [ 'trove' ]
-    _slotTypeMap = dict(trove=_Trove)
+    __slots__ = [ 'id', 'troveChanges', 'troveChange', 'trove',
+        'installedSoftware', ]
+    _slotTypeMap = dict(trove = _Trove,
+        troveChange = _TroveChangeMinimal,
+        troveChanges = _TroveChangesHref,
+        installedSoftware = InstalledSoftware)
+    _slotAttributes = set(['id'])
 
-class SoftwareVersion(xmlNode.BaseNode):
-    tag = "softwareVersion"
-    multiple = True
-    __slots__ = [ 'trove' ]
-    _slotTypeMap = dict(trove=_Trove)
-
-    def getText(self):
-        name = self.getTrove().name.getText()
-        version = self.getTrove().getVersion().getFull()
-        flavor = self.getTrove().getFlavor()
-
-        nvf = "%s=%s" % (name, version)
-        if flavor and flavor != 'None':
-            nvf += "[%s]" % flavor
-
-        return str(nvf)
+    def setInstalledSoftwareHref(self, href):
+        node = InstalledSoftware()
+        node.setHref(href)
+        self.setInstalledSoftware(node)
 
 class StageHref(xmlNode.BaseNode):
     tag = "stage"
@@ -110,7 +159,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'outOfDate',
                   '_xmlNodeHash', 'launchTime', 'productCode',
                   'placement',
-                  'softwareVersion',
+                  'installedSoftware',
                   'softwareVersionJobId',
                   'softwareVersionJobStatus',
                   'softwareVersionLastChecked',
@@ -122,7 +171,7 @@ class BaseInstance(xmlNode.BaseNode):
                         productCode = _ProductCode,
                         softwareVersionLastChecked = int,
                         softwareVersionNextCheck = int,
-                        softwareVersion = SoftwareVersion,
+                        installedSoftware = InstalledSoftware,
                         availableUpdate = AvailableUpdate,
                         outOfDate = bool,
                         version = VersionHref,
@@ -142,20 +191,11 @@ class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
 
 class Handler(xmlNode.Handler):
-    instanceClass = BaseInstance
-    instanceUpdateStatusClass = BaseInstanceUpdateStatus
-    instanceUpdateStatusStateClass = BaseInstanceUpdateStatusState
-    instanceUpdateStatusTimeClass = BaseInstanceUpdateStatusTime
-    instancesClass = BaseInstances
     launchIndexClass = IntegerNode
+    instanceClass = BaseInstance
+    instancesClass = BaseInstances
     instanceTypeClass = InstanceType
     instanceTypesClass = InstanceTypes
-    softwareVersionClass = SoftwareVersion
-    availableUpdateClass = AvailableUpdate
-    troveClass = _Trove
-    availableUpdateVersionClass = AvailableUpdateVersion
-    stageHrefClass = StageHref
-    versionHrefClass = VersionHref
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         self.registerType(self.launchIndexClass, 'launchIndex')
@@ -163,17 +203,3 @@ class Handler(xmlNode.Handler):
         self.registerType(self.instancesClass, self.instancesClass.tag)
         self.registerType(self.instanceTypeClass, self.instanceTypeClass.tag)
         self.registerType(self.instanceTypesClass, self.instanceTypesClass.tag)
-        self.registerType(self.instanceUpdateStatusClass,
-                          self.instanceUpdateStatusClass.tag)
-        self.registerType(self.instanceUpdateStatusStateClass,
-                          self.instanceUpdateStatusStateClass.tag)
-        self.registerType(self.instanceUpdateStatusTimeClass,
-                          self.instanceUpdateStatusTimeClass.tag)
-        self.registerType(self.softwareVersionClass,
-                          self.softwareVersionClass.tag)
-        self.registerType(self.availableUpdateClass,
-                          self.availableUpdateClass.tag)
-        self.registerType(self.availableUpdateVersionClass,
-                          self.availableUpdateVersionClass.tag)
-        self.registerType(self.troveClass,
-                          self.troveClass.tag)

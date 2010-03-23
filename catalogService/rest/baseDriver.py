@@ -242,9 +242,10 @@ class BaseDriver(object):
         return self.getInstances(None)
 
     def _addSoftwareVersionInfo(self, instance):
-        self._updateSoftwareVersion(instance)
+        self._updateInstalledSoftwareList(instance)
         self._getAvailableUpdates(instance)
         self._setVersionAndStage(instance)
+        self._nodeFactory.refreshInstance(instance)
 
     def getInstances(self, instanceIds):
         if self.client is None:
@@ -272,7 +273,18 @@ class BaseDriver(object):
             return None
         return (name, version, flavor)
 
-    def _updateSoftwareVersion(self, instance):
+    def _fullSpec(self, nvf):
+        flavor = nvf[2]
+        if flavor is None:
+            flavor = ''
+        else:
+            flavor = str(flavor)
+        return "%s=%s[%s]" % (nvf[0], nvf[1].freeze(), flavor)
+
+    def _quoteSpec(self, spec):
+        return urllib.quote(spec, safe = '')
+
+    def _updateInstalledSoftwareList(self, instance):
         state = instance.getState()
         # XXX we really should normalize the states across drivers
         if not state or state.lower() not in ['running', 'poweredon']:
@@ -280,14 +292,24 @@ class BaseDriver(object):
         instanceId = instance.getInstanceId()
         softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
         if softwareVersions:
-            troves = [self._troveFactoryFromTroveTuple(c)
+            troveList = [self._troveFactoryFromTroveTuple(c)
                 for c in softwareVersions]
             versions = []
-            for t in troves:
-                softwareVersion = instances.SoftwareVersion()
-                softwareVersion.setTrove(t)
-                versions.append(softwareVersion)
-            instance.setSoftwareVersion(versions)
+            for (nvf, t) in zip(softwareVersions, troveList):
+                isTopLevel = self._isTopLevelGroup(nvf)
+                fullSpec = self._fullSpec(nvf)
+                installedSoftware = instances.InstalledSoftware()
+                installedSoftware.setTrove(t)
+                if isTopLevel:
+                    installedSoftware.setIsTopLevel(isTopLevel)
+                sanitizedFullSpec = self._quoteSpec(fullSpec)
+                installedSoftware.setId(sanitizedFullSpec)
+                installedSoftware.setTroveChangesHref(sanitizedFullSpec)
+
+                installedSoftware.setTroveChangeNode(fromVersion = nvf[1].freeze(),
+                    fromFlavor = str(nvf[2]))
+                versions.append(installedSoftware)
+            instance.setInstalledSoftware(versions)
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
@@ -417,6 +439,8 @@ class BaseDriver(object):
 
         content = []
         for trvName, trvVersion, trvFlavor in softwareVersions:
+            fullSpec = self._fullSpec((trvName, trvVersion, trvFlavor))
+            sanitizedFullSpec = self._quoteSpec(fullSpec)
             cclient = self._getConaryClient()
 
             # name and version are str's, but flavor is a conary.deps.deps.Flavor.
@@ -467,12 +491,19 @@ class BaseDriver(object):
                         newerVersions[v] = satisfiedFlavors
 
             if newerVersions:
-                for v, fs in newerVersions.iteritems():
-                    # XXX: do we only care about the 1st flavor?
-                    trove = self._troveModelFactory(trvName, v, fs[0])
-                    update = instances.AvailableUpdate()
-                    update.setTrove(trove)
-                    content.append(update)
+                for ver, fs in newerVersions.iteritems():
+                    for flv in fs:
+                        trove = self._troveModelFactory(trvName, ver, f)
+                        update = instances.AvailableUpdate()
+                        update.setTrove(trove)
+                        update.setInstalledSoftwareHref(sanitizedFullSpec)
+                        updateFullSpec = self._quoteSpec(self._fullSpec(
+                            (trvName, ver, flv)))
+                        update.setId(updateFullSpec)
+                        update.setTroveChangesHref(updateFullSpec)
+                        update.setTroveChangeNode(fromVersion = ver.freeze(),
+                            fromFlavor = str(flv))
+                        content.append(update)
 
                 instance.setOutOfDate(True)
 
@@ -480,6 +511,11 @@ class BaseDriver(object):
             trove = self._troveModelFactory(trvName, repoVersion, trvFlavor)
             update = instances.AvailableUpdate()
             update.setTrove(trove)
+            update.setInstalledSoftwareHref(sanitizedFullSpec)
+            update.setId(sanitizedFullSpec)
+            update.setTroveChangesHref(sanitizedFullSpec)
+            update.setTroveChangeNode(fromVersion = trvVersion.freeze(),
+                fromFlavor = str(trvFlavor))
             content.append(update)
 
         instance.setAvailableUpdate(content)

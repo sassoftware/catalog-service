@@ -101,12 +101,39 @@ class NodeFactory(object):
 
     def newInstance(self, *args, **kwargs):
         node = self.instanceFactory(*args, **kwargs)
-        node.setId(self.getInstanceUrl(node))
+        return self.refreshInstance(node)
+
+    def refreshInstance(self, node):
+        instanceUrl = self.getInstanceUrl(node)
+        node.setId(instanceUrl)
         node.setCloudType(self.cloudType)
         updateStatus = self.instanceUpdateStatusFactory()
         updateStatus.setState('')
         updateStatus.setTime('')
         node.setUpdateStatus(updateStatus)
+        # Software stuff
+        for instSoftware in (node.getInstalledSoftware() or []):
+            isid = instSoftware.getId()
+            isid = "%s/installedSoftware/%s" % (instanceUrl, isid)
+            instSoftware.setId(isid)
+
+            tc = instSoftware.getTroveChanges()
+            if tc:
+                href = tc.getHref()
+                if href:
+                    tc.setHref("%s/troveChanges" % isid)
+        for availUpdate in (node.getAvailableUpdate() or []):
+            href = os.path.basename(availUpdate.getId())
+            availUpdate.setId("%s/availableUpdates/%s" %
+                (instanceUrl, href))
+            instSoftware = availUpdate.getInstalledSoftware()
+            href = os.path.basename(instSoftware.getHref())
+            instSoftware.setHref("%s/installedSoftware/%s" %
+                (instanceUrl, href))
+            troveChanges = availUpdate.getTroveChanges()
+            href = os.path.basename(troveChanges.getHref())
+            troveChanges.setHref("%s/availableUpdates/%s/troveChanges" %
+                (instanceUrl, href))
         return node
 
     def newInstanceLaunchJob(self, *args, **kwargs):
@@ -176,6 +203,7 @@ class NodeFactory(object):
     def _getInstanceUrl(self, node, instanceId):
         if instanceId is None:
             return None
+        instanceId = instanceId.split('/')[-1]
         return self.join(self.getCloudUrl(node), 'instances',
                         self._quote(instanceId))
 
