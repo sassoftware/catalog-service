@@ -282,7 +282,7 @@ class BaseDriver(object):
         return "%s=%s[%s]" % (nvf[0], nvf[1].freeze(), flavor)
 
     def _quoteSpec(self, spec):
-        return urllib.quote(spec, safe = '')
+        return urllib.quote(urllib.quote(spec, safe = ''))
 
     def _updateInstalledSoftwareList(self, instance):
         state = instance.getState()
