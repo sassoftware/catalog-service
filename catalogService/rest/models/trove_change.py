@@ -22,6 +22,8 @@ class TroveChange(generateds_trove_diff.troveChangeType, Base):
         self.set_name(name)
         self.set_versionChange(self.newSimpleChange(oldVersion, newVersion))
         self.set_flavorChange(self.newSimpleChange(oldFlavor, newFlavor))
+        self.set_from(self.newTroveSpec(name, oldVersion, oldFlavor))
+        self.set_to(self.newTroveSpec(name, newVersion, newFlavor))
 
     def newTroveAddition(self, name, version, flavor):
         tspec = self.newTroveSpec(name, version, flavor)

@@ -453,6 +453,8 @@ class troveChangeType(GeneratedsSuper):
         MemberSpec_('href', 'xsd:string', 0),
         MemberSpec_('id', 'xsd:string', 0),
         MemberSpec_('name', 'xsd:token', 0),
+        MemberSpec_('fromxx', 'troveSpecType', 0),
+        MemberSpec_('to', 'troveSpecType', 0),
         MemberSpec_('versionChange', 'simpleChangeType', 0),
         MemberSpec_('flavorChange', 'simpleChangeType', 0),
         MemberSpec_('buildRequirementsChange', 'buildReqsChangeType', 0),
@@ -462,10 +464,12 @@ class troveChangeType(GeneratedsSuper):
         ]
     subclass = None
     superclass = None
-    def __init__(self, href=None, id=None, name=None, versionChange=None, flavorChange=None, buildRequirementsChange=None, troveAddition=None, troveRemoval=None, troveChange=None):
+    def __init__(self, href=None, id=None, name=None, fromxx=None, to=None, versionChange=None, flavorChange=None, buildRequirementsChange=None, troveAddition=None, troveRemoval=None, troveChange=None):
         self.href = _cast(None, href)
         self.id = _cast(None, id)
         self.name = name
+        self.fromxx = fromxx
+        self.to = to
         self.versionChange = versionChange
         self.flavorChange = flavorChange
         self.buildRequirementsChange = buildRequirementsChange
@@ -489,6 +493,10 @@ class troveChangeType(GeneratedsSuper):
     factory = staticmethod(factory)
     def get_name(self): return self.name
     def set_name(self, name): self.name = name
+    def get_from(self): return self.fromxx
+    def set_from(self, fromxx): self.fromxx = fromxx
+    def get_to(self): return self.to
+    def set_to(self, to): self.to = to
     def get_versionChange(self): return self.versionChange
     def set_versionChange(self, versionChange): self.versionChange = versionChange
     def get_flavorChange(self): return self.flavorChange
@@ -531,6 +539,10 @@ class troveChangeType(GeneratedsSuper):
         if self.name is not None:
             showIndent(outfile, level)
             outfile.write('<%sname>%s</%sname>\n' % (namespace_, self.format_string(quote_xml(self.name).encode(ExternalEncoding), input_name='name'), namespace_))
+        if self.fromxx:
+            self.fromxx.export(outfile, level, namespace_, name_='from', )
+        if self.to:
+            self.to.export(outfile, level, namespace_, name_='to', )
         if self.versionChange:
             self.versionChange.export(outfile, level, namespace_, name_='versionChange')
         if self.flavorChange:
@@ -546,6 +558,8 @@ class troveChangeType(GeneratedsSuper):
     def hasContent_(self):
         if (
             self.name is not None or
+            self.fromxx is not None or
+            self.to is not None or
             self.versionChange is not None or
             self.flavorChange is not None or
             self.buildRequirementsChange is not None or
@@ -572,6 +586,18 @@ class troveChangeType(GeneratedsSuper):
         if self.name is not None:
             showIndent(outfile, level)
             outfile.write('name=%s,\n' % quote_python(self.name).encode(ExternalEncoding))
+        if self.fromxx is not None:
+            showIndent(outfile, level)
+            outfile.write('fromxx=model_.troveSpecType(\n')
+            self.fromxx.exportLiteral(outfile, level, name_='from')
+            showIndent(outfile, level)
+            outfile.write('),\n')
+        if self.to is not None:
+            showIndent(outfile, level)
+            outfile.write('to=model_.troveSpecType(\n')
+            self.to.exportLiteral(outfile, level, name_='to')
+            showIndent(outfile, level)
+            outfile.write('),\n')
         if self.versionChange is not None:
             showIndent(outfile, level)
             outfile.write('versionChange=model_.simpleChangeType(\n')
@@ -645,6 +671,16 @@ class troveChangeType(GeneratedsSuper):
                 name_ += text__content_.nodeValue
             name_ = ' '.join(name_.split())
             self.name = name_
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'from':
+            obj_ = troveSpecType.factory()
+            obj_.build(child_)
+            self.set_from(obj_)
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'to':
+            obj_ = troveSpecType.factory()
+            obj_.build(child_)
+            self.set_to(obj_)
         elif child_.nodeType == Node.ELEMENT_NODE and \
             nodeName_ == 'versionChange':
             obj_ = simpleChangeType.factory()

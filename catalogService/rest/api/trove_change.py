@@ -23,6 +23,7 @@ class TroveChangesController(BaseCloudController):
         conaryClient = self._getConaryClient()
         diff = TroveDiff(conaryClient, troveSpec, tc)
         troveChange = diff.computeDiff()
+        self._fixIds(request, troveChange)
         return response.XmlSerializableObjectResponse(troveChange)
 
     def get(self, request, cloudName, instanceId, troveSpec, troveSpecOther):
@@ -32,10 +33,26 @@ class TroveChangesController(BaseCloudController):
         diff = TroveDiff(conaryClient, troveSpec,
             troveSpecOther = troveSpecOther)
         troveChange = diff.computeDiff()
+        self._fixIds(request, troveChange)
         return response.XmlSerializableObjectResponse(troveChange)
 
     def _getConaryClient(self):
         return self.db.productMgr.reposMgr.getUserClient()
+
+    def _fixIds(self, request, troveChange):
+        troveUrl = "%s/catalog/troves/" % request.baseUrl
+        trv = troveChange.get_from().get_trove()
+        trv.set_id(troveUrl + trv.get_id())
+        trv = troveChange.get_to().get_trove()
+        trv.set_id(troveUrl + trv.get_id())
+        for troveSpec in troveChange.get_troveAddition():
+            trv = troveSpec.get_trove()
+            trv.set_id(troveUrl + trv.get_id())
+        for troveSpec in troveChange.get_troveRemoval():
+            trv = troveSpec.get_trove()
+            trv.set_id(troveUrl + trv.get_id())
+        for subtrv in troveChange.get_troveChange():
+            self._fixIds(request, subtrv)
 
 # XXX This should probably be in some manager
 class TroveDiff(object):

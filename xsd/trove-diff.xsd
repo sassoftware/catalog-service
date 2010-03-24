@@ -16,6 +16,10 @@ targetNamespace="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
     <xsd:sequence>
       <xsd:element name="name" type="xsd:token"
           minOccurs="1" maxOccurs="1" />
+      <xsd:element name="from" type="cny:troveSpecType"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="to" type="cny:troveSpecType"
+          minOccurs="1" maxOccurs="1" />
       <xsd:element name="versionChange" type="cny:simpleChangeType"
           minOccurs="0" maxOccurs="1" />
       <xsd:element name="flavorChange" type="cny:simpleChangeType"
