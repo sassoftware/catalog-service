@@ -13,7 +13,7 @@ from catalogService.rest.api.base import BaseCloudController
 from catalogService.rest.middleware import response
 
 class TroveChangesController(BaseCloudController):
-    modelName = 'specTroveFrom'
+    modelName = 'troveSpecOther'
 
     def create(self, request, cloudName, instanceId, troveSpec):
         tc = trove_change.TroveChange()
@@ -25,12 +25,22 @@ class TroveChangesController(BaseCloudController):
         troveChange = diff.computeDiff()
         return response.XmlSerializableObjectResponse(troveChange)
 
+    def get(self, request, cloudName, instanceId, troveSpec, troveSpecOther):
+        troveSpec = urllib.unquote(troveSpec)
+        troveSpecOther = urllib.unquote(troveSpecOther)
+        conaryClient = self._getConaryClient()
+        diff = TroveDiff(conaryClient, troveSpec,
+            troveSpecOther = troveSpecOther)
+        troveChange = diff.computeDiff()
+        return response.XmlSerializableObjectResponse(troveChange)
+
     def _getConaryClient(self):
         return self.db.productMgr.reposMgr.getUserClient()
 
 # XXX This should probably be in some manager
 class TroveDiff(object):
-    def __init__(self, conaryClient, troveSpec, troveChangeRequest):
+    def __init__(self, conaryClient, troveSpec, troveChangeRequest = None,
+            troveSpecOther = None):
         self.conaryClient = conaryClient
 
         n, v, f = conaryclient.cmdline.parseTroveSpec(troveSpec)
@@ -38,6 +48,19 @@ class TroveDiff(object):
         self.trvNewVersion = versions.ThawVersion(v)
         self.trvNewFlavor = f
 
+        self._fromTroveChangeRequest(troveChangeRequest)
+        self._fromOtherTroveSpec(troveSpecOther)
+
+    def _fromOtherTroveSpec(self, troveSpec):
+        if not troveSpec:
+            return
+        n, v, f = conaryclient.cmdline.parseTroveSpec(troveSpec)
+        self.trvOldVersion = versions.ThawVersion(v)
+        self.trvOldFlavor = f
+
+    def _fromTroveChangeRequest(self, troveChangeRequest):
+        if troveChangeRequest is None:
+            return
         fromVersion = self.trvNewVersion
         versionChange = troveChangeRequest.get_versionChange()
         if versionChange is not None:
