@@ -2,8 +2,15 @@
 # Copyright (c) 2010 rPath, Inc.  All Rights Reserved.
 #
 
+import urllib
 import generateds_trove_diff
 from generateds_base import Base
+
+simpleChangeType = generateds_trove_diff.simpleChangeType
+troveSpecType = generateds_trove_diff.troveSpecType
+troveType = generateds_trove_diff.troveType
+versionType = generateds_trove_diff.versionType
+
 
 class TroveChange(generateds_trove_diff.troveChangeType, Base):
     defaultNamespace = "http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
@@ -34,9 +41,22 @@ class TroveChange(generateds_trove_diff.troveChangeType, Base):
     @classmethod
     def newTroveSpec(cls, name, version, flavor):
         tspec = troveSpecType.factory()
-        tspec.set_name(name)
-        tspec.set_version(version.freeze())
-        tspec.set_flavor(str(flavor))
+        rev = version.trailingRevision()
+
+        trv = troveType.factory()
+        trv.set_name(name)
+        trv.set_flavor(str(flavor))
+        ver = versionType.factory()
+        trv.set_version(ver)
+
+        ver.set_full(str(version))
+        ver.set_label(str(version.trailingLabel()))
+        ver.set_revision(str(rev))
+        ver.set_ordering(rev.timeStamp)
+        tspec.set_trove(trv)
+
+        trv.set_id(urllib.quote("%s=%s[%s]" % (name, version, flavor),
+            safe = ""))
         return tspec
 
     @classmethod
@@ -47,9 +67,6 @@ class TroveChange(generateds_trove_diff.troveChangeType, Base):
         change.set_from(fromItem)
         change.set_to(toItem)
         return change
-
-simpleChangeType = generateds_trove_diff.simpleChangeType
-troveSpecType = generateds_trove_diff.troveSpecType
 
 if __name__ == '__main__':
     tc = TroveChange()

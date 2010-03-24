@@ -195,6 +195,259 @@ def _cast(typ, value):
 # Data representation classes.
 #
 
+class troveType(GeneratedsSuper):
+    member_data_items_ = [
+        MemberSpec_('href', 'xsd:string', 0),
+        MemberSpec_('id', 'xsd:string', 0),
+        MemberSpec_('name', 'xsd:token', 0),
+        MemberSpec_('version', 'versionType', 0),
+        MemberSpec_('flavor', 'xsd:token', 0),
+        ]
+    subclass = None
+    superclass = None
+    def __init__(self, href=None, id=None, name=None, version=None, flavor=None):
+        self.href = _cast(None, href)
+        self.id = _cast(None, id)
+        self.name = name
+        self.version = version
+        self.flavor = flavor
+    def factory(*args_, **kwargs_):
+        if troveType.subclass:
+            return troveType.subclass(*args_, **kwargs_)
+        else:
+            return troveType(*args_, **kwargs_)
+    factory = staticmethod(factory)
+    def get_name(self): return self.name
+    def set_name(self, name): self.name = name
+    def get_version(self): return self.version
+    def set_version(self, version): self.version = version
+    def get_flavor(self): return self.flavor
+    def set_flavor(self, flavor): self.flavor = flavor
+    def get_href(self): return self.href
+    def set_href(self, href): self.href = href
+    def get_id(self): return self.id
+    def set_id(self, id): self.id = id
+    def export(self, outfile, level, namespace_='cny:', name_='troveType', namespacedef_=''):
+        showIndent(outfile, level)
+        outfile.write('<%s%s%s' % (namespace_, name_, namespacedef_ and ' ' + namespacedef_ or '', ))
+        self.exportAttributes(outfile, level, namespace_, name_='troveType')
+        if self.hasContent_():
+            outfile.write('>\n')
+            self.exportChildren(outfile, level + 1, namespace_, name_)
+            showIndent(outfile, level)
+            outfile.write('</%s%s>\n' % (namespace_, name_))
+        else:
+            outfile.write('/>\n')
+    def exportAttributes(self, outfile, level, namespace_='cny:', name_='troveType'):
+        if self.href is not None:
+            outfile.write(' href=%s' % (self.format_string(quote_attrib(self.href).encode(ExternalEncoding), input_name='href'), ))
+        if self.id is not None:
+            outfile.write(' id=%s' % (self.format_string(quote_attrib(self.id).encode(ExternalEncoding), input_name='id'), ))
+    def exportChildren(self, outfile, level, namespace_='cny:', name_='troveType'):
+        if self.name is not None:
+            showIndent(outfile, level)
+            outfile.write('<%sname>%s</%sname>\n' % (namespace_, self.format_string(quote_xml(self.name).encode(ExternalEncoding), input_name='name'), namespace_))
+        if self.version:
+            self.version.export(outfile, level, namespace_, name_='version')
+        if self.flavor is not None:
+            showIndent(outfile, level)
+            outfile.write('<%sflavor>%s</%sflavor>\n' % (namespace_, self.format_string(quote_xml(self.flavor).encode(ExternalEncoding), input_name='flavor'), namespace_))
+    def hasContent_(self):
+        if (
+            self.name is not None or
+            self.version is not None or
+            self.flavor is not None
+            ):
+            return True
+        else:
+            return False
+    def exportLiteral(self, outfile, level, name_='troveType'):
+        level += 1
+        self.exportLiteralAttributes(outfile, level, name_)
+        if self.hasContent_():
+            self.exportLiteralChildren(outfile, level, name_)
+    def exportLiteralAttributes(self, outfile, level, name_):
+        if self.href is not None:
+            showIndent(outfile, level)
+            outfile.write('href = "%s",\n' % (self.href,))
+        if self.id is not None:
+            showIndent(outfile, level)
+            outfile.write('id = "%s",\n' % (self.id,))
+    def exportLiteralChildren(self, outfile, level, name_):
+        if self.name is not None:
+            showIndent(outfile, level)
+            outfile.write('name=%s,\n' % quote_python(self.name).encode(ExternalEncoding))
+        if self.version is not None:
+            showIndent(outfile, level)
+            outfile.write('version=model_.versionType(\n')
+            self.version.exportLiteral(outfile, level, name_='version')
+            showIndent(outfile, level)
+            outfile.write('),\n')
+        if self.flavor is not None:
+            showIndent(outfile, level)
+            outfile.write('flavor=%s,\n' % quote_python(self.flavor).encode(ExternalEncoding))
+    def build(self, node_):
+        attrs = node_.attributes
+        self.buildAttributes(attrs)
+        for child_ in node_.childNodes:
+            nodeName_ = child_.nodeName.split(':')[-1]
+            self.buildChildren(child_, nodeName_)
+    def buildAttributes(self, attrs):
+        if attrs.get('href'):
+            self.href = attrs.get('href').value
+        if attrs.get('id'):
+            self.id = attrs.get('id').value
+    def buildChildren(self, child_, nodeName_):
+        if child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'name':
+            name_ = ''
+            for text__content_ in child_.childNodes:
+                name_ += text__content_.nodeValue
+            name_ = ' '.join(name_.split())
+            self.name = name_
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'version':
+            obj_ = versionType.factory()
+            obj_.build(child_)
+            self.set_version(obj_)
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'flavor':
+            flavor_ = ''
+            for text__content_ in child_.childNodes:
+                flavor_ += text__content_.nodeValue
+            flavor_ = ' '.join(flavor_.split())
+            self.flavor = flavor_
+# end class troveType
+
+
+class versionType(GeneratedsSuper):
+    member_data_items_ = [
+        MemberSpec_('full', 'xsd:token', 0),
+        MemberSpec_('label', 'xsd:token', 0),
+        MemberSpec_('ordering', 'xsd:token', 0),
+        MemberSpec_('revision', 'xsd:token', 0),
+        ]
+    subclass = None
+    superclass = None
+    def __init__(self, full=None, label=None, ordering=None, revision=None):
+        self.full = full
+        self.label = label
+        self.ordering = ordering
+        self.revision = revision
+    def factory(*args_, **kwargs_):
+        if versionType.subclass:
+            return versionType.subclass(*args_, **kwargs_)
+        else:
+            return versionType(*args_, **kwargs_)
+    factory = staticmethod(factory)
+    def get_full(self): return self.full
+    def set_full(self, full): self.full = full
+    def get_label(self): return self.label
+    def set_label(self, label): self.label = label
+    def get_ordering(self): return self.ordering
+    def set_ordering(self, ordering): self.ordering = ordering
+    def validate_ordering(self, value):
+        # Validate type ordering, a restriction on xsd:decimal.
+        pass
+    def get_revision(self): return self.revision
+    def set_revision(self, revision): self.revision = revision
+    def export(self, outfile, level, namespace_='cny:', name_='versionType', namespacedef_=''):
+        showIndent(outfile, level)
+        outfile.write('<%s%s%s' % (namespace_, name_, namespacedef_ and ' ' + namespacedef_ or '', ))
+        self.exportAttributes(outfile, level, namespace_, name_='versionType')
+        if self.hasContent_():
+            outfile.write('>\n')
+            self.exportChildren(outfile, level + 1, namespace_, name_)
+            showIndent(outfile, level)
+            outfile.write('</%s%s>\n' % (namespace_, name_))
+        else:
+            outfile.write('/>\n')
+    def exportAttributes(self, outfile, level, namespace_='cny:', name_='versionType'):
+        pass
+    def exportChildren(self, outfile, level, namespace_='cny:', name_='versionType'):
+        if self.full is not None:
+            showIndent(outfile, level)
+            outfile.write('<%sfull>%s</%sfull>\n' % (namespace_, self.format_string(quote_xml(self.full).encode(ExternalEncoding), input_name='full'), namespace_))
+        if self.label is not None:
+            showIndent(outfile, level)
+            outfile.write('<%slabel>%s</%slabel>\n' % (namespace_, self.format_string(quote_xml(self.label).encode(ExternalEncoding), input_name='label'), namespace_))
+        if self.ordering is not None:
+            showIndent(outfile, level)
+            outfile.write('<%sordering>%s</%sordering>\n' % (namespace_, self.format_string(quote_xml(self.ordering).encode(ExternalEncoding), input_name='ordering'), namespace_))
+        if self.revision is not None:
+            showIndent(outfile, level)
+            outfile.write('<%srevision>%s</%srevision>\n' % (namespace_, self.format_string(quote_xml(self.revision).encode(ExternalEncoding), input_name='revision'), namespace_))
+    def hasContent_(self):
+        if (
+            self.full is not None or
+            self.label is not None or
+            self.ordering is not None or
+            self.revision is not None
+            ):
+            return True
+        else:
+            return False
+    def exportLiteral(self, outfile, level, name_='versionType'):
+        level += 1
+        self.exportLiteralAttributes(outfile, level, name_)
+        if self.hasContent_():
+            self.exportLiteralChildren(outfile, level, name_)
+    def exportLiteralAttributes(self, outfile, level, name_):
+        pass
+    def exportLiteralChildren(self, outfile, level, name_):
+        if self.full is not None:
+            showIndent(outfile, level)
+            outfile.write('full=%s,\n' % quote_python(self.full).encode(ExternalEncoding))
+        if self.label is not None:
+            showIndent(outfile, level)
+            outfile.write('label=%s,\n' % quote_python(self.label).encode(ExternalEncoding))
+        if self.ordering is not None:
+            showIndent(outfile, level)
+            outfile.write('ordering=%s,\n' % quote_python(self.ordering).encode(ExternalEncoding))
+        if self.revision is not None:
+            showIndent(outfile, level)
+            outfile.write('revision=%s,\n' % quote_python(self.revision).encode(ExternalEncoding))
+    def build(self, node_):
+        attrs = node_.attributes
+        self.buildAttributes(attrs)
+        for child_ in node_.childNodes:
+            nodeName_ = child_.nodeName.split(':')[-1]
+            self.buildChildren(child_, nodeName_)
+    def buildAttributes(self, attrs):
+        pass
+    def buildChildren(self, child_, nodeName_):
+        if child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'full':
+            full_ = ''
+            for text__content_ in child_.childNodes:
+                full_ += text__content_.nodeValue
+            full_ = ' '.join(full_.split())
+            self.full = full_
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'label':
+            label_ = ''
+            for text__content_ in child_.childNodes:
+                label_ += text__content_.nodeValue
+            label_ = ' '.join(label_.split())
+            self.label = label_
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'ordering':
+            ordering_ = ''
+            for text__content_ in child_.childNodes:
+                ordering_ += text__content_.nodeValue
+            ordering_ = ' '.join(ordering_.split())
+            self.ordering = ordering_
+            self.validate_ordering(self.ordering)    # validate type ordering
+        elif child_.nodeType == Node.ELEMENT_NODE and \
+            nodeName_ == 'revision':
+            revision_ = ''
+            for text__content_ in child_.childNodes:
+                revision_ += text__content_.nodeValue
+            revision_ = ' '.join(revision_.split())
+            self.revision = revision_
+# end class versionType
+
+
 class troveChangeType(GeneratedsSuper):
     member_data_items_ = [
         MemberSpec_('href', 'xsd:string', 0),
@@ -497,28 +750,20 @@ class troveUnaryOperationType(GeneratedsSuper):
 
 class troveSpecType(GeneratedsSuper):
     member_data_items_ = [
-        MemberSpec_('name', 'xsd:token', 0),
-        MemberSpec_('version', 'xsd:string', 0),
-        MemberSpec_('flavor', 'xsd:string', 0),
+        MemberSpec_('trove', 'troveType', 0),
         ]
     subclass = None
     superclass = None
-    def __init__(self, name=None, version=None, flavor=None):
-        self.name = name
-        self.version = version
-        self.flavor = flavor
+    def __init__(self, trove=None):
+        self.trove = trove
     def factory(*args_, **kwargs_):
         if troveSpecType.subclass:
             return troveSpecType.subclass(*args_, **kwargs_)
         else:
             return troveSpecType(*args_, **kwargs_)
     factory = staticmethod(factory)
-    def get_name(self): return self.name
-    def set_name(self, name): self.name = name
-    def get_version(self): return self.version
-    def set_version(self, version): self.version = version
-    def get_flavor(self): return self.flavor
-    def set_flavor(self, flavor): self.flavor = flavor
+    def get_trove(self): return self.trove
+    def set_trove(self, trove): self.trove = trove
     def export(self, outfile, level, namespace_='cny:', name_='troveSpecType', namespacedef_=''):
         showIndent(outfile, level)
         outfile.write('<%s%s%s' % (namespace_, name_, namespacedef_ and ' ' + namespacedef_ or '', ))
@@ -533,20 +778,11 @@ class troveSpecType(GeneratedsSuper):
     def exportAttributes(self, outfile, level, namespace_='cny:', name_='troveSpecType'):
         pass
     def exportChildren(self, outfile, level, namespace_='cny:', name_='troveSpecType'):
-        if self.name is not None:
-            showIndent(outfile, level)
-            outfile.write('<%sname>%s</%sname>\n' % (namespace_, self.format_string(quote_xml(self.name).encode(ExternalEncoding), input_name='name'), namespace_))
-        if self.version is not None:
-            showIndent(outfile, level)
-            outfile.write('<%sversion>%s</%sversion>\n' % (namespace_, self.format_string(quote_xml(self.version).encode(ExternalEncoding), input_name='version'), namespace_))
-        if self.flavor is not None:
-            showIndent(outfile, level)
-            outfile.write('<%sflavor>%s</%sflavor>\n' % (namespace_, self.format_string(quote_xml(self.flavor).encode(ExternalEncoding), input_name='flavor'), namespace_))
+        if self.trove:
+            self.trove.export(outfile, level, namespace_, name_='trove', )
     def hasContent_(self):
         if (
-            self.name is not None or
-            self.version is not None or
-            self.flavor is not None
+            self.trove is not None
             ):
             return True
         else:
@@ -559,15 +795,12 @@ class troveSpecType(GeneratedsSuper):
     def exportLiteralAttributes(self, outfile, level, name_):
         pass
     def exportLiteralChildren(self, outfile, level, name_):
-        if self.name is not None:
+        if self.trove is not None:
             showIndent(outfile, level)
-            outfile.write('name=%s,\n' % quote_python(self.name).encode(ExternalEncoding))
-        if self.version is not None:
+            outfile.write('trove=model_.troveType(\n')
+            self.trove.exportLiteral(outfile, level, name_='trove')
             showIndent(outfile, level)
-            outfile.write('version=%s,\n' % quote_python(self.version).encode(ExternalEncoding))
-        if self.flavor is not None:
-            showIndent(outfile, level)
-            outfile.write('flavor=%s,\n' % quote_python(self.flavor).encode(ExternalEncoding))
+            outfile.write('),\n')
     def build(self, node_):
         attrs = node_.attributes
         self.buildAttributes(attrs)
@@ -578,24 +811,10 @@ class troveSpecType(GeneratedsSuper):
         pass
     def buildChildren(self, child_, nodeName_):
         if child_.nodeType == Node.ELEMENT_NODE and \
-            nodeName_ == 'name':
-            name_ = ''
-            for text__content_ in child_.childNodes:
-                name_ += text__content_.nodeValue
-            name_ = ' '.join(name_.split())
-            self.name = name_
-        elif child_.nodeType == Node.ELEMENT_NODE and \
-            nodeName_ == 'version':
-            version_ = ''
-            for text__content_ in child_.childNodes:
-                version_ += text__content_.nodeValue
-            self.version = version_
-        elif child_.nodeType == Node.ELEMENT_NODE and \
-            nodeName_ == 'flavor':
-            flavor_ = ''
-            for text__content_ in child_.childNodes:
-                flavor_ += text__content_.nodeValue
-            self.flavor = flavor_
+            nodeName_ == 'trove':
+            obj_ = troveType.factory()
+            obj_.build(child_)
+            self.set_trove(obj_)
 # end class troveSpecType
 
 
@@ -942,12 +1161,12 @@ def usage():
 def parse(inFileName):
     doc = minidom.parse(inFileName)
     rootNode = doc.documentElement
-    rootObj = troveChangeType.factory()
+    rootObj = troveType.factory()
     rootObj.build(rootNode)
     # Enable Python to collect the space used by the DOM.
     doc = None
 ##     sys.stdout.write('<?xml version="1.0" ?>\n')
-##     rootObj.export(sys.stdout, 0, name_="troveChange", 
+##     rootObj.export(sys.stdout, 0, name_="trove", 
 ##         namespacedef_='')
     return rootObj
 
@@ -955,12 +1174,12 @@ def parse(inFileName):
 def parseString(inString):
     doc = minidom.parseString(inString)
     rootNode = doc.documentElement
-    rootObj = troveChangeType.factory()
+    rootObj = troveType.factory()
     rootObj.build(rootNode)
     # Enable Python to collect the space used by the DOM.
     doc = None
 ##     sys.stdout.write('<?xml version="1.0" ?>\n')
-##     rootObj.export(sys.stdout, 0, name_="troveChange",
+##     rootObj.export(sys.stdout, 0, name_="trove",
 ##         namespacedef_='')
     return rootObj
 
@@ -968,14 +1187,14 @@ def parseString(inString):
 def parseLiteral(inFileName):
     doc = minidom.parse(inFileName)
     rootNode = doc.documentElement
-    rootObj = troveChangeType.factory()
+    rootObj = troveType.factory()
     rootObj.build(rootNode)
     # Enable Python to collect the space used by the DOM.
     doc = None
 ##     sys.stdout.write('#from generateds_trove_diff import *\n\n')
 ##     sys.stdout.write('import generateds_trove_diff as model_\n\n')
-##     sys.stdout.write('rootObj = model_.troveChange(\n')
-##     rootObj.exportLiteral(sys.stdout, 0, name_="troveChange")
+##     sys.stdout.write('rootObj = model_.trove(\n')
+##     rootObj.exportLiteral(sys.stdout, 0, name_="trove")
 ##     sys.stdout.write(')\n')
     return rootObj
 

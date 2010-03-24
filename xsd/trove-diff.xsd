@@ -7,6 +7,9 @@ targetNamespace="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
     xmlns:cny="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
     xmlns="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd">
 
+  <xsd:import namespace="http://www.rpath.com/permanent/conary/trove-1.0.xsd"
+    schemaLocation="trove.xsd" />
+
   <xsd:element name="troveChange" type="cny:troveChangeType" />
 
   <xsd:complexType name="troveChangeType">
@@ -36,9 +39,7 @@ targetNamespace="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
 
   <xsd:complexType name="troveSpecType">
     <xsd:sequence>
-      <xsd:element name="name" type="xsd:token" minOccurs="1" maxOccurs="1" />
-      <xsd:element name="version" type="xsd:string" minOccurs="1" maxOccurs="1" />
-      <xsd:element name="flavor" type="xsd:string" minOccurs="1" maxOccurs="1" />
+      <xsd:element name="trove" type="cny:troveType" minOccurs="1" maxOccurs="1" />
     </xsd:sequence>
   </xsd:complexType>
 

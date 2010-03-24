@@ -33,6 +33,7 @@ rule-%:
                 --no-versions \
                 --member-specs=list \
                 --external-encoding=utf-8 \
+                --search-path=$(XSD_DIR) \
                 -o generateds_$(subst -,_,$(patsubst rule-%,%,$@)).py \
                 $(XSD_DIR)/$(patsubst rule-%,%,$@).xsd
 
