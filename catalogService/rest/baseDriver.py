@@ -241,8 +241,8 @@ class BaseDriver(object):
     def getAllInstances(self):
         return self.getInstances(None)
 
-    def _addSoftwareVersionInfo(self, instance):
-        self._updateInstalledSoftwareList(instance)
+    def _addSoftwareVersionInfo(self, instance, force=False):
+        self._updateInstalledSoftwareList(instance, force)
         self._getAvailableUpdates(instance)
         self._setVersionAndStage(instance)
         self._nodeFactory.refreshInstance(instance)
@@ -284,7 +284,7 @@ class BaseDriver(object):
     def _quoteSpec(self, spec):
         return urllib.quote(urllib.quote(spec, safe = ''))
 
-    def _updateInstalledSoftwareList(self, instance):
+    def _updateInstalledSoftwareList(self, instance, force):
         state = instance.getState()
         # XXX we really should normalize the states across drivers
         if not state or state.lower() not in ['running', 'poweredon']:
@@ -321,7 +321,7 @@ class BaseDriver(object):
             instance.setSoftwareVersionJobId(
                 self._nodeFactory.getJobIdUrl(jobId, 'appliance-version-update'))
 
-        if nextCheck and time.time() < nextCheck:
+        if nextCheck and time.time() < nextCheck and not force:
             return
 
         if jobStatus == 'Running':
@@ -431,20 +431,21 @@ class BaseDriver(object):
         return self.db.productMgr.reposMgr.getUserClient()
 
     def _getAvailableUpdates(self, instance):
+        # need to access this property as it sets user information and sets up
+        # the instance store under the hood.
         client = self.client
+
         instanceId = instance.getInstanceId()
         softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
-    
-        if not softwareVersions:
-            return
-
+        cclient = self._getConaryClient()
         content = []
+
         for trvName, trvVersion, trvFlavor in softwareVersions:
             fullSpec = self._fullSpec((trvName, trvVersion, trvFlavor))
             sanitizedFullSpec = self._quoteSpec(fullSpec)
-            cclient = self._getConaryClient()
 
-            # name and version are str's, but flavor is a conary.deps.deps.Flavor.
+            # trvName and trvVersion are str's, trvFlavor is a
+            # conary.deps.deps.Flavor.
             label = trvVersion.trailingLabel()
             revision = trvVersion.trailingRevision()
 
@@ -519,8 +520,13 @@ class BaseDriver(object):
                 fromFlavor = str(trvFlavor))
             content.append(update)
 
+            # Can only have one repositoryUrl set on the instance, so set it
+            # if this is a top level group.
+            if self._isTopLevelGroup([trvName,]):
+                instance.setRepositoryUrl(
+                    self._getRepositoryUrl(repoVersion.getHost()))
+
         instance.setAvailableUpdate(content)
-        instance.setRepositoryUrl(self._getRepositoryUrl(repoVersion.getHost()))
 
         return instance
 
@@ -593,11 +599,11 @@ class BaseDriver(object):
         s.close()
         return True
 
-    def getInstance(self, instanceId):
+    def getInstance(self, instanceId, force=False):
         if self.client is None:
             raise errors.MissingCredentials("Target credentials not set for user")
         instance = self.drvGetInstance(instanceId)
-        self._addSoftwareVersionInfo(instance)
+        self._addSoftwareVersionInfo(instance, force)
         return instance
 
     def drvGetInstance(self, instanceId):
