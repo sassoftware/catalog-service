@@ -56,17 +56,9 @@ class TroveDiff(object):
 
     def computeDiff(self):
         troveChange = trove_change.TroveChange()
-        troveChange.set_name(self.trvName)
-        if self.trvOldVersion != self.trvNewVersion:
-            versionChange = trove_change.simpleChangeType.factory()
-            versionChange.set_from(self.trvOldVersion.freeze())
-            versionChange.set_to(self.trvNewVersion.freeze())
-            troveChange.set_versionChange(versionChange)
-        if self.trvOldFlavor != self.trvNewFlavor:
-            flavorChange = trove_change.simpleChangeType.factory()
-            flavorChange.set_from(str(self.trvOldFlavor))
-            flavorChange.set_to(str(self.trvNewFlavor))
-            troveChange.set_flavorChange(flavorChange)
+        troveChange.setChanges(self.trvName,
+            (self.trvOldVersion, self.trvOldFlavor),
+            (self.trvNewVersion, self.trvNewFlavor))
         if troveChange.get_versionChange() is None and troveChange.get_flavorChange() is None:
             # No need to work harder, we're diffing against ourselves
             return troveChange
@@ -85,19 +77,11 @@ class TroveDiff(object):
         for (trvName, oldVF, newVF, _) in troveDiff:
             if oldVF[0] is None:
                 # Added trove
-                tspec = self._newTroveSpec(trvName, newVF[0], newVF[1])
-                troveChange.add_troveAddition(tspec)
+                troveChange.newTroveAddition(trvName, newVF[0], newVF[1])
                 continue
             if newVF[0] is None:
                 # Erased trove
-                tspec =  self._newTroveSpec(trvName, oldVF[0], oldVF[1])
-                troveChange.add_troveRemoval(tspec)
+                troveChange.newTroveRemoval(trvName, oldVF[0], oldVF[1])
                 continue
+            troveChange.newTroveChange(trvName, oldVF, newVF)
         return troveChange
-
-    def _newTroveSpec(self, name, version, flavor):
-        tspec = trove_change.troveSpecType.factory()
-        tspec.set_name(name)
-        tspec.set_version(version.freeze())
-        tspec.set_flavor(str(flavor))
-        return tspec
