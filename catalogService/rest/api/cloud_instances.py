@@ -58,10 +58,16 @@ class AvailableUpdatesController(BaseCloudController):
 
     urls = dict(troveChanges=trove_change.TroveChangesController)
 
+class InstancesForceUpdateController(BaseCloudController):
+    def index(self, request, cloudName, instanceId):
+        insts = self.driver(request, cloudName).getInstance(instanceId, True)
+        return XmlResponse(insts)
+
 class InstancesController(BaseCloudController):
     urls = dict(updates=InstancesUpdateController,
                 securityGroups=SecurityGroupsController,
-                availableUpdates=AvailableUpdatesController,)
+                availableUpdates=AvailableUpdatesController,
+                forceUpdate=InstancesForceUpdateController,)
 
     modelName = 'instanceId'
     def index(self, request, cloudName):
