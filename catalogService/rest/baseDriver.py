@@ -342,9 +342,6 @@ class BaseDriver(object):
         jobStatus = 'Running'
         instance.setSoftwareVersionJobStatus(jobStatus)
 
-    class ProbeHostError(Exception):
-        pass
-
     def _troveFactoryFromTroveTuple(self, (name, version, flavor)):
         return self._troveModelFactory(name, version, flavor)
 
@@ -392,6 +389,10 @@ class BaseDriver(object):
                     return version, stage
 
         return None, None
+
+    def _getRepositoryUrl(self, host):
+        schemeUrl = self._nodeFactory.baseUrl.strip('/catalog')
+        return '/'.join([schemeUrl, 'repos', host, 'api'])
 
     def _buildUrl(self, model):
         absUrl = model.get_absolute_url()
@@ -519,6 +520,7 @@ class BaseDriver(object):
             content.append(update)
 
         instance.setAvailableUpdate(content)
+        instance.setRepositoryUrl(self._getRepositoryUrl(repoVersion.getHost()))
 
         return instance
 
@@ -1228,6 +1230,8 @@ class BaseDriver(object):
         hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
         return cls._uuid(hex)
 
+    class ProbeHostError(Exception):
+        pass
 
 class CookieClient(object):
     def __init__(self, server, username, password):
