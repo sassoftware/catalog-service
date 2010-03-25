@@ -166,7 +166,8 @@ class BaseInstance(xmlNode.BaseNode):
                   'softwareVersionNextCheck',
                   'version',
                   'stage',
-                  'repositoryUrl'
+                  'repositoryUrl',
+                  'forceUpdateUrl',
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
