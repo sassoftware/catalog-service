@@ -6,6 +6,7 @@ import urllib
 
 from conary.deps import deps
 from conary import conaryclient
+from conary import trove
 from conary import versions
 
 from catalogService.rest.models import trove_change
@@ -113,7 +114,9 @@ class TroveDiff(object):
             self.trvOldFlavor)
         newTrvCs = cs.getNewTroveVersion(self.trvName, self.trvNewVersion,
             self.trvNewFlavor)
-        trvCs, fileDiff, troveDiff = newTrvCs.diff(oldTrvCs)
+        oldTrv = trove.Trove(oldTrvCs)
+        newTrv = trove.Trove(newTrvCs)
+        trvCs, fileDiff, troveDiff = newTrv.diff(oldTrv)
         for (trvName, oldVF, newVF, _) in troveDiff:
             if oldVF[0] is None:
                 # Added trove
