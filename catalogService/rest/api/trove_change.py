@@ -92,7 +92,7 @@ class TroveDiff(object):
         if flavorChange is not None:
             fromFlavorStr = flavorChange.get_from()
             if fromFlavorStr:
-                fromFlavor = deps.parseFlavor(fromFlavorStr)
+                fromFlavor = deps.parseFlavor(str(fromFlavorStr))
         self.trvOldFlavor = fromFlavor
 
     def computeDiff(self):
