@@ -142,7 +142,6 @@ class VMwareClient(baseDriver.BaseDriver):
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
-        self._instanceStore = None
         self._virtualMachines = None
 
     @classmethod
