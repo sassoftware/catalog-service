@@ -242,6 +242,7 @@ class BaseDriver(object):
         return self.getInstances(None)
 
     def _addSoftwareVersionInfo(self, instance, force=False):
+        self._updateInventory(instance)
         self._updateInstalledSoftwareList(instance, force)
         self._getAvailableUpdates(instance)
         self._setVersionAndStage(instance)
@@ -272,6 +273,10 @@ class BaseDriver(object):
             # This was for the change from VersionToString to ThawVersion
             return None
         return (name, version, flavor)
+
+    def _updateInventory(self, instance):
+        self.db.systemMgr.addSystem(instance.instanceId.getText(),
+            instance.cloudName.getText(), instance.cloudType.getText())
 
     def _fullSpec(self, nvf):
         flavor = nvf[2]
