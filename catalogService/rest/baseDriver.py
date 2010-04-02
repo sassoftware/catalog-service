@@ -34,6 +34,7 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists
 from mint.rest import errors as mint_rest_errors
+from mint.django_rest.rbuilder.inventory import systemdbmgr
 
 from rpath_job import api1 as rpath_job
 
@@ -94,6 +95,8 @@ class BaseDriver(object):
         #    self._instanceLaunchJobStore = None
         self._x509Cert = None
         self._x509Key = None
+
+        self.systemMgr = systemdbmgr.SystemDBManager(cfg)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -275,8 +278,8 @@ class BaseDriver(object):
         return (name, version, flavor)
 
     def _updateInventory(self, instance):
-        self.db.systemMgr.addSystem(instance.instanceId.getText(),
-            instance.cloudName.getText(), instance.cloudType.getText())
+        self.systemMgr.registerSystem(instance.instanceId.getText(),
+            instance.cloudType.getText(), instance.cloudName.getText())
 
     def _fullSpec(self, nvf):
         flavor = nvf[2]
