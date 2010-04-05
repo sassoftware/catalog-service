@@ -245,7 +245,6 @@ class BaseDriver(object):
         return self.getInstances(None)
 
     def _addSoftwareVersionInfo(self, instance, force=False):
-        self._updateInventory(instance)
         self._updateInstalledSoftwareList(instance, force)
         self._getAvailableUpdates(instance)
         self._setVersionAndStage(instance)
@@ -277,9 +276,10 @@ class BaseDriver(object):
             return None
         return (name, version, flavor)
 
-    def _updateInventory(self, instance):
-        self.systemMgr.registerSystem(instance.instanceId.getText(),
-            instance.cloudType.getText(), instance.cloudName.getText())
+    def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
+                         x509Key):
+        self.systemMgr.launchSystem(instanceId, cloudType, cloudName)
+        self.systemMgr.setSystemSSLInfo(instanceId, x509Cert, x509Key)
 
     def _fullSpec(self, nvf):
         flavor = nvf[2]
@@ -776,7 +776,10 @@ class BaseDriver(object):
                     realInstanceId = [ realInstanceId ]
                 x509Cert, x509Key = self.getWbemX509()
                 for instanceId in realInstanceId:
-                    self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
+                    x509CertPath, x509KeyPath = self._instanceStore.storeX509(
+                                                    instanceId, x509Cert, x509Key)
+                    self._updateInventory(instanceId, job.cloudType,
+                        job.cloudName, x509CertPath, x509KeyPath)
                 job.result = '\n'.join(realInstanceId)
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
