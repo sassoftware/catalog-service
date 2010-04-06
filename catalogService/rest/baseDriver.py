@@ -34,6 +34,7 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists
 from mint.rest import errors as mint_rest_errors
+from mint.django_rest.rbuilder.inventory import systemdbmgr
 
 from rpath_job import api1 as rpath_job
 
@@ -94,6 +95,8 @@ class BaseDriver(object):
         #    self._instanceLaunchJobStore = None
         self._x509Cert = None
         self._x509Key = None
+
+        self.systemMgr = systemdbmgr.SystemDBManager(cfg)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -256,7 +259,7 @@ class BaseDriver(object):
         return instances
 
     def _getSoftwareVersionsForInstance(self, instanceId):
-        softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
+        softwareVersions = self.systemMgr.getSoftwareVersionsForInstanceId(instanceId)
         if not softwareVersions:
             return []
         ret = [ self._getNVF(x) for x in softwareVersions.split('\n') ]
@@ -272,6 +275,11 @@ class BaseDriver(object):
             # This was for the change from VersionToString to ThawVersion
             return None
         return (name, version, flavor)
+
+    def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
+                         x509Key):
+        self.systemMgr.launchSystem(instanceId, cloudType, cloudName)
+        self.systemMgr.setSystemSSLInfo(instanceId, x509Cert, x509Key)
 
     def _fullSpec(self, nvf):
         flavor = nvf[2]
@@ -328,7 +336,7 @@ class BaseDriver(object):
             # XXX Verify if process still exists
             return
 
-        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
         if not (os.path.exists(keyFile) and os.path.exists(certFile)):
             return
         # Do we have an IP address/DNS name for this instance?
@@ -568,7 +576,7 @@ class BaseDriver(object):
             job.status = job.STATUS_FAILED
             return
         job.addLog(_le("Successfully probed %s:%s" % (ipAddr, port)))
-        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
         self.log_debug("Querying %s using cert %s, key %s", ipAddr,
                        certFile, keyFile)
 
@@ -585,7 +593,7 @@ class BaseDriver(object):
             return
         content = '\n'.join(installedGroups)
         job.result = content
-        self._instanceStore.setSoftwareVersion(instanceId, content)
+        self.systemMgr.setSoftwareVersionsForInstanceId(instanceId, content)
         job.status = job.STATUS_COMPLETED
 
     def _probeHost(self, host, port):
@@ -768,7 +776,10 @@ class BaseDriver(object):
                     realInstanceId = [ realInstanceId ]
                 x509Cert, x509Key = self.getWbemX509()
                 for instanceId in realInstanceId:
-                    self._instanceStore.storeX509(instanceId, x509Cert, x509Key)
+                    x509CertPath, x509KeyPath = self._instanceStore.storeX509(
+                                                    instanceId, x509Cert, x509Key)
+                    self._updateInventory(instanceId, job.cloudType,
+                        job.cloudName, x509CertPath, x509KeyPath)
                 job.result = '\n'.join(realInstanceId)
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
