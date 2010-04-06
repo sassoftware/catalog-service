@@ -259,7 +259,7 @@ class BaseDriver(object):
         return instances
 
     def _getSoftwareVersionsForInstance(self, instanceId):
-        softwareVersions = self._instanceStore.getSoftwareVersion(instanceId)
+        softwareVersions = self.systemMgr.getSoftwareVersionsForInstanceId(instanceId)
         if not softwareVersions:
             return []
         ret = [ self._getNVF(x) for x in softwareVersions.split('\n') ]
@@ -336,7 +336,7 @@ class BaseDriver(object):
             # XXX Verify if process still exists
             return
 
-        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
         if not (os.path.exists(keyFile) and os.path.exists(certFile)):
             return
         # Do we have an IP address/DNS name for this instance?
@@ -576,7 +576,7 @@ class BaseDriver(object):
             job.status = job.STATUS_FAILED
             return
         job.addLog(_le("Successfully probed %s:%s" % (ipAddr, port)))
-        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
+        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
         self.log_debug("Querying %s using cert %s, key %s", ipAddr,
                        certFile, keyFile)
 
@@ -593,7 +593,7 @@ class BaseDriver(object):
             return
         content = '\n'.join(installedGroups)
         job.result = content
-        self._instanceStore.setSoftwareVersion(instanceId, content)
+        self.systemMgr.setSoftwareVersionsForInstanceId(instanceId, content)
         job.status = job.STATUS_COMPLETED
 
     def _probeHost(self, host, port):
