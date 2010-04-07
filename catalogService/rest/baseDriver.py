@@ -593,7 +593,8 @@ class BaseDriver(object):
             return
         content = '\n'.join(installedGroups)
         job.result = content
-        self.systemMgr.setSoftwareVersionsForInstanceId(instanceId, content)
+        versions = [ self._getNVF(x) for x in content.split('\n') ]
+        self.systemMgr.setSoftwareVersionForInstanceId(instanceId, versions)
         job.status = job.STATUS_COMPLETED
 
     def _probeHost(self, host, port):
