@@ -453,6 +453,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         """
         returns all templates in the inventory
         """
+        useTemplate = not self.client.isESX()
+        if not useTemplate:
+            # ESX does not support templates, so don't bother to search
+            # for them
+            return []
         cloudAlias = self.getCloudAlias()
         instMap = self.getVirtualMachines()
         imageList = images.BaseImages()
@@ -481,6 +486,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 longName = longName,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
+            # This is a bit nasty, but we need the opaque ID later when
+            # launching, so we clone the proper image (instead of the one with
+            # the image ID possibly coming from the rbuilder)
+            image.opaqueId = opaqueId
             imageList.append(image)
         return imageList
 
@@ -621,9 +630,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                    resourcePool, vmName, uuid)
             if useTemplate:
                 self.client.markAsTemplate(vm=vm)
+        else:
+            # Since we're bypassing _getTemplatesFromInventory, none of the
+            # images should be marked as deployed for ESX targets
+            assert useTemplate
+            vm = getattr(image, 'opaqueId')
 
         if useTemplate:
-            # mark the VM as a template, clone
             job.addLog(self.LogEntry('Cloning template'))
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
