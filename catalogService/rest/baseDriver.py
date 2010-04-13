@@ -96,7 +96,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
 
-        self.systemMgr = systemdbmgr.SystemDBManager(cfg)
+        self.systemMgr = systemdbmgr.SystemDBManager(cfg, userId)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -699,7 +699,7 @@ class BaseDriver(object):
     def _checkAuth(self):
         """rBuilder authentication"""
         if not self.db.auth.auth.authorized:
-            raise PermissionDenied
+            raise errors.PermissionDenied
 
     def getUserCredentials(self):
         cred = self.credentials
