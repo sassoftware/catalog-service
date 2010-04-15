@@ -25,18 +25,16 @@ from catalogService.rest.models import credentials
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-from catalogService.rest.models import job_models
+from catalogService.rest.models import jobs as jobmodels
 from catalogService.rest.models import keypairs
 from catalogService.rest.models import securityGroups
 from catalogService.utils import cimupdater
 from catalogService.utils import timeutils
 from catalogService.utils import x509
 
-from mint.mint_error import TargetExists
+from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
 from mint.django_rest.rbuilder.inventory import systemdbmgr
-
-from rpath_job import api1 as rpath_job
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -49,7 +47,6 @@ class BaseDriver(object):
     CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
-    InstanceLaunchJob = job_models.Job
     InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
     KeyPair          = keypairs.BaseKeyPair
@@ -67,7 +64,7 @@ class BaseDriver(object):
 
     instanceStorageClass = storage.DiskStorage
 
-    LogEntry = rpath_job.LogEntry
+    HistoryEntry = jobs.HistoryEntry
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None):
@@ -84,15 +81,8 @@ class BaseDriver(object):
         self._nodeFactory.userId = userId
         self._logger = None
         self._instanceStore = None
-        spJobSuffix = 'jobs'
-        spath = os.path.join(self._cfg.storagePath, spJobSuffix)
-        self._jobsStore = jobs.ApplianceVersionUpdateJobStore(spath)
-        self._instanceLaunchJobStore = jobs.LaunchJobStore(spath)
-        #if cloudName:
-        #    spath = os.path.join(self._cfg.storagePath, spJobSuffix,
-        #        self.cloudType, self._sanitizeKey(cloudName))
-        #else:
-        #    self._instanceLaunchJobStore = None
+        self._jobsStore = jobs.ApplianceVersionUpdateJobSqlStore(self.db)
+        self._instanceLaunchJobStore = jobs.LaunchJobSqlStore(self.db)
         self._x509Cert = None
         self._x509Key = None
 
@@ -167,7 +157,6 @@ class BaseDriver(object):
             credentialsFieldsFactory = self.CredentialsFields,
             imageFactory = self.Image,
             instanceFactory = self.Instance,
-            instanceLaunchJobFactory = self.InstanceLaunchJob,
             instanceUpdateStatusFactory = self.InstanceUpdateStatus,
             instanceTypeFactory = self.InstanceType,
             keyPairFactory = self.KeyPair,
@@ -327,7 +316,7 @@ class BaseDriver(object):
         instance.setSoftwareVersionJobStatus(jobStatus)
         if jobId:
             instance.setSoftwareVersionJobId(
-                self._nodeFactory.getJobIdUrl(jobId, 'appliance-version-update'))
+                self._nodeFactory.getJobIdUrl(jobId, 'software-version-refresh'))
 
         if nextCheck and time.time() < nextCheck and not force:
             return
@@ -343,10 +332,12 @@ class BaseDriver(object):
         ipAddr = instance.getPublicDnsName()
         if not ipAddr:
             return
-        job = self._jobsStore.create()
-        self.backgroundRun(self.runUpdateSoftwareVersion, instance, job)
+        job = self._jobsStore.create(cloudType = self.cloudType,
+            cloudName = self.cloudName, instanceId = instanceId)
+        self._jobsStore.commit()
+        self.backgroundRun(self.runUpdateSoftwareVersion, instance, job.id)
         instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id,
-                    'appliance-version-update'))
+                    'software-version-refresh'))
         jobStatus = 'Running'
         instance.setSoftwareVersionJobStatus(jobStatus)
 
@@ -538,7 +529,10 @@ class BaseDriver(object):
 
         return instance
 
-    def runUpdateSoftwareVersion(self, instance, job):
+    def runUpdateSoftwareVersion(self, instance, jobId):
+        self.db.db.reopen_fork()
+
+        job = self._jobsStore.get(jobId, commitAfterChange = True)
 
         # RBL-5979 fix race condition. just because the instance is in the
         # 'running' state, doesn't mean sfcb is started.  If the instance was
@@ -547,8 +541,9 @@ class BaseDriver(object):
             time.sleep(5)
 
         instanceId = instance.getInstanceId()
-        job.pid = os.getpid()
-        job.status = job.STATUS_RUNNING
+
+        job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
+        job.addHistoryEntry('Running')
 
         self._instanceStore.setSoftwareVersionJobId(instanceId, job.id)
         self._instanceStore.setSoftwareVersionJobStatus(instanceId,
@@ -565,17 +560,16 @@ class BaseDriver(object):
             self._instanceStore.setSoftwareVersionNextCheck(instanceId)
 
     def runUpdateSoftwareVersionJob(self, instanceId, instance, job):
-        _le = self.LogEntry
         ipAddr = instance.getPublicDnsName()
         port = 5989
         self.log_debug("software version: probing %s:%s" % (ipAddr, port))
         try:
             self._probeHost(ipAddr, port)
         except self.ProbeHostError, e:
-            job.addLog(_le("Error contacting system %s: %s" % (ipAddr, str(e))))
+            job.addHistoryEntry("Error contacting system %s: %s" % (ipAddr, str(e)))
             job.status = job.STATUS_FAILED
             return
-        job.addLog(_le("Successfully probed %s:%s" % (ipAddr, port)))
+        job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
         certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
         self.log_debug("Querying %s using cert %s, key %s", ipAddr,
                        certFile, keyFile)
@@ -587,14 +581,13 @@ class BaseDriver(object):
             updater = cimupdater.CIMUpdater(wbemUrl, x509Dict)
             installedGroups = updater.getInstalledGroups()
         except cimupdater.WBEMException, e:
-            job.addLog(_le("Error retrieving software version for %s: %s" %
-                (ipAddr, str(e))))
+            job.addHistoryEntry("Error retrieving software version for %s: %s" %
+                (ipAddr, str(e)))
             job.status = job.STATUS_FAILED
             return
-        content = '\n'.join(installedGroups)
-        job.result = content
-        versions = [ self._getNVF(x) for x in content.split('\n') ]
-        self.systemMgr.setSoftwareVersionForInstanceId(instanceId, versions)
+        job.addResults(installedGroups)
+        self.systemMgr.setSoftwareVersionForInstanceId(instanceId,
+            '\n'.join(installedGroups))
         job.status = job.STATUS_COMPLETED
 
     def _probeHost(self, host, port):
@@ -761,14 +754,17 @@ class BaseDriver(object):
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
     def launchInstanceInBackground(self, jobId, image, auth, **params):
-        job = self._instanceLaunchJobStore.get(jobId)
-        job.pid = os.getpid()
-        job.status = job.STATUS_RUNNING
+        # We need to reopen the db, so we don't share a cursor with the parent
+        # process
+        self.db.db.reopen_fork()
+        job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
+        job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
+        job.addHistoryEntry('Running')
         try:
             try:
                 realInstanceId = self.launchInstanceProcess(job, image, auth, **params)
                 if not realInstanceId:
-                    job.addLog(self.LogEntry('Launch failed, no instance was created'))
+                    job.addHistoryEntry('Launch failed, no instance was created')
                     job.status = job.STATUS_FAILED
                     return
                 # Some drivers (like ec2) may have the ability to launch
@@ -781,20 +777,23 @@ class BaseDriver(object):
                                                     instanceId, x509Cert, x509Key)
                     self._updateInventory(instanceId, job.cloudType,
                         job.cloudName, x509CertPath, x509KeyPath)
-                job.result = '\n'.join(realInstanceId)
+                job.addResults(realInstanceId)
+                job.addHistoryEntry('Done')
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
                 err = errors.CatalogErrorResponse(e.status,
                     message = e.msg, tracebackData = e.tracebackData,
                     productCodeData = e.productCodeData)
-                job.status = job.STATUS_FAILED
-                job.errorResponse = err.response[0]
+                job.addHistoryEntry(e.msg)
+                job.setFields([('errorResponse', err.response[0]),
+                    ('status', job.STATUS_FAILED)])
             except Exception, e:
-                job.addLog(self.LogEntry(str(e)))
+                job.addHistoryEntry(str(e))
                 job.status = job.STATUS_FAILED
                 raise
         finally:
             job.pid = None
+            job.commit()
             self.launchInstanceInBackgroundCleanup(image, **params)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
@@ -813,19 +812,17 @@ class BaseDriver(object):
 
         params = self.getLaunchInstanceParameters(image, descriptorData)
 
-        job = self._instanceLaunchJobStore.create()
+        job = self._instanceLaunchJobStore.create(cloudName = self.cloudName,
+            cloudType = self.cloudType, restArgs = descrXml)
+        job.commit()
         jobId = job.id
-        job.cloudName = self.cloudName
-        job.cloudType = self.cloudType
-        # Save the invocation, we may want to replay a job
-        job.launchData = descrXml
-        job.imageId = image.getImageId()
         self.backgroundRun(self.launchInstanceInBackground, jobId, image, auth,
                            **params)
-        newInstanceParams = self.getNewInstanceParameters(jobId, image,
+        newInstanceParams = self.getNewInstanceParameters(job, image,
             descriptorData, params)
         newInstanceParams['createdBy'] = self.userId
-        return self._nodeFactory.newInstanceLaunchJob(**newInstanceParams)
+        job = jobmodels.Job(**newInstanceParams)
+        return self._nodeFactory.newInstanceLaunchJob(job)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         getField = descriptorData.getField
@@ -843,16 +840,14 @@ class BaseDriver(object):
             instanceType = getField('instanceType'),
         )
 
-    def getNewInstanceParameters(self, jobId, image, descriptorData, launchParams):
+    def getNewInstanceParameters(self, job, image, descriptorData, launchParams):
         imageId = launchParams['imageId']
         return dict(
-            id = jobId,
+            id = job.id,
             imageId = imageId,
-            instanceName = launchParams.get('instanceName'),
-            instanceDescription = launchParams.get('instanceDescription'),
             cloudName = self.cloudName,
-            cloudAlias = self.getCloudAlias(),
-            type = 'instance-launch',
+            type_ = 'instance-launch',
+            status = job.status,
         )
 
     def createCloud(self, cloudConfigurationData):

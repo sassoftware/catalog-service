@@ -8,8 +8,9 @@ import os
 
 from catalogService import nodeFactory
 from catalogService.rest.api import base
-from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse
-from catalogService.rest.models import job_models
+from catalogService.rest.middleware.response import (XmlResponse,
+    XmlStringResponse, XmlSerializableObjectResponse)
+from catalogService.rest.models import jobs as jobmodels
 from catalogService.rest.models import job_types
 from catalogService import jobs
 
@@ -41,10 +42,10 @@ class JobFilter(BaseFilter):
 class JobTypeController(base.BaseController):
     modelName = 'jobId'
     supportedJobTypes = {
-        'appliance-version-update' : ('Appliance Version Update',
-            jobs.ApplianceVersionUpdateJobStore),
+        'software-version-refresh' : ('Software Version Refresh',
+            jobs.ApplianceVersionUpdateJobSqlStore),
         'instance-launch' : ('Instance Launch',
-            jobs.LaunchJobStore),
+            jobs.LaunchJobSqlStore),
     }
     storagePathSuffix = 'jobs'
     def index(self, request, jobType):
@@ -54,12 +55,13 @@ class JobTypeController(base.BaseController):
         self._setStore(jobType)
         # Build filter object, passing in the query arguments
         filter = JobFilter(request.GET)
-        storedJobs = filter.matchIterator(self.jobStore.enumerate())
+        storedJobs = filter.matchIterator(
+            self.jobStore.enumerate(readOnly=True))
         storedJobs = (self.jobModelFromJob(request, j, jobType)
             for j in sorted(storedJobs, key = lambda x: x.created))
-        ret = job_models.Jobs()
-        ret.extend(storedJobs)
-        return XmlResponse(ret)
+        ret = jobmodels.Jobs()
+        ret.addJobs(storedJobs)
+        return XmlSerializableObjectResponse(ret)
 
     class XmlPassThrough(object):
         def __init__(self, doc):
@@ -72,59 +74,68 @@ class JobTypeController(base.BaseController):
             return 'error'
 
     def jobModelFromJob(self, request, job, jobType):
-        logs = [ job_models.JobLog(
-                    timestamp = "%.3f" % x.timestamp, content = x.content)
-                 for x in job.logs ]
-        jobId = self.url(request, 'jobs', 'types', os.path.dirname(job.id),
-            'jobs', os.path.basename(job.id))
+        jobm = jobmodels.Job()
+        jobm.set_type(job.type)
+        jobm.set_id(job.id)
+        jobm.set_created(job.created)
+        jobm.set_modified(job.modified)
+        jobm.set_status(job.status)
+        jobm.set_cloudType(job.cloudType)
+        jobm.set_cloudName(job.cloudName)
+        if hasattr(job, 'instanceId'):
+            jobm.set_instanceId(job.instanceId)
+        jobm.history.extend(job.history)
+        jobId = self.url(request, 'jobs', 'types', jobType,
+            'jobs', str(job.id))
         results = job.result
-        resultIsHref = self.supportedJobTypes[jobType][1].resultIsHref
+        resultClass = self.supportedJobTypes[jobType][1].resultClass
         if results:
-            results = results.split('\n')
-            if resultIsHref:
-                results = [ job_models.JobResult().setHref(x)
-                    for x in results ]
+            if resultClass is unicode:
+                jobm.set_result([ unicode(x) for x in results ])
             else:
-                results = [ job_models.JobResult(None, None, x)
-                    for x in results ]
-        else:
-            results = [ ] # empty string should be None
-        errorResponse = job.errorResponse
-        if errorResponse:
-            try:
-                errorResponse = etree.fromstring(errorResponse)
-                errorResponse = self.XmlPassThrough(errorResponse)
-            except etree.LxmlError:
-                pass
-        params = dict(id = jobId, status = job.status,
-            type = jobType,
-            result = results,
-            errorResponse = errorResponse,
-            cloudName = job.cloudName, cloudType = job.cloudType,
-            created = int(job.created), modified = int(job.modified),
-            expiration = int(job.expiration), log = logs)
-        for k in ['imageId', 'instanceId']:
-            params[k] = getattr(job, k, None)
+                jobm.set_resultResource(
+                    [ resultClass(href=x) for x in results ])
+        self._fillErrorResponse(jobm, job.errorResponse)
         nf = nodeFactory.NodeFactory(baseUrl = request.baseUrl,
-            cloudType = job.cloudType, instanceLaunchJobFactory = job_models.Job)
-        return nf.newInstanceLaunchJob(**params)
+            cloudType = job.cloudType)
+        return nf.newInstanceLaunchJob(jobm)
+
+    def _fillErrorResponse(self, job, errorResponse):
+        if not errorResponse:
+            return
+        try:
+            errorResponse = etree.fromstring(errorResponse)
+        except etree.LxmlError:
+            return
+        if errorResponse.tag != 'fault':
+            return
+        code = errorResponse.find('code')
+        if code is None:
+            return
+        message = errorResponse.find('message')
+        if message is None:
+            return
+        tracebackData = errorResponse.find('traceback')
+        if tracebackData is not None:
+            tracebackData = tracebackData.text
+        productCodeData = errorResponse.find('productCode')
+        if productCodeData is not None:
+            productCodeData = productCodeData.attrib
+        job.setErrorResponse(int(code.text), message.text,
+            tracebackData = tracebackData, productCodeData = productCodeData)
 
     def _setStore(self, jobType):
         jobStoreClass = self.supportedJobTypes[jobType][1]
-        spath = self._getStorePath()
-        self.jobStore = jobStoreClass(spath)
-
-    def _getStorePath(self):
-        return os.path.join(self.storageCfg.storagePath, self.storagePathSuffix)
+        self.jobStore = jobStoreClass(self.db)
 
     def get(self, request, jobType, jobId):
         if jobType not in self.supportedJobTypes:
             raise NotImplementedError
 
         self._setStore(jobType)
-        internalId = (jobType, jobId)
-        job = self.jobStore.get(internalId)
-        return XmlResponse(self.jobModelFromJob(request, job, jobType))
+        job = self.jobStore.get(jobId, readOnly=True)
+        ret = self.jobModelFromJob(request, job, jobType)
+        return XmlSerializableObjectResponse(ret)
 
 
 class JobTypesController(base.BaseController):

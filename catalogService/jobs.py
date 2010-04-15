@@ -3,17 +3,16 @@
 # Copyright (c) 2010 rPath, Inc.
 
 from rpath_job import api1 as rpath_job
+HistoryEntry = rpath_job.HistoryEntry
+ResultResource = rpath_job.ResultResource
 
-class InstanceLaunchJob(rpath_job.LogBaseJob):
-    _fieldTypes = rpath_job.LogBaseJob._fieldTypes.copy()
-    _fieldTypes['imageId'] = rpath_job.FieldString
+class InstanceLaunchJob(rpath_job.HistoryBaseJob):
+    _fieldTypes = rpath_job.HistoryBaseJob._fieldTypes.copy()
     _fieldTypes['cloudType'] = rpath_job.FieldString
     _fieldTypes['cloudName'] = rpath_job.FieldString
-    _fieldTypes['launchData'] = rpath_job.FieldString
 
-class VersionUpdateLaunchJob(rpath_job.LogBaseJob):
-    _fieldTypes = rpath_job.LogBaseJob._fieldTypes.copy()
-    _fieldTypes = rpath_job.LogBaseJob._fieldTypes.copy()
+class VersionUpdateLaunchJob(rpath_job.HistoryBaseJob):
+    _fieldTypes = rpath_job.HistoryBaseJob._fieldTypes.copy()
     _fieldTypes['instanceId'] = rpath_job.FieldString
     _fieldTypes['cloudType'] = rpath_job.FieldString
     _fieldTypes['cloudName'] = rpath_job.FieldString
@@ -24,11 +23,24 @@ class CatalogJobStore(rpath_job.JobStore):
 class LaunchJobStore(CatalogJobStore):
     jobType = "instance-launch"
     jobFactory = InstanceLaunchJob
-    # XXX this is not the proper place to indicate the conversion to href
-    resultIsHref = True
+    resultClass = ResultResource
 
 class ApplianceVersionUpdateJobStore(CatalogJobStore):
-    jobType = "appliance-version-update"
+    jobType = "software-version-refresh"
     jobFactory = VersionUpdateLaunchJob
-    # XXX this is not the proper place to indicate the conversion to href
-    resultIsHref = False
+    resultClass = unicode
+
+class CatalogSqlJobStore(rpath_job.SqlJobStore):
+    pass
+
+class LaunchJobSqlStore(CatalogSqlJobStore):
+    jobType = LaunchJobStore.jobType
+    jobFactory = InstanceLaunchJob
+    resultClass = ResultResource
+    BackingStore = rpath_job.TargetSqlBacking
+
+class ApplianceVersionUpdateJobSqlStore(CatalogSqlJobStore):
+    jobType = ApplianceVersionUpdateJobStore.jobType
+    jobFactory = VersionUpdateLaunchJob
+    resultClass = unicode
+    BackingStore = rpath_job.ManagedSystemsSqlBacking

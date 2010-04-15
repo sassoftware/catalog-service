@@ -416,11 +416,11 @@ class VWSClient(baseDriver.BaseDriver):
             tmpDir = os.path.join(self.client._tmpDir, 'downloads')
             util.mkdirChain(tmpDir)
             try:
-                job.addLog(self.LogEntry('Downloading image'))
+                job.addHistoryEntry('Downloading image')
                 dlImagePath = self._downloadImage(image, tmpDir, auth = auth)
-                job.addLog(self.LogEntry('Preparing image'))
+                job.addHistoryEntry('Preparing image')
                 imgFile = self._prepareImage(dlImagePath)
-                job.addLog(self.LogEntry('Publishing image'))
+                job.addHistoryEntry('Publishing image')
                 self._publishImage(imgFile)
             finally:
                 util.rmtree(tmpDir, ignore_errors = True)
@@ -429,7 +429,7 @@ class VWSClient(baseDriver.BaseDriver):
         def callback(realId):
             pass
 
-        job.addLog(self.LogEntry('Launching'))
+        job.addHistoryEntry('Launching')
         realId = self.client.launchInstances([imageId],
             duration = duration, callback = callback)
         return str(realId)

@@ -539,7 +539,7 @@ class VMwareClient(baseDriver.BaseDriver):
         host = hosts[0]
 
         msg = 'Downloading image'
-        job.addLog(self.LogEntry(msg))
+        job.addHistoryEntry(msg)
         self.log_debug(msg)
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
@@ -555,12 +555,12 @@ class VMwareClient(baseDriver.BaseDriver):
         # the data store
 
         msg = 'Extracting image'
-        job.addLog(self.LogEntry(msg))
+        job.addHistoryEntry(msg)
         self.log_debug(msg)
         try:
             workdir = self.extractImage(path)
             msg = 'Uploading image to VMware'
-            job.addLog(self.LogEntry(msg))
+            job.addHistoryEntry(msg)
             self.log_debug(msg)
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
@@ -623,7 +623,7 @@ class VMwareClient(baseDriver.BaseDriver):
             vm = getattr(image, 'opaqueId')
 
         if useTemplate:
-            job.addLog(self.LogEntry('Cloning template'))
+            job.addHistoryEntry('Cloning template')
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
                                         dataCenter, computeResource,
@@ -634,7 +634,7 @@ class VMwareClient(baseDriver.BaseDriver):
         self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
                                 computeResource)
         self.client.startVM(mor = vmMor)
-        job.addLog(self.LogEntry('Launching'))
+        job.addHistoryEntry('Launching')
         # Grab the real uuid
         instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
         uuid = instMap[vmMor]['config.uuid']

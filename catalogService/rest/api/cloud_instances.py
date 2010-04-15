@@ -88,7 +88,7 @@ class InstancesController(BaseCloudController):
                 request.auth)
         request.logger.info("User %s: %s/%s: launched job %s with image %s"
             % ( request.auth[0], self.driver.cloudType, cloudName,
-            job.getId(), os.path.basename(job.getImageId())))
+            job.get_id(), os.path.basename(job.get_imageId())))
         return XmlResponse(job)
 
     def destroy(self, request, cloudName, instanceId):

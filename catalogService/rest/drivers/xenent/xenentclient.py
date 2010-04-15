@@ -408,10 +408,10 @@ class XenEntClient(baseDriver.BaseDriver):
             downloadUrl = image.getDownloadUrl()
             checksum = image.getImageId()
 
-            job.addLog(self.LogEntry('Downloading image'))
+            job.addHistoryEntry('Downloading image')
             path = self._downloadImage(image, tmpDir, auth = auth, extension = '.xva')
 
-            job.addLog(self.LogEntry('Importing image'))
+            job.addHistoryEntry('Importing image')
             templRef, templUuid = self._importImage(image, path, srUuid)
 
             image.setImageId(templUuid)
@@ -442,10 +442,10 @@ class XenEntClient(baseDriver.BaseDriver):
 
         imageId = image.getInternalTargetId()
 
-        job.addLog(self.LogEntry('Cloning template'))
+        job.addHistoryEntry('Cloning template')
         realId = self.cloneTemplate(job, imageId, instanceName,
             instanceDescription)
-        job.addLog(self.LogEntry('Launching'))
+        job.addHistoryEntry('Launching')
         self.startVm(realId)
         return realId
 
