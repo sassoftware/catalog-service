@@ -5,7 +5,7 @@
 
 from rpath_xmllib import api1 as xmllib
 
-from catalogService import xmlNode
+from catalogService.rest.models import xmlNode
 
 class UuidNode(xmlNode.BaseNode):
     tag = 'uuid'
