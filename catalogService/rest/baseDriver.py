@@ -2,6 +2,7 @@
 # Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
+import datetime
 import os
 import sys
 import subprocess
@@ -34,7 +35,7 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
-from mint.django_rest.rbuilder.inventory import systemdbmgr
+from mint.django_rest.rbuilder import inventory
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -86,7 +87,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
 
-        self.systemMgr = systemdbmgr.SystemDBManager(cfg, userId)
+        self.systemMgr = inventory.systemdbmgr.SystemDBManager(cfg, userId)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -267,8 +268,10 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        self.systemMgr.launchSystem(instanceId, cloudType, cloudName)
-        self.systemMgr.setSystemSSLInfo(instanceId, x509Cert, x509Key)
+        system = inventory.System(target_system_id=instanceId, target_type=cloudType,
+                    target_name=cloudName, ssl_client_certificate=x509Cert, 
+                    ssl_client_key=x509Key, registration_date=datetime.datetime.now())
+        self.systemMgr.createSystem(system)
 
     def _fullSpec(self, nvf):
         flavor = nvf[2]
