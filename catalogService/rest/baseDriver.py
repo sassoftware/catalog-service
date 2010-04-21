@@ -36,6 +36,7 @@ from catalogService.utils import x509
 from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
 from mint.django_rest.rbuilder import inventory
+from mint.django_rest.rbuilder.inventory import systemdbmgr
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -87,7 +88,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
 
-        self.systemMgr = inventory.systemdbmgr.SystemDBManager(cfg, userId)
+        self.systemMgr = systemdbmgr.SystemDBManager(cfg, userId)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -328,8 +329,9 @@ class BaseDriver(object):
             # XXX Verify if process still exists
             return
 
-        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
-        if not (os.path.exists(keyFile) and os.path.exists(certFile)):
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
+        if not (os.path.exists(system.ssl_client_key) and \
+                os.path.exists(system.ssl_client_certificate)):
             return
         # Do we have an IP address/DNS name for this instance?
         ipAddr = instance.getPublicDnsName()
@@ -573,12 +575,13 @@ class BaseDriver(object):
             job.status = job.STATUS_FAILED
             return
         job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
-        certFile, keyFile = self.systemMgr.getSystemSSLInfo(instanceId)
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
         self.log_debug("Querying %s using cert %s, key %s", ipAddr,
-                       certFile, keyFile)
+                       system.ssl_client_certificate, system.ssl_client_key)
 
         # We know we can contact the appliance.
-        x509Dict = dict(cert_file = certFile, key_file = keyFile)
+        x509Dict = dict(cert_file=system.ssl_client_certificate, 
+                        key_file=system.ssl_client_key)
         wbemUrl = "https://%s" % ipAddr
         try:
             updater = cimupdater.CIMUpdater(wbemUrl, x509Dict)
