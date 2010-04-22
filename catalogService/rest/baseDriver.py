@@ -330,9 +330,12 @@ class BaseDriver(object):
             return
 
         system = self.systemMgr.getSystemByInstanceId(instanceId)
-        if not (os.path.exists(system.ssl_client_key) and \
-                os.path.exists(system.ssl_client_certificate)):
+        if not system.is_manageable:
             return
+        assert system.ssl_client_key is not None \
+            and system.ssl_client_certificate is not None
+        assert os.path.exists(system.ssl_client_key) and \
+                os.path.exists(system.ssl_client_certificate)
         # Do we have an IP address/DNS name for this instance?
         ipAddr = instance.getPublicDnsName()
         if not ipAddr:
