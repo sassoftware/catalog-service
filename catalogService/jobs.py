@@ -17,6 +17,11 @@ class VersionUpdateLaunchJob(rpath_job.HistoryBaseJob):
     _fieldTypes['cloudType'] = rpath_job.FieldString
     _fieldTypes['cloudName'] = rpath_job.FieldString
 
+class InstanceUpdateJob(rpath_job.HistoryBaseJob):
+    _fieldTypes = rpath_job.HistoryBaseJob._fieldTypes.copy()
+    _fieldTypes['cloudType'] = rpath_job.FieldString
+    _fieldTypes['cloudName'] = rpath_job.FieldString
+
 class CatalogJobStore(rpath_job.JobStore):
     _storageSubdir = "catalog-jobs"
 
@@ -28,6 +33,11 @@ class LaunchJobStore(CatalogJobStore):
 class ApplianceVersionUpdateJobStore(CatalogJobStore):
     jobType = "software-version-refresh"
     jobFactory = VersionUpdateLaunchJob
+    resultClass = unicode
+
+class ApplianceUpdateJobStore(CatalogJobStore):
+    jobType = "instance-update"
+    jobFactory = InstanceUpdateJob
     resultClass = unicode
 
 class CatalogSqlJobStore(rpath_job.SqlJobStore):
@@ -42,5 +52,11 @@ class LaunchJobSqlStore(CatalogSqlJobStore):
 class ApplianceVersionUpdateJobSqlStore(CatalogSqlJobStore):
     jobType = ApplianceVersionUpdateJobStore.jobType
     jobFactory = VersionUpdateLaunchJob
+    resultClass = unicode
+    BackingStore = rpath_job.ManagedSystemsSqlBacking
+
+class ApplianceUpdateJobSqlStore(CatalogSqlJobStore):
+    jobType = ApplianceUpdateJobStore.jobType
+    jobFactory = InstanceUpdateJob
     resultClass = unicode
     BackingStore = rpath_job.ManagedSystemsSqlBacking

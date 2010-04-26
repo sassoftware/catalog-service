@@ -89,6 +89,7 @@ class BaseDriver(object):
         self._instanceStore = None
         self._jobsStore = jobs.ApplianceVersionUpdateJobSqlStore(self.db)
         self._instanceLaunchJobStore = jobs.LaunchJobSqlStore(self.db)
+        self._instanceUpdateJobStore = jobs.ApplianceUpdateJobSqlStore(self.db)
         self._x509Cert = None
         self._x509Key = None
 
@@ -1059,7 +1060,7 @@ class BaseDriver(object):
         system = self.systemMgr.getSystemByInstanceId(instanceId)
 
         if system.is_manageable:
-            job = self._jobsStore.create(cloudType=self.cloudType,
+            job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
                 cloudName=self.cloudName, instanceId=instanceId)
             self._jobsStore.commit()
 
