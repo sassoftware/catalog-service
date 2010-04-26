@@ -46,6 +46,8 @@ class JobTypeController(base.BaseController):
             jobs.ApplianceVersionUpdateJobSqlStore),
         'instance-launch' : ('Instance Launch',
             jobs.LaunchJobSqlStore),
+        'instance-update' : ('Instance Update',
+            jobs.ApplianceUpdateJobSqlStore),
     }
     storagePathSuffix = 'jobs'
     def index(self, request, jobType):

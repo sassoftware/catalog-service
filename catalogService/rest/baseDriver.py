@@ -834,8 +834,10 @@ class BaseDriver(object):
             cloudType = self.cloudType, restArgs = descrXml)
         job.commit()
         jobId = job.id
-        self.backgroundRun(self.launchInstanceInBackground, jobId, image, auth,
-                           **params)
+        self.launchJobRunner = CatalogJobRunner(self.launchInstanceInBackground)
+        self.launchJobRunner.job = job
+        self.launchJobRunner(jobId, image, auth, **params)
+
         newInstanceParams = self.getNewInstanceParameters(job, image,
             descriptorData, params)
         newInstanceParams['createdBy'] = self.userId
