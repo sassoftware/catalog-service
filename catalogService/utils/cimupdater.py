@@ -162,7 +162,11 @@ class CIMUpdater(object):
 
     def applyUpdate(self, sources, timeout = DEFAULT_TIMEOUT):
         job = self.applyUpdateAsync(sources)
-        return self.pollJobForCompletion(job, timeout = timeout)
+        job = self.pollJobForCompletion(job, timeout = timeout)
+        if not self.isJobSuccessful(job):
+            error = self.server.getError(job)
+            self.log_error(error)
+            raise RuntimeError("Error while applying updates")
 
     def checkAndApplyUpdate(self, timeout = DEFAULT_TIMEOUT):
         job = self.updateCheck(timeout = timeout)

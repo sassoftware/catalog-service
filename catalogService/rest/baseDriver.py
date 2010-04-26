@@ -1089,7 +1089,7 @@ class BaseDriver(object):
             self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
             x509Dict = dict(cert_file = certFile, key_file = keyFile)
             updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
-            updater.checkAndApplyUpdate()
+            updater.applyUpdate(troveList)
         except Exception, e:
             newState = self.updateStatusStateException
             raise
