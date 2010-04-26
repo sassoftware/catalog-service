@@ -24,13 +24,6 @@ class ImagesController(BaseCloudController):
         images = self.driver(request, cloudName).getImages([imageId])
         return XmlResponse(images)
 
-class InstancesUpdateController(BaseCloudController):
-    modelName = 'instanceUpdateId'
-
-    def create(self, request, cloudName, instanceId):
-        insts = self.driver(request, cloudName).updateInstance(instanceId)
-        return XmlResponse(insts)
-
 class SecurityGroupsController(BaseCloudController):
     modelName = 'securityGroup'
 
@@ -64,8 +57,7 @@ class InstancesForceUpdateController(BaseCloudController):
         return XmlResponse(insts)
 
 class InstancesController(BaseCloudController):
-    urls = dict(updates=InstancesUpdateController,
-                securityGroups=SecurityGroupsController,
+    urls = dict(securityGroups=SecurityGroupsController,
                 availableUpdates=AvailableUpdatesController,
                 forceUpdate=InstancesForceUpdateController,)
 
@@ -95,6 +87,10 @@ class InstancesController(BaseCloudController):
         insts = self.driver(request, cloudName).terminateInstance(instanceId)
         return XmlResponse(insts)
 
+    def update(self, request, cloudName, instanceId):
+        instanceXml = request.read()
+        ret = self.driver(request, cloudName).updateInstance(instanceXml)
+        return XmlResponse(ret)
 
 class UserEnvironmentController(BaseCloudController):
     def index(self, request, cloudName, userName):

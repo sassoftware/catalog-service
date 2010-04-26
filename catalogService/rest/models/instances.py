@@ -144,6 +144,11 @@ class VersionHref(xmlNode.BaseNode):
     __slots__ = ['href']
     _slotAttributes = set(['href'])
 
+class UpdateHref(xmlNode.BaseNode):
+    tag = "version"
+    __slots__ = ['href']
+    _slotAttributes = set(['href'])
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -167,7 +172,8 @@ class BaseInstance(xmlNode.BaseNode):
                   'version',
                   'stage',
                   'repositoryUrl',
-                  'forceUpdateUrl',
+                  'forceUpdateUrl', # force refresh the installed sw data
+                  'update',      # update the sw on the system
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
@@ -177,7 +183,8 @@ class BaseInstance(xmlNode.BaseNode):
                         availableUpdate = AvailableUpdate,
                         outOfDate = bool,
                         version = VersionHref,
-                        stage = StageHref)
+                        stage = StageHref,
+                        update = UpdateHref)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"

@@ -7,11 +7,13 @@ import os
 import sys
 import subprocess
 import time
+import traceback
 import urllib
 import urllib2
 
 from conary import conaryclient
 from conary import versions
+from conary.deps import deps
 from conary.lib import util, sha1helper
 
 from catalogService import errors
@@ -37,6 +39,8 @@ from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
 from mint.django_rest.rbuilder import inventory
 from mint.django_rest.rbuilder.inventory import systemdbmgr
+
+from rpath_job import api1 as rpath_job
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -340,10 +344,14 @@ class BaseDriver(object):
         ipAddr = instance.getPublicDnsName()
         if not ipAddr:
             return
+
         job = self._jobsStore.create(cloudType = self.cloudType,
             cloudName = self.cloudName, instanceId = instanceId)
         self._jobsStore.commit()
-        self.backgroundRun(self.runUpdateSoftwareVersion, instance, job.id)
+        self.versionJobRunner = CatalogJobRunner(self.runUpdateSoftwareVersion)
+        self.versionJobRunner.job = job
+        self.versionJobRunner(instance, job.id)
+
         instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id,
                     'software-version-refresh'))
         jobStatus = 'Running'
@@ -571,12 +579,13 @@ class BaseDriver(object):
         ipAddr = instance.getPublicDnsName()
         port = 5989
         self.log_debug("software version: probing %s:%s" % (ipAddr, port))
+
         try:
             self._probeHost(ipAddr, port)
         except self.ProbeHostError, e:
             job.addHistoryEntry("Error contacting system %s: %s" % (ipAddr, str(e)))
-            job.status = job.STATUS_FAILED
-            return
+            raise
+
         job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
         system = self.systemMgr.getSystemByInstanceId(instanceId)
         self.log_debug("Querying %s using cert %s, key %s", ipAddr,
@@ -589,14 +598,13 @@ class BaseDriver(object):
         try:
             updater = cimupdater.CIMUpdater(wbemUrl, x509Dict)
             installedGroups = updater.getInstalledGroups()
-        except cimupdater.WBEMException, e:
+            job.addResults(installedGroups)
+            groups = [self._getNVF(g) for g in installedGroups]
+            self.systemMgr.setSoftwareVersionForInstanceId(instanceId, groups)
+        except Exception, e:
             job.addHistoryEntry("Error retrieving software version for %s: %s" %
                 (ipAddr, str(e)))
-            job.status = job.STATUS_FAILED
-            return
-        job.addResults(installedGroups)
-        self.systemMgr.setSoftwareVersionForInstanceId(instanceId,
-            '\n'.join(installedGroups))
+            raise
         job.status = job.STATUS_COMPLETED
 
     def _probeHost(self, host, port):
@@ -1023,46 +1031,71 @@ class BaseDriver(object):
                 return val
         return None
 
-    def updateInstances(self, instanceIds):
-        instanceList = self.getInstances(instanceIds)
-        return self._updateInstances(instanceList)
+    def updateInstance(self, instanceXml):
+        hdlr = instances.Handler()
+        instance = hdlr.parseString(instanceXml)
+        return self._updateInstance(instance)
 
-    def _updateInstances(self, instanceList):
-        for instance in instanceList:
-            dnsName = instance.getPublicDnsName()
-            if not dnsName:
-                # We can't do anything unless we know how to contact the box
-                continue
-            newState = self.updateStatusStateUpdating
-            self._setInstanceUpdateStatus(instance, newState)
-            self.backgroundRun(self._updateInstance, instance, dnsName)
+    def _updateInstance(self, instance):
+        dnsName = instance.getPublicDnsName()
+        if not dnsName:
+            # We can't do anything unless we know how to contact the box
+            return
 
-        instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
-        ret = instances.BaseInstances()
-        ret.extend(instanceList)
-        return ret
+        troveSpecs = []
+        for sw in instance.getInstalledSoftware():
+            trove = sw.getTrove()
+            n = trove.name.getText()
+            f = deps.parseFlavor(trove.getFlavor())
 
-    def updateInstance(self, instanceId):
-        instance = self.getInstance(instanceId)
-        return self._updateInstances([instance])
+            version = trove.getVersion()
+            v = versions.VersionFromString(version.getFull())
+            v.versions[-1].timeStamp = float(version.getOrdering())
+            v = v.freeze()
 
-    def _updateInstance(self, instance, dnsName):
-        host = 'https://%s' % dnsName
+            troveSpecs.append(conaryclient.cmdline.toTroveSpec(n, v, f))
+
         instanceId = instance.getInstanceId()
-        self.log_debug("Updating instance %s (%s))", instanceId, dnsName)
-        certFile, keyFile = self._instanceStore.getX509Files(instanceId)
-        self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
-        x509Dict = dict(cert_file = certFile, key_file = keyFile)
-        updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
+
+        if system.is_manageable:
+            job = self._jobsStore.create(cloudType=self.cloudType,
+                cloudName=self.cloudName, instanceId=instanceId)
+            self._jobsStore.commit()
+
+            self.updateJobRunner = CatalogJobRunner(self._updateInstanceJob)
+            self.updateJobRunner.job = job
+
+            newState = self.updateStatusStateUpdating
+            # TODO comment this out for now until it's in the db.
+            # self._setInstanceUpdateStatus(instance, newState)
+            self.updateJobRunner(instance, dnsName,
+                    troveSpecs, system.ssl_client_certificate,
+                    system.ssl_client_key, job)
+        else:
+            # system is not manageable
+            pass
+
+        return instance
+
+    def _updateInstanceJob(self, instanceId, dnsName, troveList, certFile,
+                        keyFile, job):
         try:
+            host = 'https://%s' % dnsName
+            self.log_debug("Updating instance %s (%s))", instanceId, dnsName)
+            self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
+            x509Dict = dict(cert_file = certFile, key_file = keyFile)
+            updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
             updater.checkAndApplyUpdate()
-        except:
-            # XXX FIXME: do something with the exception
+        except Exception, e:
             newState = self.updateStatusStateException
+            raise
         else:
             # Mark the update status as done.
             newState = self.updateStatusStateDone
-        self._setInstanceUpdateStatus(instance, newState)
+            job.status = job.STATUS_COMPLETED
+        finally:
+            self._setInstanceUpdateStatus(instance, newState)
 
     def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
         if newTime is None:
@@ -1075,41 +1108,6 @@ class BaseDriver(object):
         self._instanceStore.setUpdateStatusTime(instanceId, newTime)
         # Set the expiration to 3 hours for now.
         self._instanceStore.setExpiration(instanceId, 10800)
-
-    def backgroundRun(self, function, *args, **kw):
-        pid = os.fork()
-        if pid:
-            os.waitpid(pid, 0)
-            return
-        # Re-open the cloud client in the child
-        self._cloudClient = None
-        try:
-            try:
-                pid = os.fork()
-                if pid:
-                    # The first child exits and is waited by the parent
-                    # the finally part will do the os._exit
-                    return
-                # Redirect stdin, stdout, stderr
-                fd = os.open(os.devnull, os.O_RDWR)
-                #os.dup2(fd, 0)
-                #os.dup2(fd, 1)
-                #os.dup2(fd, 2)
-                os.close(fd)
-                # Create new process group
-                #os.setsid()
-
-                os.chdir('/')
-                function(*args, **kw)
-            except Exception:
-                try:
-                    ei = sys.exc_info()
-                    self.log_error('Daemonized process exception',
-                                   exc_info = ei)
-                finally:
-                    os._exit(1)
-        finally:
-            os._exit(0)
 
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
@@ -1290,3 +1288,21 @@ class CookieClient(object):
         # Junk the response
         ret.read()
         return ret
+
+class CatalogJobRunner(rpath_job.BackgroundRunner):
+    def __init__(self, function, logger=None):
+        self.logger = logger
+        rpath_job.BackgroundRunner.__init__(self, function)
+
+    def preFork(self):
+        # Setting this to None forces the child to re-open the connection.
+        self._cloudClient = None
+
+    def log_error(self, msg, ei):
+        if self.logger is not None:
+            self.logger.error(msg, ei)
+
+    def handleError(self, ei):
+        self.job.addHistoryEntry('\n'.join(traceback.format_tb(ei[2])))
+        self.job.status = self.job.STATUS_FAILED
+        self.job.commit()
