@@ -1053,8 +1053,7 @@ class BaseDriver(object):
 
             version = trove.getVersion()
             v = versions.VersionFromString(version.getFull())
-            v.versions[-1].timeStamp = float(version.getOrdering())
-            v = v.freeze()
+            v = str(v)
 
             troveSpecs.append(conaryclient.cmdline.toTroveSpec(n, v, f))
 

@@ -19,6 +19,7 @@ class VersionUpdateLaunchJob(rpath_job.HistoryBaseJob):
 
 class InstanceUpdateJob(rpath_job.HistoryBaseJob):
     _fieldTypes = rpath_job.HistoryBaseJob._fieldTypes.copy()
+    _fieldTypes['instanceId'] = rpath_job.FieldString
     _fieldTypes['cloudType'] = rpath_job.FieldString
     _fieldTypes['cloudName'] = rpath_job.FieldString
 

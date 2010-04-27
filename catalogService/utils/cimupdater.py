@@ -5,6 +5,7 @@
 
 import time
 
+import pywbem
 import wbemlib
 
 WBEMException = wbemlib.WBEMException
@@ -157,7 +158,9 @@ class CIMUpdater(object):
         return self.pollJobForCompletion(job, timeout = timeout)
 
     def applyUpdateAsync(self, sources):
-        result = self.server.VAMI_SoftwareInstallationService.InstallFromNetworkLocations(sources)
+        result = self.server.VAMI_SoftwareInstallationService.\
+                             InstallFromNetworkLocations(Sources=sources,
+                                    InstallOptions=[pywbem.Uint16(2),])
         return result[1]['job']
 
     def applyUpdate(self, sources, timeout = DEFAULT_TIMEOUT):
