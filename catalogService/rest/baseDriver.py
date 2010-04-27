@@ -1312,6 +1312,8 @@ class CatalogJobRunner(rpath_job.BackgroundRunner):
             self.logger.error(msg, ei)
 
     def handleError(self, ei):
+        self.job.addHistoryEntry(ei[0])
+        self.job.addHistoryEntry(ei[1])
         self.job.addHistoryEntry('\n'.join(traceback.format_tb(ei[2])))
         self.job.status = self.job.STATUS_FAILED
         self.job.commit()
