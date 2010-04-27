@@ -1079,6 +1079,11 @@ class BaseDriver(object):
             # system is not manageable
             pass
 
+        instance = self.getInstance(instance.getInstanceId())
+        jobHref = instances.BaseInstanceJobHref(
+            href=self._nodeFactory.getJobIdUrl(job.id, 'instance-update'))
+        jobHref.setId(job.id)
+        instance.setJob(jobHref)
         return instance
 
     def _updateInstanceJob(self, instanceId, dnsName, troveList, certFile,
@@ -1092,13 +1097,15 @@ class BaseDriver(object):
             updater.applyUpdate(troveList)
         except Exception, e:
             newState = self.updateStatusStateException
-            self._setInstanceUpdateStatus(instance, newState)
+            # TODO comment this out for now until it's in the db.
+            # self._setInstanceUpdateStatus(instance, newState)
             raise
         else:
             # Mark the update status as done.
             newState = self.updateStatusStateDone
             job.status = job.STATUS_COMPLETED
-            self._setInstanceUpdateStatus(instance, newState)
+            # TODO comment this out for now until it's in the db.
+            # self._setInstanceUpdateStatus(instance, newState)
 
     def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
         if newTime is None:

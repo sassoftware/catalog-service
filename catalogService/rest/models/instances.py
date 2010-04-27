@@ -5,7 +5,7 @@
 
 import rpath_xmllib as xmllib
 
-import xmlNode
+from catalogService.rest.models import xmlNode
 
 class BaseInstanceUpdateStatusState(xmlNode.BaseNode):
     tag = 'updateState'
@@ -149,6 +149,11 @@ class UpdateHref(xmlNode.BaseNode):
     __slots__ = ['href']
     _slotAttributes = set(['href'])
 
+class BaseInstanceJobHref(xmlNode.BaseNode):
+    tag = "job"
+    __slots__ = ['id', 'href']
+    _slotAttributes = set(['href'])
+
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
     __slots__ = [ 'id', 'instanceId', 'instanceName',
@@ -174,6 +179,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'repositoryUrl',
                   'forceUpdateUrl', # force refresh the installed sw data
                   'update',      # update the sw on the system
+                  'job',
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
@@ -184,7 +190,8 @@ class BaseInstance(xmlNode.BaseNode):
                         outOfDate = bool,
                         version = VersionHref,
                         stage = StageHref,
-                        update = UpdateHref)
+                        update = UpdateHref,
+                        job = BaseInstanceJobHref)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
