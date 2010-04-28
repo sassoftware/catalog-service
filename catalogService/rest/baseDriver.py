@@ -1109,7 +1109,9 @@ class BaseDriver(object):
 
             # Refetch the instance and force an update the installed version
             # information.
-            # instance = self.getInstance(instance.getInstanceId(), force=True)
+            self._instanceStore = self._getInstanceStore()
+            self._instanceStore.setSoftwareVersionNextCheck(
+                instance.getInstanceId(), timestamp=time.time(), delta=0)
 
             # TODO comment this out for now until it's in the db.
             # self._setInstanceUpdateStatus(instance, newState)
