@@ -1106,6 +1106,11 @@ class BaseDriver(object):
             newState = self.updateStatusStateDone
             job.status = job.STATUS_COMPLETED
             job.commit()
+
+            # Refetch the instance and force an update the installed version
+            # information.
+            instance = self.getInstance(instanceId, force=True)
+
             # TODO comment this out for now until it's in the db.
             # self._setInstanceUpdateStatus(instance, newState)
 
