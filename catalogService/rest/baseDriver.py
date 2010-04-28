@@ -1085,14 +1085,14 @@ class BaseDriver(object):
         instance.setJob(jobHref)
         return instance
 
-    def _updateInstanceJob(self, instanceId, dnsName, troveList, certFile,
+    def _updateInstanceJob(self, instance, dnsName, troveList, certFile,
                         keyFile, job):
         job.status = job.STATUS_RUNNING
         self.db.db.reopen_fork()
         try:
             host = 'https://%s' % dnsName
-            self.log_debug("Updating instance %s (%s))", instanceId, dnsName)
-            self.log_debug("Updating %s: cert %s, key %s", instanceId, certFile, keyFile)
+            self.log_debug("Updating instance %s (%s))", instance, dnsName)
+            self.log_debug("Updating %s: cert %s, key %s", instance, certFile, keyFile)
             x509Dict = dict(cert_file = certFile, key_file = keyFile)
             updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
             updater.applyUpdate(troveList)
@@ -1109,7 +1109,7 @@ class BaseDriver(object):
 
             # Refetch the instance and force an update the installed version
             # information.
-            instance = self.getInstance(instanceId, force=True)
+            # instance = self.getInstance(instance.getInstanceId(), force=True)
 
             # TODO comment this out for now until it's in the db.
             # self._setInstanceUpdateStatus(instance, newState)
