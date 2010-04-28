@@ -1087,6 +1087,7 @@ class BaseDriver(object):
 
     def _updateInstanceJob(self, instanceId, dnsName, troveList, certFile,
                         keyFile, job):
+        job.status = job.STATUS_RUNNING
         self.db.db.reopen_fork()
         try:
             host = 'https://%s' % dnsName
