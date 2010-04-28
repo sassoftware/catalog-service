@@ -1087,6 +1087,7 @@ class BaseDriver(object):
 
     def _updateInstanceJob(self, instanceId, dnsName, troveList, certFile,
                         keyFile, job):
+        self.db.db.reopen_fork()
         try:
             host = 'https://%s' % dnsName
             self.log_debug("Updating instance %s (%s))", instanceId, dnsName)
@@ -1103,6 +1104,7 @@ class BaseDriver(object):
             # Mark the update status as done.
             newState = self.updateStatusStateDone
             job.status = job.STATUS_COMPLETED
+            job.commit()
             # TODO comment this out for now until it's in the db.
             # self._setInstanceUpdateStatus(instance, newState)
 
