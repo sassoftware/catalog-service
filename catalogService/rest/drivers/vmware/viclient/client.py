@@ -688,6 +688,18 @@ class VimService(object):
         @param expectedVals values for properties to end the wait
         @return true indicating expected values were met, and false otherwise
         """
+
+        # Sometimes we're seeing BadStatusLine messages coming from vsphere
+        import time
+        for i in range(10):
+            try:
+                return self._waitForValues(objmor, filterProps, endWaitProps,
+                    expectedVals)
+            except ZSI.client.httplib.BadStatusLine:
+                time.sleep(1)
+        raise
+
+    def _waitForValues(self, objmor, filterProps, endWaitProps, expectedVals):
         version = ''
         endVals = [ None ] * len(endWaitProps)
         filterVals = [ None ] * len(filterProps)
@@ -755,9 +767,13 @@ class VimService(object):
                             done = True
                             break
         finally:
-            req = DestroyPropertyFilterRequestMsg()
-            req.set_element__this(filterSpecRef)
-            self._service.DestroyPropertyFilter(req)
+            try:
+                req = DestroyPropertyFilterRequestMsg()
+                req.set_element__this(filterSpecRef)
+                self._service.DestroyPropertyFilter(req)
+            except:
+                # Don't fail when cleaning things up
+                pass
 
         return filterVals
 

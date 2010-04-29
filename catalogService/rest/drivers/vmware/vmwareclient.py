@@ -522,8 +522,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                         ds=self.vicfg.getMOR(dataStore),
                                         rp=self.vicfg.getMOR(resourcePool))
             return vmMor
-        except:
-            # FIXME: error handle on ret
+        except Exception, e:
+            self.log_exception("Exception cloning template: %s" % e)
             raise
 
     def _findUniqueName(self, inventoryPrefix, startName):
@@ -593,6 +593,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 self.client.reconfigVM(vm,
                     dict(annotation = "rba-uuid: %s" % uuid))
             except viclient.Error, e:
+                self.log_exception("Exception registering VM: %s", e)
                 raise RuntimeError('An error occurred when registering the '
                                    'VM: %s' %str(e))
             return vm
@@ -645,8 +646,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         else:
             vmMor = self.client._getVM(uuid = instanceId)
 
-        self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
-                                computeResource)
+        try:
+            self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
+                                    computeResource)
+        except Exception, e:
+            self.log_exception("Exception attaching credentials: %s" % e)
         self.client.startVM(mor = vmMor)
         job.addLog(self.LogEntry('Launching'))
         # Grab the real uuid
@@ -662,8 +666,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         dsInfo = self.vicfg.getMOR(dataStoreMor)
         dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
         import viclient
-        viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
-            dataCenter = dataCenter, dataStore = dataStore)
+        try:
+            viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
+                dataCenter = dataCenter, dataStore = dataStore)
+        finally:
+            # We use filename below only for the actual name; no need to keep
+            # this file around now
+            os.unlink(filename)
 
         dc = self.vicfg.getMOR(dataCenterMor)
         hostFolder = self.client.getMoRefProp(dc, 'hostFolder')
