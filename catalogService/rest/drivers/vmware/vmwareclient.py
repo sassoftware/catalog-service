@@ -538,9 +538,7 @@ class VMwareClient(baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        msg = 'Downloading image'
-        job.addHistoryEntry(msg)
-        self.log_debug(msg)
+        self._msg(job, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
             path = self._downloadImage(image, tmpDir, auth = auth)
@@ -554,14 +552,10 @@ class VMwareClient(baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        msg = 'Extracting image'
-        job.addHistoryEntry(msg)
-        self.log_debug(msg)
+        self._msg(job, 'Extracting image')
         try:
             workdir = self.extractImage(path)
-            msg = 'Uploading image to VMware'
-            job.addHistoryEntry(msg)
-            self.log_debug(msg)
+            self._msg(job, 'Uploading image to VMware')
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
@@ -571,9 +565,11 @@ class VMwareClient(baseDriver.BaseDriver):
                                                  dataCenter=dcName,
                                                  dataStore=dsName)
             try:
+                self._msg(job, 'Registering VM')
                 vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
                                             vmName, asTemplate=False,
                                             host=host, pool=rp)
+                self._msg(job, 'Reconfiguring VM')
                 # Reconfiguring the uuid is unreliable, we're using the
                 # annotation field for now
                 self.client.reconfigVM(vm,
@@ -616,6 +612,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                    dataStore, computeResource,
                                    resourcePool, vmName, uuid)
             if useTemplate:
+                self._msg(job, 'Converting VM to template')
                 self.client.markAsTemplate(vm=vm)
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
@@ -624,7 +621,7 @@ class VMwareClient(baseDriver.BaseDriver):
             vm = getattr(image, 'opaqueId')
 
         if useTemplate:
-            job.addHistoryEntry('Cloning template')
+            self._msg(job, 'Cloning template')
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
                                         dataCenter, computeResource,
@@ -633,19 +630,23 @@ class VMwareClient(baseDriver.BaseDriver):
             vmMor = self.client._getVM(uuid = instanceId)
 
         try:
-            self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
+            self._attachCredentials(job, instanceName, vmMor, dataCenter, dataStore,
                                     computeResource)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
+        self._msg(job, 'Launching')
         self.client.startVM(mor = vmMor)
-        job.addHistoryEntry('Launching')
         # Grab the real uuid
         instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
         uuid = instMap[vmMor]['config.uuid']
+        self._msg(job, 'Instance launched')
         return uuid
 
+    def _msg(self, job, msg):
+        job.addHistoryEntry(msg)
+        self.log_debug(msg)
 
-    def _attachCredentials(self, vmName, vmMor, dataCenterMor, dataStoreMor,
+    def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor):
         filename = self.getCredentialsIsoFile()
         dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
@@ -653,6 +654,7 @@ class VMwareClient(baseDriver.BaseDriver):
         dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
         import viclient
         try:
+            self._msg(job, 'Uploading initial configuration')
             viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:
@@ -669,6 +671,7 @@ class VMwareClient(baseDriver.BaseDriver):
         datastoreVolume = self.client._getVolumeName(dataStore)
         controllerMor = self.client._getIdeController(defaultDevices)
         try:
+            self._msg(job, 'Creating initial configuration disc')
             cdromSpec = self.client.createCdromConfigSpec(
                 os.path.basename(filename), vmMor, controllerMor,
                 dataStoreMor, datastoreVolume)
