@@ -27,14 +27,16 @@ def _strToMor(smor, mortype=None):
         mor.set_attribute_type(mortype)
     return mor
 
-class ComputeResource:
+class ComputeResource(object):
+    __slots__ = [ 'obj', 'configTarget', 'properties', 'resourcePools' ]
     def __init__(self, obj, properties, configTarget, resourcePools):
         self.obj = obj
         self.properties = properties
         self.configTarget = configTarget
         self.resourcePools = resourcePools
 
-class Datacenter:
+class Datacenter(object):
+    __slots__ = [ 'obj', 'crs', 'properties' ]
     def __init__(self, obj, properties):
         self.crs = []
         self.obj = obj
@@ -52,12 +54,23 @@ class Datacenter:
                 return cr
         return None
 
-class VIConfig:
+class Network(object):
+    __slots__ = [ 'mor', 'props' ]
+    def __init__(self, mor, props):
+        self.mor = mor
+        self.props = props
+
+    @property
+    def name(self):
+        return self.props['name']
+
+class VIConfig(object):
     def __init__(self):
         self.datacenters = []
         self.namemap = {}
         self.mormap = {}
         self.props = {}
+        self.networks = {}
 
     def addDatacenter(self, dc):
         self.datacenters.append(dc)
@@ -86,6 +99,12 @@ class VIConfig:
 
     def getProperties(self):
         return self.props
+
+    def getNetwork(self, mor):
+        return self.networks.get(mor)
+
+    def addNetwork(self, mor, props):
+        self.networks[mor] = Network(mor, props)
 
 class Error(Exception):
     pass
@@ -508,6 +527,16 @@ class VimService(object):
         dcToVmf.set_element_selectSet([ dcToVmfSpec ])
         dcToVmf.set_element_name('dcToVmf')
 
+        # Recurse through networkFolder branch
+        dcToNetwork = ns0.TraversalSpec_Def('').pyclass()
+        dcToNetwork.set_element_type('Datacenter')
+        dcToNetwork.set_element_path('networkFolder')
+        dcToNetwork.set_element_skip(False)
+        dcToNetworkSpec = dcToNetwork.new_selectSet()
+        dcToNetworkSpec.set_element_name('visitFolders')
+        dcToNetwork.set_element_selectSet([ dcToNetworkSpec ])
+        dcToNetwork.set_element_name('dcToNetwork')
+
         # Recurse through all Hosts
         hToVm = ns0.TraversalSpec_Def('').pyclass()
         hToVm.set_element_type('HostSystem')
@@ -525,14 +554,14 @@ class VimService(object):
         visitFolders.set_element_skip(False)
         l = []
         for specName in ('visitFolders', 'dcToHf', 'dcToVmf', 'crToH',
-                         'crToRp', 'HToVm', 'rpToVm'):
+                         'crToRp', 'HToVm', 'rpToVm', 'dcToNetwork'):
             spec = visitFolders.new_selectSet()
             spec.set_element_name(specName)
             l.append(spec)
         visitFolders.set_element_selectSet(l)
         visitFolders.set_element_name('visitFolders')
         specs = [ visitFolders, dcToVmf, dcToHf, crToH, crToRp,
-                  rpToRp, hToVm, rpToVm ]
+                  rpToRp, hToVm, rpToVm, dcToNetwork ]
         return specs
 
     def buildPropertySpecArray(self, typeinfo):
@@ -986,14 +1015,19 @@ class VimService(object):
                                                          'network' ],
                                     'ResourcePool': [ 'name',
                                                       'parent' ],
+                                    'Network' : [ 'name',
+                                                  'host',
+                                                  'tag', ],
                                     })
         crs = []
         hostFolderToDataCenter = {}
         rps = {}
         childRps = {}
+        networks = {}
         nameMap = dict((x[0], x[1].get('name', None))
                        for x in props.iteritems())
 
+        networkTypes = set(['Network', 'DistributedVirtualPortgroup'])
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1007,6 +1041,16 @@ class VimService(object):
                 rps[mor] = morProps
                 l = childRps.setdefault(morProps['parent'], [])
                 l.append(mor)
+            elif objType in networkTypes:
+                # Ignore networks without hosts
+                if not morProps['host']:
+                    continue
+                tags = set([ x.get_element_key()
+                    for x in morProps['tag'].get_element_Tag() ])
+                if 'SYSTEM/DVS.UPLINKPG' in tags:
+                    # We can't use an uplink
+                    continue
+                networks[mor] = morProps
 
         ret = []
 
@@ -1048,6 +1092,8 @@ class VimService(object):
             vicfg.addDatacenter(dc)
         vicfg.updateNamemap(nameMap)
         vicfg.setProperties(props)
+        for mor, props in networks.items():
+            vicfg.addNetwork(mor, props)
         return vicfg
 
     def _getVM(self, mor=None, uuid=None):

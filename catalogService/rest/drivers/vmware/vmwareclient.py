@@ -227,10 +227,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                            readonly = True
                            )
         crToDc = {}
+        networkToDc = {}
         for dc in dataCenters:
             crs = dc.getComputeResources()
             for cr in crs:
                 crToDc[cr] = dc
+            for network in dc.properties['network']:
+                networkToDc.setdefault(network, []).append(dc)
             descr.addDataField('cr-%s' %dc.obj,
                                descriptions = 'Compute Resource',
                                required = True,
@@ -245,9 +248,31 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                conditional = descriptor.Conditional(
                 fieldName='dataCenter',
                 operator='eq',
-                value=dc.obj)
-                               )
-        for cr in crToDc.keys():
+                value=dc.obj))
+        for cr, dc in crToDc.items():
+            cfg = cr.configTarget
+            if cfg is None:
+                continue
+            # We may have references to invalid networks, skip those
+            networks = dc.properties['network']
+            networks = [ vicfg.getNetwork(x) for x in networks ]
+            networks = [ x for x in networks if x is not None ]
+            descr.addDataField('network-%s' % dc.obj,
+                descriptions = 'Network',
+                required = True,
+                    help = [
+                        ('launch/network.html', None)
+                    ],
+                    type = descriptor.EnumeratedType(
+                        descriptor.ValueWithDescription(x.mor,
+                            descriptions=x.name) for x in networks),
+                    default = networks[0].mor,
+                    conditional = descriptor.Conditional(
+                        fieldName='dataCenter',
+                        operator='eq',
+                        value=dc.obj))
+
+        for cr, dc in crToDc.items():
             cfg = cr.configTarget
             if cfg is None:
                 continue
@@ -260,7 +285,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 dsDesc = '%s - %s free' %(name, formatSize(free))
                 dsMor = ds.get_element_datastore().get_element_datastore()
                 dataStores.append((dsMor, dsDesc))
-            dc = crToDc[cr]
             descr.addDataField('dataStore-%s' %cr.obj,
                                descriptions = 'Data Store',
                                required = True,
