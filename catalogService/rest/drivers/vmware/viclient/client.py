@@ -231,7 +231,7 @@ class VimService(object):
         return self.baseUrl
 
     def getSessionUUID(self):
-        return self._service.binding.cookies['vmware_soap_session'].coded_value
+        return self._service._service.binding.cookies['vmware_soap_session'].coded_value
 
     def getObjectProperties(self, obj, properties, collector=None):
         if obj is None:
