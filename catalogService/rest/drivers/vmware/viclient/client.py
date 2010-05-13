@@ -3,17 +3,22 @@
 # Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
 #
 
-import sys
 import errno
+import glob
+import os
 import select
 import struct
-import glob
+import sys
+import time
+from lxml import etree
 
 from VimService_client import *
 from ZSI.wstools import logging
 from ZSI.wstools import TimeoutSocket
 from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
+
+import vmutils
 
 def _strToMor(smor, mortype=None):
     if isinstance(smor, unicode):
@@ -27,14 +32,16 @@ def _strToMor(smor, mortype=None):
         mor.set_attribute_type(mortype)
     return mor
 
-class ComputeResource:
+class ComputeResource(object):
+    __slots__ = [ 'obj', 'configTarget', 'properties', 'resourcePools' ]
     def __init__(self, obj, properties, configTarget, resourcePools):
         self.obj = obj
         self.properties = properties
         self.configTarget = configTarget
         self.resourcePools = resourcePools
 
-class Datacenter:
+class Datacenter(object):
+    __slots__ = [ 'obj', 'crs', 'properties' ]
     def __init__(self, obj, properties):
         self.crs = []
         self.obj = obj
@@ -52,12 +59,24 @@ class Datacenter:
                 return cr
         return None
 
-class VIConfig:
+class Network(object):
+    __slots__ = [ 'mor', 'props' ]
+    def __init__(self, mor, props):
+        self.mor = mor
+        self.props = props
+
+    @property
+    def name(self):
+        return self.props['name']
+
+class VIConfig(object):
     def __init__(self):
         self.datacenters = []
         self.namemap = {}
         self.mormap = {}
         self.props = {}
+        self.networks = {}
+        self.distributedVirtualSwitches = {}
 
     def addDatacenter(self, dc):
         self.datacenters.append(dc)
@@ -87,8 +106,40 @@ class VIConfig:
     def getProperties(self):
         return self.props
 
+    def getNetwork(self, mor):
+        return self.networks.get(mor)
+
+    def addNetwork(self, mor, props):
+        self.networks[mor] = Network(mor, props)
+
+    def addDistributedVirtualSwitch(self, dvs):
+        d = self.distributedVirtualSwitches
+        k = dvs.get_element_distributedVirtualSwitch()
+        d[k] = dvs
+
+    def getDistributedVirtualSwitch(self, dvs):
+        return self.distributedVirtualSwitches.get(dvs)
+
 class Error(Exception):
     pass
+
+class ProgressUpdate(object):
+    def __init__(self, vmclient, httpNfcLease):
+        self.vmclient = vmclient
+        self.httpNfcLease = httpNfcLease
+        self.totalSize = 0
+        self.prevFilesSize = 0
+
+    def progress(self, bytes, rate=0):
+        pct = int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
+        req = HttpNfcLeaseProgressRequestMsg()
+        req.set_element__this(self.httpNfcLease)
+        req.set_element_percent(pct)
+
+        self.vmclient._service.HttpNfcLeaseProgress(req)
+
+    def updateSize(self, size):
+        self.prevFilesSize = size
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -115,6 +166,7 @@ class VimService(object):
         self._sic = ret.get_element_returnval()
         self._propCol = self._sic.get_element_propertyCollector()
         self._rootFolder = self._sic.get_element_rootFolder()
+        self.vmwareVersion = self.getVmwareVersion()
 
         # log in
         ret = self.login(self._service, username, password, locale,
@@ -169,6 +221,11 @@ class VimService(object):
     def isESX(self):
         prodLine = self._sic.get_element_about().get_element_productLineId()
         return 'esx' in prodLine.lower()
+
+    def getVmwareVersion(self):
+        version =  self._sic.get_element_about().get_element_version()
+        version = tuple(int(x) for x in version.split('.'))
+        return version
 
     def getUrlBase(self):
         return self.baseUrl
@@ -304,80 +361,6 @@ class VimService(object):
         diskSpec.set_element_device(disk)
         return diskSpec
 
-    def createVmConfigSpec(self, vmName, datastoreName, diskSizeMB,
-                           computeResMor, hostMor):
-        configTarget = self.getConfigTarget(computeResMor, hostMor)
-        defaultDevices = self.getDefaultDevices(computeResMor, hostMor)
-
-        configSpec = ns0.VirtualMachineConfigSpec_Def('').pyclass()
-
-        # determine the default network name
-        networkName = None
-        network = (configTarget is not None and
-                   configTarget.get_element_network()) or None
-        if network:
-            for netInfo in network:
-                netSummary = netInfo.get_element_network()
-                if netSummary.get_element_accessible():
-                    networkName = netSummary.get_element_name()
-                    break
-
-        # determine the data store to use
-        datastoreRef, datastoreName = self._getDatastoreRef(configTarget,
-            datastoreName)
-
-        datastoreVolume = self._getVolumeName(datastoreName)
-        vmfi = ns0.VirtualMachineFileInfo_Def('').pyclass()
-        vmfi.set_element_vmPathName(datastoreVolume)
-        configSpec.set_element_files(vmfi)
-
-        # Add a scsi controller
-        diskCtlrKey = 1
-        scsiCtrlSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        scsiCtrlSpec.set_element_operation('add')
-
-        scsiCtrl = ns0.VirtualLsiLogicController_Def('').pyclass()
-        scsiCtrl.set_element_busNumber(0)
-        scsiCtrlSpec.set_element_device(scsiCtrl)
-        scsiCtrl.set_element_key(diskCtlrKey)
-        scsiCtrl.set_element_sharedBus('noSharing')
-
-        # add a floppy
-        floppySpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        floppySpec.set_element_operation('add')
-        floppy = ns0.VirtualFloppy_Def('').pyclass()
-        flpBacking = ns0.VirtualFloppyDeviceBackingInfo_Def('').pyclass()
-        flpBacking.set_element_deviceName('/dev/fd0')
-        floppy.set_element_backing(flpBacking)
-        floppy.set_element_key(3)
-        floppySpec.set_element_device(floppy)
-
-        # Create a new disk - file based - for the vm
-        diskSpec = None
-        diskSpec = self.createVirtualDisk(datastoreName, diskCtlrKey,
-                                          datastoreRef, diskSizeMB)
-
-
-        # Add a NIC. the network Name must be set as the device name
-        # to create the NIC.
-        nicSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        if networkName:
-            nicSpec.set_element_operation('add')
-            nic = ns0.VirtualPCNet32_Def('').pyclass()
-            nicBacking = ns0.VirtualEthernetCardNetworkBackingInfo_Def('').pyclass()
-            nicBacking.set_element_deviceName(networkName)
-            nic.set_element_addressType('generated')
-            nic.set_element_backing(nicBacking)
-            nic.set_element_key(4)
-            nicSpec.set_element_device(nic)
-
-        deviceConfigSpec = [ scsiCtrlSpec, diskSpec ]
-        deviceConfigSpec.append(nicSpec)
-
-        configSpec.set_element_deviceChange(deviceConfigSpec)
-        configSpec.set_element_name(vmName)
-        return configSpec
-
     def _getDatastoreRef(self, configTarget, datastoreName):
         # determine the data store to use
         datastoreRef = None
@@ -401,6 +384,37 @@ class VimService(object):
             if isinstance(dev.typecode, ns0.VirtualIDEController_Def):
                 return dev
         return None
+
+    def createNicConfigSpec(self, networkMor, vicfg):
+        # Add a NIC.
+        nwProps = vicfg.getNetwork(networkMor).props
+        if networkMor.get_attribute_type() == 'DistributedVirtualPortgroup':
+            # We don't fetch the full config upfront, it's too large
+            dvsMor = self.getMoRefProp(networkMor,
+                'config.distributedVirtualSwitch')
+            dvs = vicfg.getDistributedVirtualSwitch(dvsMor)
+            switchUuid = dvs.get_element_switchUuid()
+            nicBacking = ns0.VirtualEthernetCardDistributedVirtualPortBackingInfo_Def('').pyclass()
+            port = nicBacking.new_port()
+            port.set_element_switchUuid(switchUuid)
+            port.set_element_portgroupKey(str(networkMor))
+            nicBacking.set_element_port(port)
+        else:
+            # Plain network. NIC is bound by network name (very lame)
+            deviceName = nwProps['name']
+            nicBacking = ns0.VirtualEthernetCardNetworkBackingInfo_Def('').pyclass()
+            nicBacking.set_element_deviceName(deviceName)
+
+        nicSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
+        nicSpec.set_element_operation('add')
+
+        nic = ns0.VirtualPCNet32_Def('').pyclass()
+
+        nic.set_element_addressType('generated')
+        nic.set_element_backing(nicBacking)
+        nic.set_element_key(-1)
+        nicSpec.set_element_device(nic)
+        return nicSpec
 
     def createCdromConfigSpec(self, filename, vmmor, controller, datastoreRef,
                 datastoreVolume):
@@ -508,6 +522,16 @@ class VimService(object):
         dcToVmf.set_element_selectSet([ dcToVmfSpec ])
         dcToVmf.set_element_name('dcToVmf')
 
+        # Recurse through networkFolder branch
+        dcToNetwork = ns0.TraversalSpec_Def('').pyclass()
+        dcToNetwork.set_element_type('Datacenter')
+        dcToNetwork.set_element_path('networkFolder')
+        dcToNetwork.set_element_skip(False)
+        dcToNetworkSpec = dcToNetwork.new_selectSet()
+        dcToNetworkSpec.set_element_name('visitFolders')
+        dcToNetwork.set_element_selectSet([ dcToNetworkSpec ])
+        dcToNetwork.set_element_name('dcToNetwork')
+
         # Recurse through all Hosts
         hToVm = ns0.TraversalSpec_Def('').pyclass()
         hToVm.set_element_type('HostSystem')
@@ -523,16 +547,21 @@ class VimService(object):
         visitFolders.set_element_type('Folder')
         visitFolders.set_element_path('childEntity')
         visitFolders.set_element_skip(False)
+        specNames =  ['visitFolders', 'dcToHf', 'dcToVmf', 'crToH',
+                     'crToRp', 'HToVm', 'rpToVm' ]
+        specs = [ visitFolders, dcToVmf, dcToHf, crToH, crToRp,
+                  rpToRp, hToVm, rpToVm ]
+        if self.vmwareVersion >= (4, 0, 0):
+            specNames.append('dcToNetwork')
+            specs.append(dcToNetwork)
+
         l = []
-        for specName in ('visitFolders', 'dcToHf', 'dcToVmf', 'crToH',
-                         'crToRp', 'HToVm', 'rpToVm'):
+        for specName in specNames:
             spec = visitFolders.new_selectSet()
             spec.set_element_name(specName)
             l.append(spec)
         visitFolders.set_element_selectSet(l)
         visitFolders.set_element_name('visitFolders')
-        specs = [ visitFolders, dcToVmf, dcToHf, crToH, crToRp,
-                  rpToRp, hToVm, rpToVm ]
         return specs
 
     def buildPropertySpecArray(self, typeinfo):
@@ -827,62 +856,6 @@ class VimService(object):
         propsWanted = {'VirtualMachine': propertyList}
         return self.getProperties(propsWanted, root)
 
-    def createVM(self, dcName, vmName, dataStore=None,
-                 annotation=None, memory=512, cpus=1,
-                 guestOsId='winXPProGuest'):
-        dc = self.getDecendentMoRef(None, 'Datacenter', dcName)
-        if not dc:
-            raise RuntimeError('Datacenter ' + dc + ' not found')
-
-        hostFolder = self.getMoRefProp(dc, 'hostFolder')
-        computeResources = self.getDecendentMoRefs(hostFolder, 'ComputeResource')
-        hostName = None
-        if hostName:
-            hostmor = self.getDecendentMoRef(hostFolder, 'HostSystem', hostName)
-            if not host:
-                raise RuntimeError('Host ' + hostName + ' not found')
-        else:
-            # pick the first host we find
-            # FIXME: this was supposed to look up in dataCenter, but that
-            # is not working
-            hostmor = self.getFirstDecendentMoRef(hostFolder, 'HostSystem')
-
-        # find the compute resource for the host we're going to use
-        crmor = self._getComputeResourceForHost(hostmor, computeResources)
-        if not crmor:
-            raise RuntimeError('No Compute Resource Found On Specified Host')
-
-        # now get the resourcePool for the compute resource
-        resourcePool = self.getMoRefProp(crmor, 'resourcePool')
-        # and vmFolder for the datacenter
-        vmFolder = self.getMoRefProp(dc, 'vmFolder')
-        vmConfigSpec = self.createVmConfigSpec(vmName, dataStore, 100, crmor,
-                                               hostmor)
-        if annotation:
-            vmConfigSpec.set_element_annotation(annotation)
-        vmConfigSpec.set_element_memoryMB(memory)
-        vmConfigSpec.set_element_numCPUs(cpus)
-        vmConfigSpec.set_element_guestId(guestOsId)
-
-        req = CreateVM_TaskRequestMsg()
-        req.set_element__this(vmFolder)
-        req.set_element_config(vmConfigSpec)
-        req.set_element_pool(resourcePool)
-        req.set_element_host(hostmor)
-        ret = self._service.CreateVM_Task(req)
-        task = ret.get_element_returnval()
-        return task
-
-    def _getComputeResourceForHost(self, hostmor, computeResources):
-        nodeHostName = self.getDynamicProperty(hostmor, 'name')
-        for cr in computeResources:
-            crHosts = self.getDynamicProperty(cr, 'host')
-            for crHost in crHosts.get_element_ManagedObjectReference():
-                hostName = self.getDynamicProperty(crHost, 'name')
-                if hostName.lower() == nodeHostName.lower():
-                    return cr
-        return None
-
     def findVMByUUID(self, uuid):
         searchIndex = self._sic.get_element_searchIndex()
         req = FindByUuidRequestMsg()
@@ -922,25 +895,14 @@ class VimService(object):
             tinfo = self.getDynamicProperty(task, 'info')
             vm = tinfo.get_element_result()
             return vm
-        else:
-            tinfo = self.getDynamicProperty(task, 'info')
+
+        tinfo = self.getDynamicProperty(task, 'info')
+        error = 'Error occurred while waiting for task'
+        if hasattr(tinfo, '_error'):
             fault = tinfo.get_element_error()
-            error = 'Error Occurred'
             if fault:
                 error = fault.get_element_localizedMessage()
-            raise Error(error)
-
-    def setExtraConfig(self, vm, options):
-        req = ReconfigVM_TaskRequestMsg()
-        spec = req.new_spec()
-        l = []
-        for key, value in options.iteritems():
-            option = ns0.OptionValue_Def('').pyclass()
-            option.set_element_key(key)
-            option.set_element_value(value)
-            l.append(option)
-        spec.set_element_extraConfig(l)
-        return self._reconfigVM(vm, spec)
+        raise Error(error)
 
     def reconfigVM(self, vm, options):
         req = ReconfigVM_TaskRequestMsg()
@@ -961,6 +923,165 @@ class VimService(object):
         task = ret.get_element_returnval()
         return self.waitForTask(task)
 
+    def leaseComplete(self, httpNfcLease):
+        req = HttpNfcLeaseCompleteRequestMsg()
+        req.set_element__this(httpNfcLease)
+
+        self._service.HttpNfcLeaseComplete(req)
+
+    def getOvfManager(self):
+        return getattr(self._sic, '_ovfManager', None)
+
+    def parseOvfDescriptor(self, ovfContents):
+        ovfContents = self.sanitizeOvfDescriptor(ovfContents)
+        params = ns0.OvfParseDescriptorParams_Def('').pyclass()
+        params.set_element_deploymentOption('')
+        params.set_element_locale('')
+
+        req = ParseDescriptorRequestMsg()
+        req.set_element__this(self.getOvfManager())
+        req.set_element_ovfDescriptor(ovfContents)
+        req.set_element_pdp(params)
+        resp = self._service.ParseDescriptor(req)
+        parseDescriptorResult = resp.get_element_returnval()
+
+        if hasattr(parseDescriptorResult, '_error'):
+            raise Exception("Error parsing OVF descriptor")
+        return parseDescriptorResult
+
+    @classmethod
+    def sanitizeOvfDescriptor(cls, ovfContents):
+        # Get rid of the network specification, it breaks older vSphere 4.0
+        # nodes
+        xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
+        rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
+        doc = etree.fromstring(ovfContents)
+        contentNode = doc.find('Content')
+        sections = contentNode.findall('Section')
+        typeAttrib = "{%s}%s" % (xsiNs, "type")
+        hardwareSection = [ x for x in sections
+            if x.get(typeAttrib) == 'ovf:VirtualHardwareSection_Type' ]
+        if not hardwareSection:
+            return ovfContents
+        hardwareSection = hardwareSection[0]
+        # Iterate through all items
+        captionTag = "{%s}%s" % (rasdNs, "Caption")
+        for i, node in enumerate(hardwareSection.iterchildren()):
+            if node.tag != 'Item':
+                continue
+            caption = node.find(captionTag)
+            if caption is None:
+                continue
+            if caption.text == 'ethernet0':
+                del hardwareSection[i]
+                break
+        return etree.tostring(doc, encoding = "UTF-8")
+
+    def ovfImportStart(self, ovfFilePath, vmName,
+            vmFolder, resourcePool, dataStore, network):
+        ovfContents = file(ovfFilePath).read()
+        ovfContents = self.sanitizeOvfDescriptor(ovfContents)
+        createImportSpecResult = self.createOvfImportSpec(ovfContents, vmName,
+            resourcePool, dataStore, network)
+
+        hostErrorMessage = 'Host did not have any virtual network defined.'
+        if hasattr(createImportSpecResult, '_error'):
+            errors = createImportSpecResult.get_element_error()
+            if errors:
+                errmsg = errors[0].get_element_localizedMessage()
+                if errmsg == hostErrorMessage:
+                    raise Exception("Please update to vCenter update 1: "
+                        "http://www.vmware.com/support/vsphere4/doc/vsp_vc40_u1_rel_notes.html")
+                raise Exception("Error creating import spec: %s" % errmsg)
+
+        fileItems = createImportSpecResult.get_element_fileItem()
+
+        httpNfcLease = self.getOvfImportLease(resourcePool, vmFolder,
+            createImportSpecResult.get_element_importSpec())
+        return fileItems, httpNfcLease
+
+    def ovfUpload(self, httpNfcLease, downloadDir, fileItems, progressUpdate):
+        httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
+        deviceUrls = httpNfcLeaseInfo.get_element_deviceUrl()
+        vmMor = httpNfcLeaseInfo.get_element_entity()
+
+        fileMap = {}
+        # Compute total size
+        totalSize = 0
+        for fileItem in fileItems:
+            filePath = fileItem.get_element_path()
+            filePath = os.path.join(downloadDir, filePath)
+            isCreated = fileItem.get_element_create()
+            method = (isCreated and 'PUT') or 'POST'
+            fileSize = os.stat(filePath).st_size
+            fileMap[fileItem.get_element_deviceId()] = (method, filePath, fileSize)
+            totalSize += fileSize
+
+        progressUpdate.totalSize = totalSize
+        progressUpdate.progress(0, 0)
+
+        for deviceUrl in deviceUrls:
+            method, filePath, fileSize = fileMap[deviceUrl.get_element_importKey()]
+            vmutils._putFile(filePath, deviceUrl.get_element_url(),
+                session=None, method=method, callback = progressUpdate)
+            progressUpdate.updateSize(fileSize)
+        progressUpdate.progress(100, 0)
+        self.leaseComplete(httpNfcLease)
+
+        return vmMor
+
+    def waitForLeaseReady(self, lease):
+        ret = self.waitForValues(lease, ['state'],
+            [ 'state' ], [ ['ready', 'error'] ])
+        if ret[0] != 'ready':
+            raise Exception("Error getting lease")
+
+    def createOvfImportSpec(self, ovfContents, vmName, resourcePool,
+                            dataStore, network):
+
+        parseDescriptorResult = self.parseOvfDescriptor(ovfContents)
+        params = self.createOvfImportParams(parseDescriptorResult, vmName,
+            network)
+
+        req = CreateImportSpecRequestMsg()
+        req.set_element__this(self.getOvfManager())
+        req.set_element_ovfDescriptor(ovfContents)
+        req.set_element_resourcePool(resourcePool)
+        req.set_element_datastore(dataStore)
+        req.set_element_cisp(params)
+
+        resp = self._service.CreateImportSpec(req)
+        createImportSpecResult = resp.get_element_returnval()
+        return createImportSpecResult
+
+    def createOvfImportParams(self, parseDescriptorResult, vmName, network):
+        params = ns0.OvfCreateImportSpecParams_Def('').pyclass()
+        params.set_element_locale('')
+        params.set_element_deploymentOption(
+            parseDescriptorResult.get_element_defaultDeploymentOption())
+        params.set_element_entityName(vmName)
+
+        # Assign the first network
+        networkLabels = [ x.get_element_name()
+            for x in parseDescriptorResult.get_element_network() ]
+        if networkLabels:
+            nm = params.new_networkMapping()
+            nm.set_element_name(networkLabels[0])
+            nm.set_element_network(network)
+            params.set_element_networkMapping([ nm ])
+        return params
+
+    def getOvfImportLease(self, resourcePool, vmFolder, importSpec):
+        req = ImportVAppRequestMsg()
+        req.set_element__this(resourcePool)
+        req.set_element_spec(importSpec)
+        req.set_element_folder(vmFolder)
+
+        resp = self._service.ImportVApp(req)
+        httpNfcLease = resp.get_element_returnval()
+        return httpNfcLease
+
+
     def markAsTemplate(self, vm=None, uuid=None):
         mor = self._getVM(mor=vm, uuid=uuid)
         req = MarkAsTemplateRequestMsg()
@@ -969,11 +1090,12 @@ class VimService(object):
 
     def getVIConfig(self):
         # get properties for interesting objects
-        props = self.getProperties({'Datacenter': [ 'name',
+        propsDict = {
+                                    'Datacenter': [ 'name',
                                                     'hostFolder',
                                                     'vmFolder',
                                                     'datastore',
-                                                    'network'],
+                                                    'network' ],
                                     'Folder': ['name'],
                                     'HostSystem': [ 'name',
                                                     'datastore',
@@ -983,17 +1105,24 @@ class VimService(object):
                                                          'parent',
                                                          'host',
                                                          'resourcePool',
-                                                         'network' ],
+                                                         'network'],
                                     'ResourcePool': [ 'name',
                                                       'parent' ],
-                                    })
+                                    }
+        if self.vmwareVersion >= (4, 0, 0):
+            propsDict['Network'] = [ 'name', 'host', 'tag', ]
+        props = self.getProperties(propsDict)
+
         crs = []
         hostFolderToDataCenter = {}
         rps = {}
         childRps = {}
+        networks = {}
+        incompleteNetworks = set()
         nameMap = dict((x[0], x[1].get('name', None))
                        for x in props.iteritems())
 
+        networkTypes = set(['Network', 'DistributedVirtualPortgroup'])
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1003,10 +1132,45 @@ class VimService(object):
                 # build a map from host folder -> data center
                 dc = Datacenter(mor, morProps)
                 hostFolderToDataCenter[morProps['hostFolder']] = dc
+                for network in dc.properties['network']:
+                    if network not in networks:
+                        networks[network] = None
             elif objType == 'ResourcePool':
                 rps[mor] = morProps
                 l = childRps.setdefault(morProps['parent'], [])
                 l.append(mor)
+            elif objType in networkTypes:
+                # Ignore networks without hosts
+                if not morProps['host']:
+                    incompleteNetworks.add(mor)
+                    continue
+                tags = set([ x.get_element_key()
+                    for x in morProps['tag'].get_element_Tag() ])
+                if 'SYSTEM/DVS.UPLINKPG' in tags:
+                    # We can't use an uplink
+                    incompleteNetworks.add(mor)
+                    continue
+                networks[mor] = morProps
+
+        networksNotInFolder = [ x for (x, y) in networks.items()
+            if y is None and x not in incompleteNetworks ]
+        # 3.5 did not have a networkFolder child for datacenters, so we could
+        # not traverse the folder that way. Describe the networks
+        # individually.
+        if networksNotInFolder:
+            propsDict = {}
+            propList = [ 'name', 'host' ]
+            for network in networksNotInFolder:
+                propsDict.clear()
+                nwtype = network.get_attribute_type()
+                propsDict[nwtype] = propList
+                nwprops = self.getProperties(propsDict, root = network)[network]
+                if not nwprops['host']:
+                    # No host attached to this network
+                    del networks[network]
+                    continue
+                networks[network] = nwprops
+            nameMap.update((mor, p['name']) for (mor, p) in networks.items())
 
         ret = []
 
@@ -1018,6 +1182,11 @@ class VimService(object):
             configTarget = self.getConfigTarget(cr)
             datastores = (configTarget is not None and
                           configTarget.get_element_datastore()) or []
+            dvsList = (configTarget is not None and
+                       hasattr(configTarget, '_distributedVirtualSwitch') and
+                       configTarget.get_element_distributedVirtualSwitch()) or []
+            for dvs in dvsList:
+                vicfg.addDistributedVirtualSwitch(dvs)
             for ds in datastores:
                 # first go through all the datastores and record
                 # their names.
@@ -1048,6 +1217,10 @@ class VimService(object):
             vicfg.addDatacenter(dc)
         vicfg.updateNamemap(nameMap)
         vicfg.setProperties(props)
+        for mor, props in networks.items():
+            if props is None:
+                continue
+            vicfg.addNetwork(mor, props)
         return vicfg
 
     def _getVM(self, mor=None, uuid=None):

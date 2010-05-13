@@ -12,7 +12,7 @@ import pprint
 
 from conary.lib import util
 
-BUFSIZE=256 * 1024
+BUFSIZE=1024 * 1024
 
 class HTTPConnection(httplib.HTTPConnection):
     def send(self, buf):
@@ -28,7 +28,8 @@ class HTTPSConnection(httplib.HTTPSConnection):
             pprint.pprint(buf)
         self.sock.sendall(buf)
 
-def _makeConnection(url, method, headers = None, bodyStream = None):
+def _makeConnection(url, method, headers = None, bodyStream = None,
+        callback = None):
     protocol, uri = urllib.splittype(url)
     assert(protocol in ('http', 'https'))
     host, selector = urllib.splithost(uri)
@@ -38,6 +39,12 @@ def _makeConnection(url, method, headers = None, bodyStream = None):
         r = HTTPConnection(host, port)
     else:
         r = HTTPSConnection(host, port)
+
+    progress = None
+    if callback:
+        progress = getattr(callback, 'progress', None)
+    if progress is None:
+        progress = lambda x, y: x
 
     hdrs = { 'Content-Type' : 'application/octet-stream'}
     hdrs.update(headers or {})
@@ -56,7 +63,7 @@ def _makeConnection(url, method, headers = None, bodyStream = None):
         if bodyStream:
             # This could fail, if the device backed by this file is connected
             util.copyfileobj(bodyStream, r, bufSize=BUFSIZE,
-                sizeLimit=hdrs['Content-Length'])
+                sizeLimit=hdrs['Content-Length'], callback=progress)
         return r.getresponse()
     except socket.error, e:
         raise
@@ -68,20 +75,21 @@ def _makeConnection(url, method, headers = None, bodyStream = None):
             pass
         return response
 
-def _putFile(inPath, outUrl, session=None):
+def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
     size = os.stat(inPath).st_size
     inFile = open(inPath)
 
     headers = {}
     if session:
         headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
-    response = _makeConnection(outUrl, 'PUT', headers, inFile)
+    response = _makeConnection(outUrl, method, headers, inFile,
+        callback=callback)
 
     if response and response.status not in (200, 201):
-        raise RuntimeError('PUT failed: %d - %s' %(response.status,
-                                                   response.reason))
+        raise RuntimeError('%s failed: %d - %s' % (
+            method, response.status, response.reason))
     elif not response:
-        raise RuntimeError('PUT failed')
+        raise RuntimeError('%s failed' % method)
     response.close()
 
 def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):

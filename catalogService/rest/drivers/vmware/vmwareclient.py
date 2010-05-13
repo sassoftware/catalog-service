@@ -179,11 +179,13 @@ class VMwareClient(baseDriver.BaseDriver):
         dataCenter = getField('dataCenter')
         cr = getField('cr-%s' % dataCenter)
         rp = getField('resourcePool-%s' % cr)
+        network = getField('network-%s' % dataCenter)
         params.update(dict(
             dataCenter = dataCenter,
             dataStore = getField('dataStore-%s' % cr),
             computeResource = cr,
             resourcePool = rp,
+            network = network,
         ))
         return params
 
@@ -226,10 +228,13 @@ class VMwareClient(baseDriver.BaseDriver):
                            readonly = True
                            )
         crToDc = {}
+        networkToDc = {}
         for dc in dataCenters:
             crs = dc.getComputeResources()
             for cr in crs:
                 crToDc[cr] = dc
+            for network in dc.properties['network']:
+                networkToDc.setdefault(network, []).append(dc)
             descr.addDataField('cr-%s' %dc.obj,
                                descriptions = 'Compute Resource',
                                required = True,
@@ -250,6 +255,29 @@ class VMwareClient(baseDriver.BaseDriver):
             cfg = cr.configTarget
             if cfg is None:
                 continue
+            # We may have references to invalid networks, skip those
+            networks = dc.properties['network']
+            networks = [ vicfg.getNetwork(x) for x in networks ]
+            networks = [ x for x in networks if x is not None ]
+            descr.addDataField('network-%s' % dc.obj,
+                descriptions = 'Network',
+                required = True,
+                    help = [
+                        ('launch/network.html', None)
+                    ],
+                    type = descr.EnumeratedType(
+                        descr.ValueWithDescription(x.mor,
+                            descriptions=x.name) for x in networks),
+                    default = networks[0].mor,
+                    conditional = descr.Conditional(
+                        fieldName='dataCenter',
+                        operator='eq',
+                        fieldValue=dc.obj))
+
+        for cr, dc in crToDc.items():
+            cfg = cr.configTarget
+            if cfg is None:
+                continue
             dataStores = []
 
             for ds in cfg.get_element_datastore():
@@ -259,7 +287,6 @@ class VMwareClient(baseDriver.BaseDriver):
                 dsDesc = '%s - %s free' %(name, formatSize(free))
                 dsMor = ds.get_element_datastore().get_element_datastore()
                 dataStores.append((dsMor, dsDesc))
-            dc = crToDc[cr]
             descr.addDataField('dataStore-%s' %cr.obj,
                                descriptions = 'Data Store',
                                required = True,
@@ -316,6 +343,14 @@ class VMwareClient(baseDriver.BaseDriver):
     def terminateInstance(self, instanceId):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
+
+    def drvGetImages(self, imageIds):
+        if self.client.vmwareVersion >= (4, 0, 0):
+            imageFormat = 'VMWARE_OVF_IMAGE'
+        else:
+            imageFormat = 'VMWARE_ESX_IMAGE'
+        self.RBUILDER_BUILD_TYPE = imageFormat
+        return baseDriver.BaseDriver.drvGetImages(self, imageIds)
 
     def getCloudAlias(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)
@@ -520,8 +555,54 @@ class VMwareClient(baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
+    def _deployOvf(self, job, vmName, uuid, vmFilesPath, dataCenter,
+                     dataStore, host, resourcePool, network,
+                     asTemplate = False):
+        dataCenterName = dataCenter.properties['name']
+        # Grab ovf file
+        ovfFiles = [ x for x in os.listdir(vmFilesPath) if x.endswith('.ovf') ]
+        if not ovfFiles:
+            raise RuntimeError("No ovf file found")
+        if len(ovfFiles) != 1:
+            raise RuntimeError("More than one .ovf file found in %s" %
+                vmFilesPath)
+        ovfFilePath = os.path.join(vmFilesPath, ovfFiles[0])
+        vmFolder = dataCenter.properties['vmFolder']
+        self._msg(job, 'Importing OVF descriptor')
+        fileItems, httpNfcLease = self.client.ovfImportStart(ovfFilePath,
+            vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
+            dataStore = dataStore, network = network)
+        self.client.waitForLeaseReady(httpNfcLease)
+        import viclient
+        progressUpdate = viclient.client.ProgressUpdate(self.client, httpNfcLease)
+        vmMor = self.client.ovfUpload(httpNfcLease, vmFilesPath, fileItems,
+            progressUpdate)
+        return vmMor
+
+    def _deployByVmx(self, job, vmName, uuid, vmFiles, dataCenter,
+                     dataStoreName, host, resourcePool, network,
+                     asTemplate = False):
+        dataCenterName = dataCenter.properties['name']
+        import viclient
+        vmx = viclient.vmutils.uploadVMFiles(self.client,
+                                             vmFiles,
+                                             vmName,
+                                             dataCenter=dataCenterName,
+                                             dataStore=dataStoreName)
+        try:
+            self._msg(job, 'Registering VM')
+            vm = self.client.registerVM(dataCenter.properties['vmFolder'], vmx,
+                                        vmName, asTemplate=False,
+                                        host=host, pool=resourcePool)
+            return vm
+        except viclient.Error, e:
+            self.log_exception("Exception registering VM: %s", e)
+            raise RuntimeError('An error occurred when registering the '
+                               'VM: %s' %str(e))
+
     def _deployImage(self, job, image, auth, dataCenter, dataStore,
-                     computeResource, resourcePool, vmName, uuid):
+                     computeResource, resourcePool, vmName, uuid,
+                     network, asTemplate=False):
 
         dc = self.vicfg.getDatacenter(dataCenter)
         dcName = dc.properties['name']
@@ -531,6 +612,7 @@ class VMwareClient(baseDriver.BaseDriver):
         dsInfo = self.client.getDynamicProperty(ds, 'summary')
         dsName = dsInfo.get_element_name()
         rp = self.vicfg.getMOR(resourcePool)
+        network = self.vicfg.getMOR(network)
         props = self.vicfg.getProperties()
         # find a host that can access the datastore
         hosts = [ x for x in cr.properties['host'] if ds in props[x]['datastore'] ]
@@ -559,26 +641,38 @@ class VMwareClient(baseDriver.BaseDriver):
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
-            vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                                 vmFiles,
-                                                 vmName,
-                                                 dataCenter=dcName,
-                                                 dataStore=dsName)
-            try:
-                self._msg(job, 'Registering VM')
-                vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
-                                            vmName, asTemplate=False,
-                                            host=host, pool=rp)
-                self._msg(job, 'Reconfiguring VM')
+            if self.client.vmwareVersion >= (4, 0, 0):
+                vmMor = self._deployOvf(job, vmName, uuid,
+                    vmFiles, dc, dataStore=ds,
+                    host = host, resourcePool=rp, network = network,
+                    asTemplate = asTemplate)
+            else:
+                vmMor = self._deployByVmx(job, vmName, uuid,
+                    vmFiles, dc, dataStoreName=dsName,
+                    host = host, resourcePool=rp, network = network,
+                    asTemplate = asTemplate)
+
+            nwobj = self.client.getMoRefProp(vmMor, 'network')
+            reconfigVmParams = dict()
+            if not nwobj.get_element_ManagedObjectReference():
+                # add NIC
+                nicSpec = self.client.createNicConfigSpec(network, self._vicfg)
+                deviceChange = [ nicSpec ]
+                reconfigVmParams['deviceChange'] = deviceChange
+
+            if asTemplate:
                 # Reconfiguring the uuid is unreliable, we're using the
                 # annotation field for now
-                self.client.reconfigVM(vm,
-                    dict(annotation = "rba-uuid: %s" % uuid))
-            except viclient.Error, e:
-                self.log_exception("Exception registering VM: %s", e)
-                raise RuntimeError('An error occurred when registering the '
-                                   'VM: %s' %str(e))
-            return vm
+                reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
+
+            if reconfigVmParams:
+                self._msg(job, 'Reconfiguring VM')
+                self.client.reconfigVM(vmMor, reconfigVmParams)
+
+            if asTemplate:
+                self._msg(job, 'Converting VM to template')
+                self.client.markAsTemplate(vm=vmMor)
+            return vmMor
         finally:
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
@@ -592,6 +686,7 @@ class VMwareClient(baseDriver.BaseDriver):
         resourcePool= ppop('resourcePool')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
+        network = ppop('network')
 
         vm = None
 
@@ -610,10 +705,8 @@ class VMwareClient(baseDriver.BaseDriver):
                 uuid = instanceId
             vm = self._deployImage(job, image, auth, dataCenter,
                                    dataStore, computeResource,
-                                   resourcePool, vmName, uuid)
-            if useTemplate:
-                self._msg(job, 'Converting VM to template')
-                self.client.markAsTemplate(vm=vm)
+                                   resourcePool, vmName, uuid,
+                                   network, asTemplate = useTemplate)
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
             # images should be marked as deployed for ESX targets
