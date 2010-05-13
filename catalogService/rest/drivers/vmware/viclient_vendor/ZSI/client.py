@@ -466,6 +466,7 @@ class _Binding:
     def __repr__(self):
         return "<%s instance %s>" % (self.__class__.__name__, _get_idstr(self))
 
+    __str__ = __repr__
 
 class Binding(_Binding):
     '''Object that represents a binding (connection) to a SOAP server.  
@@ -495,9 +496,6 @@ class Binding(_Binding):
         '''Return a callable object that will invoke the RPC method
         named by the attribute.
         '''
-        if name[:2] == '__' and len(name) > 5 and name[-2:] == '__':
-            if hasattr(self, name): return getattr(self, name)
-            return getattr(self.__class__, name)
         return _Caller(self, name, self.namespace)
 
     def __parse_child(self, node):
