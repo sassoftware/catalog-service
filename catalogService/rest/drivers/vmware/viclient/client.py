@@ -323,80 +323,6 @@ class VimService(object):
         diskSpec.set_element_device(disk)
         return diskSpec
 
-    def createVmConfigSpec(self, vmName, datastoreName, diskSizeMB,
-                           computeResMor, hostMor):
-        configTarget = self.getConfigTarget(computeResMor, hostMor)
-        defaultDevices = self.getDefaultDevices(computeResMor, hostMor)
-
-        configSpec = ns0.VirtualMachineConfigSpec_Def('').pyclass()
-
-        # determine the default network name
-        networkName = None
-        network = (configTarget is not None and
-                   configTarget.get_element_network()) or None
-        if network:
-            for netInfo in network:
-                netSummary = netInfo.get_element_network()
-                if netSummary.get_element_accessible():
-                    networkName = netSummary.get_element_name()
-                    break
-
-        # determine the data store to use
-        datastoreRef, datastoreName = self._getDatastoreRef(configTarget,
-            datastoreName)
-
-        datastoreVolume = self._getVolumeName(datastoreName)
-        vmfi = ns0.VirtualMachineFileInfo_Def('').pyclass()
-        vmfi.set_element_vmPathName(datastoreVolume)
-        configSpec.set_element_files(vmfi)
-
-        # Add a scsi controller
-        diskCtlrKey = 1
-        scsiCtrlSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        scsiCtrlSpec.set_element_operation('add')
-
-        scsiCtrl = ns0.VirtualLsiLogicController_Def('').pyclass()
-        scsiCtrl.set_element_busNumber(0)
-        scsiCtrlSpec.set_element_device(scsiCtrl)
-        scsiCtrl.set_element_key(diskCtlrKey)
-        scsiCtrl.set_element_sharedBus('noSharing')
-
-        # add a floppy
-        floppySpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        floppySpec.set_element_operation('add')
-        floppy = ns0.VirtualFloppy_Def('').pyclass()
-        flpBacking = ns0.VirtualFloppyDeviceBackingInfo_Def('').pyclass()
-        flpBacking.set_element_deviceName('/dev/fd0')
-        floppy.set_element_backing(flpBacking)
-        floppy.set_element_key(3)
-        floppySpec.set_element_device(floppy)
-
-        # Create a new disk - file based - for the vm
-        diskSpec = None
-        diskSpec = self.createVirtualDisk(datastoreName, diskCtlrKey,
-                                          datastoreRef, diskSizeMB)
-
-
-        # Add a NIC. the network Name must be set as the device name
-        # to create the NIC.
-        nicSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        if networkName:
-            nicSpec.set_element_operation('add')
-            nic = ns0.VirtualPCNet32_Def('').pyclass()
-            nicBacking = ns0.VirtualEthernetCardNetworkBackingInfo_Def('').pyclass()
-            nicBacking.set_element_deviceName(networkName)
-            nic.set_element_addressType('generated')
-            nic.set_element_backing(nicBacking)
-            nic.set_element_key(4)
-            nicSpec.set_element_device(nic)
-
-        deviceConfigSpec = [ scsiCtrlSpec, diskSpec ]
-        deviceConfigSpec.append(nicSpec)
-
-        configSpec.set_element_deviceChange(deviceConfigSpec)
-        configSpec.set_element_name(vmName)
-        return configSpec
-
     def _getDatastoreRef(self, configTarget, datastoreName):
         # determine the data store to use
         datastoreRef = None
@@ -856,62 +782,6 @@ class VimService(object):
         propsWanted = {'VirtualMachine': propertyList}
         return self.getProperties(propsWanted, root)
 
-    def createVM(self, dcName, vmName, dataStore=None,
-                 annotation=None, memory=512, cpus=1,
-                 guestOsId='winXPProGuest'):
-        dc = self.getDecendentMoRef(None, 'Datacenter', dcName)
-        if not dc:
-            raise RuntimeError('Datacenter ' + dc + ' not found')
-
-        hostFolder = self.getMoRefProp(dc, 'hostFolder')
-        computeResources = self.getDecendentMoRefs(hostFolder, 'ComputeResource')
-        hostName = None
-        if hostName:
-            hostmor = self.getDecendentMoRef(hostFolder, 'HostSystem', hostName)
-            if not host:
-                raise RuntimeError('Host ' + hostName + ' not found')
-        else:
-            # pick the first host we find
-            # FIXME: this was supposed to look up in dataCenter, but that
-            # is not working
-            hostmor = self.getFirstDecendentMoRef(hostFolder, 'HostSystem')
-
-        # find the compute resource for the host we're going to use
-        crmor = self._getComputeResourceForHost(hostmor, computeResources)
-        if not crmor:
-            raise RuntimeError('No Compute Resource Found On Specified Host')
-
-        # now get the resourcePool for the compute resource
-        resourcePool = self.getMoRefProp(crmor, 'resourcePool')
-        # and vmFolder for the datacenter
-        vmFolder = self.getMoRefProp(dc, 'vmFolder')
-        vmConfigSpec = self.createVmConfigSpec(vmName, dataStore, 100, crmor,
-                                               hostmor)
-        if annotation:
-            vmConfigSpec.set_element_annotation(annotation)
-        vmConfigSpec.set_element_memoryMB(memory)
-        vmConfigSpec.set_element_numCPUs(cpus)
-        vmConfigSpec.set_element_guestId(guestOsId)
-
-        req = CreateVM_TaskRequestMsg()
-        req.set_element__this(vmFolder)
-        req.set_element_config(vmConfigSpec)
-        req.set_element_pool(resourcePool)
-        req.set_element_host(hostmor)
-        ret = self._service.CreateVM_Task(req)
-        task = ret.get_element_returnval()
-        return task
-
-    def _getComputeResourceForHost(self, hostmor, computeResources):
-        nodeHostName = self.getDynamicProperty(hostmor, 'name')
-        for cr in computeResources:
-            crHosts = self.getDynamicProperty(cr, 'host')
-            for crHost in crHosts.get_element_ManagedObjectReference():
-                hostName = self.getDynamicProperty(crHost, 'name')
-                if hostName.lower() == nodeHostName.lower():
-                    return cr
-        return None
-
     def findVMByUUID(self, uuid):
         searchIndex = self._sic.get_element_searchIndex()
         req = FindByUuidRequestMsg()
@@ -958,18 +828,6 @@ class VimService(object):
             if fault:
                 error = fault.get_element_localizedMessage()
             raise Error(error)
-
-    def setExtraConfig(self, vm, options):
-        req = ReconfigVM_TaskRequestMsg()
-        spec = req.new_spec()
-        l = []
-        for key, value in options.iteritems():
-            option = ns0.OptionValue_Def('').pyclass()
-            option.set_element_key(key)
-            option.set_element_value(value)
-            l.append(option)
-        spec.set_element_extraConfig(l)
-        return self._reconfigVM(vm, spec)
 
     def reconfigVM(self, vm, options):
         req = ReconfigVM_TaskRequestMsg()
