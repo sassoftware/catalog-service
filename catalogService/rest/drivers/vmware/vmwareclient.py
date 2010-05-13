@@ -180,11 +180,13 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         dataCenter = getField('dataCenter')
         cr = getField('cr-%s' % dataCenter)
         rp = getField('resourcePool-%s' % cr)
+        network = getField('network-%s' % dataCenter)
         params.update(dict(
             dataCenter = dataCenter,
             dataStore = getField('dataStore-%s' % cr),
             computeResource = cr,
             resourcePool = rp,
+            network = network,
         ))
         return params
 
@@ -345,7 +347,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory(imageIds)
-        imageList = self.addMintDataToImageList(imageList, 'VMWARE_ESX_IMAGE')
+        if self.client.vmwareVersion >= (4, 0, 0):
+            imageFormat = 'VMWARE_OVF_IMAGE'
+        else:
+            imageFormat = 'VMWARE_ESX_IMAGE'
+        imageList = self.addMintDataToImageList(imageList, imageFormat)
 
         # FIXME: duplicate code
         # now that we've grabbed all the images, we can return only the one
@@ -353,7 +359,9 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # nor the grid call allow us to filter by image, at least for now
         if imageIds is None:
             # no filtering required
-            return imageList
+            newImageList = images.BaseImages()
+            newImageList.extend(imageList)
+            return newImageList
 
         # filter the images to those requested
         imagesById = dict((x.getImageId(), x) for x in imageList)
@@ -564,8 +572,52 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
+    def _deployOvf(self, job, vmName, uuid, vmFilesPath, dataCenter,
+                     dataStore, host, resourcePool, network,
+                     asTemplate = False):
+        dataCenterName = dataCenter.properties['name']
+        # Grab ovf file
+        ovfFiles = [ x for x in os.listdir(vmFilesPath) if x.endswith('.ovf') ]
+        if not ovfFiles:
+            raise RuntimeError("No ovf file found")
+        if len(ovfFiles) != 1:
+            raise RuntimeError("More than one .ovf file found in %s" %
+                vmFilesPath)
+        ovfFilePath = os.path.join(vmFilesPath, ovfFiles[0])
+        vmFolder = dataCenter.properties['vmFolder']
+        fileItems, httpNfcLease = self.client.ovfImportStart(ovfFilePath,
+            vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
+            dataStore = dataStore, network = network)
+        self.client.waitForLeaseReady(httpNfcLease)
+        import viclient
+        progressUpdate = viclient.client.ProgressUpdate(self.client, httpNfcLease)
+        vmMor = self.client.ovfUpload(httpNfcLease, vmFilesPath, fileItems,
+            progressUpdate)
+        return vmMor
+
+    def _deployByVmx(self, job, vmName, uuid, vmFiles, dataCenter,
+                     dataStoreName, host, resourcePool, network,
+                     asTemplate = False):
+        dataCenterName = dataCenter.properties['name']
+        import viclient
+        vmx = viclient.vmutils.uploadVMFiles(self.client,
+                                             vmFiles,
+                                             vmName,
+                                             dataCenter=dataCenterName,
+                                             dataStore=dataStoreName)
+        try:
+            vm = self.client.registerVM(dataCenter.properties['vmFolder'], vmx,
+                                        vmName, asTemplate=False,
+                                        host=host, pool=resourcePool)
+            return vm
+        except viclient.Error, e:
+            self.log_exception("Exception registering VM: %s", e)
+            raise RuntimeError('An error occurred when registering the '
+                               'VM: %s' %str(e))
+
     def _deployImage(self, job, image, auth, dataCenter, dataStore,
-                     computeResource, resourcePool, vmName, uuid):
+                     computeResource, resourcePool, vmName, uuid,
+                     network, asTemplate=False):
 
         dc = self.vicfg.getDatacenter(dataCenter)
         dcName = dc.properties['name']
@@ -575,6 +627,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         dsInfo = self.client.getDynamicProperty(ds, 'summary')
         dsName = dsInfo.get_element_name()
         rp = self.vicfg.getMOR(resourcePool)
+        network = self.vicfg.getMOR(network)
         props = self.vicfg.getProperties()
         # find a host that can access the datastore
         hosts = [ x for x in cr.properties['host'] if ds in props[x]['datastore'] ]
@@ -603,24 +656,36 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
-            vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                                 vmFiles,
-                                                 vmName,
-                                                 dataCenter=dcName,
-                                                 dataStore=dsName)
-            try:
-                vm = self.client.registerVM(dc.properties['vmFolder'], vmx,
-                                            vmName, asTemplate=False,
-                                            host=host, pool=rp)
+            if self.client.vmwareVersion >= (4, 0, 0):
+                vmMor = self._deployOvf(job, vmName, uuid,
+                    vmFiles, dc, dataStore=ds,
+                    host = host, resourcePool=rp, network = network,
+                    asTemplate = asTemplate)
+            else:
+                vmMor = self._deployByVmx(job, vmName, uuid,
+                    vmFiles, dc, dataStoreName=dsName,
+                    host = host, resourcePool=rp, network = network,
+                    asTemplate = asTemplate)
+
+            nwobj = self.client.getMoRefProp(vmMor, 'network')
+            reconfigVmParams = dict()
+            if not nwobj.get_element_ManagedObjectReference():
+                # add NIC
+                nicSpec = self.client.createNicConfigSpec(network, self._vicfg)
+                deviceChange = [ nicSpec ]
+                reconfigVmParams['deviceChange'] = deviceChange
+
+            if asTemplate:
                 # Reconfiguring the uuid is unreliable, we're using the
                 # annotation field for now
-                self.client.reconfigVM(vm,
-                    dict(annotation = "rba-uuid: %s" % uuid))
-            except viclient.Error, e:
-                self.log_exception("Exception registering VM: %s", e)
-                raise RuntimeError('An error occurred when registering the '
-                                   'VM: %s' %str(e))
-            return vm
+                reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
+
+            if reconfigVmParams:
+                self.client.reconfigVM(vmMor, reconfigVmParams)
+
+            if asTemplate:
+                self.client.markAsTemplate(vm=vmMor)
+            return vmMor
         finally:
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
@@ -634,6 +699,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         resourcePool= ppop('resourcePool')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
+        network = ppop('network')
 
         vm = None
 
@@ -652,9 +718,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 uuid = instanceId
             vm = self._deployImage(job, image, auth, dataCenter,
                                    dataStore, computeResource,
-                                   resourcePool, vmName, uuid)
-            if useTemplate:
-                self.client.markAsTemplate(vm=vm)
+                                   resourcePool, vmName, uuid,
+                                   network, asTemplate = useTemplate)
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
             # images should be marked as deployed for ESX targets

@@ -12,7 +12,7 @@ import pprint
 
 from conary.lib import util
 
-BUFSIZE=256 * 1024
+BUFSIZE=1024 * 1024
 
 class HTTPConnection(httplib.HTTPConnection):
     def send(self, buf):
