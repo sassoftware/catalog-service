@@ -121,7 +121,7 @@ def _uploadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
 
     for filePath in filePaths:
         fn = urllib.quote(os.path.basename(filePath))
-        _putFile(filePath, urlPattern.replace('@FILENAME@', fn), session)
+        _putFile(filePath, urlPattern.replace('@FILENAME@', fn), session=session)
 
 def _deleteVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     # steal cookies from the binding's cookiejar
