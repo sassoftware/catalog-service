@@ -1,3 +1,7 @@
+#!/usr/bin/python
+#
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+#
 
 import os
 import time
@@ -117,10 +121,11 @@ class InstanceStore(object):
         Save the X509 cert components into the store, and remove the old files
         """
         instanceId = self._getInstanceId(instanceId)
-        self._store.set((self._prefix, instanceId, 'x509cert'),
-                        file(certPath).read())
-        self._store.set((self._prefix, instanceId, 'x509key'),
-                        file(keyPath).read())
+        instCertPath = self._store.set((self._prefix, instanceId, 'x509cert'),
+                            file(certPath).read())
+        instKeyPath = self._store.set((self._prefix, instanceId, 'x509key'),
+                            file(keyPath).read())
+        return instCertPath, instKeyPath 
 
     def getX509Files(self, instanceId):
         instanceId = self._getInstanceId(instanceId)

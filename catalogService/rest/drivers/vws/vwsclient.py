@@ -7,14 +7,12 @@ import urllib
 
 from conary.lib import util
 
-from catalogService import clouds
-from catalogService import descriptor
 from catalogService import errors
-from catalogService import images
-from catalogService import instances
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
+from catalogService.rest.models import clouds
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
 
 import globuslib
 
@@ -187,7 +185,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class VWSClient(baseDriver.BaseDriver):
     Cloud = VWS_Cloud
     Image = VWS_Image
     Instance = VWS_Instance
@@ -200,18 +198,24 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         ('sshPubKey', 'sshPubKey'),
     ]
 
+    _configNameMap = [
+        ('factory', 'name'),
+    ]
+
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
+
+    RBUILDER_BUILD_TYPE = 'VWS'
 
     @classmethod
     def isDriverFunctional(cls):
         return globuslib.WorkspaceCloudClient.isFunctional()
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         props = globuslib.WorkspaceCloudProperties()
         userCredentials = credentials
-        props.set('vws.factory', cloudConfig['factory'])
+        props.set('vws.factory', self.cloudName)
         props.set('vws.repository', cloudConfig['repository'])
         props.set('vws.factory.identity', cloudConfig['factoryIdentity'])
         props.set('vws.repository.identity', cloudConfig['repositoryIdentity'])
@@ -226,16 +230,6 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     def _getUserIdForInstanceStore(self):
         return self._cloudClient.userCertHash
-
-    def isValidCloudName(self, cloudName):
-        cloudConfig = self._getCloudConfiguration(cloudName)
-        return bool(cloudConfig)
-
-    def _createCloudNode(self, cloudConfig):
-        cld = self._nodeFactory.newCloud(cloudName = cloudConfig['factory'],
-                         description = cloudConfig['description'],
-                         cloudAlias = cloudConfig['alias'])
-        return cld
 
     def terminateInstances(self, instanceIds):
         client = self.client
@@ -267,32 +261,13 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
 
-    def drvGetImages(self, imageIds):
-        imageList = self._getImagesFromGrid()
-        imageList = self.addMintDataToImageList(imageList, 'VWS')
-
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is not None:
-            imagesById = dict((x.getImageId(), x) for x in imageList )
-            newImageList = images.BaseImages()
-            for imageId in imageIds:
-                if imageId.endswith('.gz') and imageId not in imagesById:
-                    imageId = imageId[:-3]
-                if imageId not in imagesById:
-                    continue
-                newImageList.append(imagesById[imageId])
-            imageList = newImageList
-        return imageList
-
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Globus Workspaces Launch Parameters")
         descr.addDescription("Globus Workspaces Launch Parameters")
         descr.addDataField("instanceType",
             descriptions = "Instance Size", required = True,
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x,
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x,
                     descriptions = y)
                   for (x, y) in VWS_InstanceTypes.idMap),
             help = [
@@ -441,11 +416,11 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             tmpDir = os.path.join(self.client._tmpDir, 'downloads')
             util.mkdirChain(tmpDir)
             try:
-                job.addLog(self.LogEntry('Downloading image'))
+                job.addHistoryEntry('Downloading image')
                 dlImagePath = self._downloadImage(image, tmpDir, auth = auth)
-                job.addLog(self.LogEntry('Preparing image'))
+                job.addHistoryEntry('Preparing image')
                 imgFile = self._prepareImage(dlImagePath)
-                job.addLog(self.LogEntry('Publishing image'))
+                job.addHistoryEntry('Publishing image')
                 self._publishImage(imgFile)
             finally:
                 util.rmtree(tmpDir, ignore_errors = True)
@@ -454,7 +429,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         def callback(realId):
             pass
 
-        job.addLog(self.LogEntry('Launching'))
+        job.addHistoryEntry('Launching')
         realId = self.client.launchInstances([imageId],
             duration = duration, callback = callback)
         return str(realId)
@@ -467,13 +442,15 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def _publishImage(self, fileName):
         self.client.transferInstance(fileName)
 
-    def _getImagesFromGrid(self):
+    def getImagesFromTarget(self, imageIds):
         cloudAlias = self.client.getCloudAlias()
 
-        imageIds = self.client.listImages()
+        targetImageIds = self.client.listImages()
         imageList = images.BaseImages()
 
-        for imageId in imageIds:
+        for imageId in targetImageIds:
+            if imageIds is not None and imageId not in imageIds:
+                continue
             imageName = imageId
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
@@ -485,9 +462,21 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             imageList.append(image)
         return imageList
 
+    def _imageIdInMap(self, imageId, imageIdMap):
+        # Images in mint have no .gz, but we have to store them with a .gz in
+        # the grid. This normalizes the 
+        if imageId is None:
+            return None
+        if imageId.endswith('.gz') and imageId not in imageIdMap:
+            imageId = imageId[:-3]
+        return (imageId in imageIdMap and imageId) or None
+
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return image.get('sha1') + '.gz'
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+        if imageSha1 is None:
+            return imageSha1
+        return imageSha1 + '.gz'
 
     @classmethod
     def _readCredentialsFromStore(cls, store, userId, cloudName):
@@ -504,11 +493,7 @@ class VWSClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             store.set(key, v)
 
     @classmethod
-    def _getCloudNameFromConfig(cls, config):
-        return config['factory']
-
-    @classmethod
-    def _getCloudNameFromDescriptorData(cls, descriptorData):
+    def getCloudNameFromDescriptorData(cls, descriptorData):
         return descriptorData.getField('factory')
 
     def _killRunningProcessesForInstances(self, nonGlobusInstIds):
