@@ -590,7 +590,14 @@ class VMwareClient(baseDriver.BaseDriver):
             dataStore = dataStore, network = network)
         self.client.waitForLeaseReady(httpNfcLease)
         import viclient
-        progressUpdate = viclient.client.ProgressUpdate(self.client, httpNfcLease)
+
+        class ProgressUpdate(viclient.client.ProgressUpdate):
+            def progress(slf, bytes, rate=0):
+                viclient.client.ProgressUpdate.progress(slf, bytes, rate=rate)
+                pct = slf._percent(bytes)
+                self._msg(job, "Importing OVF: %d%% complete" % pct)
+
+        progressUpdate = ProgressUpdate(self.client, httpNfcLease)
         vmMor = self.client.ovfUpload(httpNfcLease, vmFilesPath, fileItems,
             progressUpdate)
         return vmMor

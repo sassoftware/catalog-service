@@ -131,12 +131,15 @@ class ProgressUpdate(object):
         self.prevFilesSize = 0
 
     def progress(self, bytes, rate=0):
-        pct = int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
+        pct = self._percent(bytes)
         req = HttpNfcLeaseProgressRequestMsg()
         req.set_element__this(self.httpNfcLease)
         req.set_element_percent(pct)
 
         self.vmclient._service.HttpNfcLeaseProgress(req)
+
+    def _percent(self, bytes):
+        return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
 
     def updateSize(self, size):
         self.prevFilesSize = size
