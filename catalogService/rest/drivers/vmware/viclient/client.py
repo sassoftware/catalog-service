@@ -966,15 +966,23 @@ class VimService(object):
         hardwareSection = hardwareSection[0]
         # Iterate through all items
         captionTag = "{%s}%s" % (rasdNs, "Caption")
+        todelete = []
         for i, node in enumerate(hardwareSection.iterchildren()):
             if node.tag != 'Item':
                 continue
             caption = node.find(captionTag)
             if caption is None:
                 continue
-            if caption.text == 'ethernet0':
-                del hardwareSection[i]
-                break
+            # We are creating cdroms and networks as part of the deployment,
+            # so remove these sections
+            if caption.text in [ 'cdrom1', 'ethernet0' ]:
+                todelete.append(i)
+
+        # Remove items to be deleted, in reverse order
+        while todelete:
+            i = todelete.pop()
+            del hardwareSection[i]
+
         return etree.tostring(doc, encoding = "UTF-8")
 
     def ovfImportStart(self, ovfFilePath, vmName,
