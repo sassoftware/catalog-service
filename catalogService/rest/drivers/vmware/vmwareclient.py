@@ -344,13 +344,36 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
 
+    def _getMintImagesByType(self, imageType):
+        # start with the most general build type
+        imageType = 'VMWARE_ESX_IMAGE'
+        mintImages = self._mintClient.getAllBuildsByType(imageType)
+        if self.client.vmwareVersion < (4, 0, 0):
+            # We don't support OVF deployments, so don't even bother
+            return mintImages
+        # Prefer ovf 0.9 over plain esx
+        mintImagesByBuildId = {}
+        for mintImage in mintImages:
+            for fdict in mintImage['files']:
+                # This is a rather lame way to detect ovf builds
+                if fdict.get('filename', '').endswith('ovf.tar.gz'):
+                    mintImage['sha1'] = fdict['sha1']
+                    mintImage['downloadUrl'] = fdict['downloadUrl']
+                    break
+            mintImagesByBuildId[mintImage['buildId']] = mintImage
+        # Finally, prefer OVF 1.0 images
+        imageType = 'VMWARE_OVF_IMAGE'
+        for mintImage in self._mintClient.getAllBuildsByType(imageType):
+            mintImagesByBuildId[mintImage['buildId']] = mintImage
+        # Sort data by build id
+        return [ x[1] for x in sorted(mintImagesByBuildId.items()) ]
+
     def drvGetImages(self, imageIds):
         # currently we return the templates as available images
         imageList = self._getTemplatesFromInventory(imageIds)
-        if self.client.vmwareVersion >= (4, 0, 0):
-            imageFormat = 'VMWARE_OVF_IMAGE'
-        else:
-            imageFormat = 'VMWARE_ESX_IMAGE'
+        # The image format does not matter here, we're overriding
+        # _getMintImagesByType from parent class
+        imageFormat = 'VMWARE_ESX_IMAGE'
         imageList = self.addMintDataToImageList(imageList, imageFormat)
 
         # FIXME: duplicate code
