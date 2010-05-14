@@ -241,9 +241,11 @@ class BaseDriver(object):
         return self.getInstances(None)
 
     def _addSoftwareVersionInfo(self, instance, force=False):
-        self._updateInstalledSoftwareList(instance, force)
-        self._getAvailableUpdates(instance)
-        self._setVersionAndStage(instance)
+        instanceId = instance.getInstanceId()
+        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
+        self._updateInstalledSoftwareList(instance, force, softwareVersions)
+        self._getAvailableUpdates(instance, softwareVersions)
+        self._setVersionAndStage(instance, softwareVersions)
         self._nodeFactory.refreshInstance(instance)
 
     def getInstances(self, instanceIds):
@@ -290,13 +292,12 @@ class BaseDriver(object):
     def _quoteSpec(self, spec):
         return urllib.quote(urllib.quote(spec, safe = ''))
 
-    def _updateInstalledSoftwareList(self, instance, force):
+    def _updateInstalledSoftwareList(self, instance, force, softwareVersions):
         state = instance.getState()
         # XXX we really should normalize the states across drivers
         if not state or state.lower() not in ['running', 'poweredon']:
             return
         instanceId = instance.getInstanceId()
-        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
         if softwareVersions:
             troveList = [self._troveFactoryFromTroveTuple(c)
                 for c in softwareVersions]
@@ -361,11 +362,10 @@ class BaseDriver(object):
     def _troveFactoryFromTroveTuple(self, (name, version, flavor)):
         return self._troveModelFactory(name, version, flavor)
 
-    def _setVersionAndStage(self, instance):
+    def _setVersionAndStage(self, instance, softwareVersions):
         # XXX: we can only look up version/stage info if there's one top
         # level
         instanceId = instance.getInstanceId()
-        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
 
         for softwareVersion in softwareVersions:
             self._addVersionAndStage(instance, softwareVersion)
@@ -446,13 +446,12 @@ class BaseDriver(object):
     def _getConaryClient(self):
         return self.db.productMgr.reposMgr.getUserClient()
 
-    def _getAvailableUpdates(self, instance):
+    def _getAvailableUpdates(self, instance, softwareVersions):
         # need to access this property as it sets user information and sets up
         # the instance store under the hood.
         client = self.client
 
         instanceId = instance.getInstanceId()
-        softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
         cclient = self._getConaryClient()
         content = []
 
