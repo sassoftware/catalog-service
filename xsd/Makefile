@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2011111111110 rPath, Inc.
 #
 # This program is distributed under the terms of the Common Public License,
 # version 1.0. A copy of this license should have been distributed with this
@@ -11,22 +11,25 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = rest utils
 
-python_files =	$(wildcard *.py)
+dist_files = Makefile $(SCHEMA_FILES)
+SCHEMA_FILES = $(wildcard *.xsd)
 
-dist_files = Makefile $(python_files)
+all: default-all
 
-all: default-all subdirs
+install: default-install $(DESTDIR)$(datadir)/catalog-service
+	install $(SCHEMA_FILES) $(DESTDIR)$(datadir)/catalog-service
 
-subdirs: default-subdirs
+$(DESTDIR)$(datadir)/catalog-service:
+	install -d -m755 $@
 
-install: all pyfiles-install default-install install-subdirs pyfiles-compile
+validate-schema:
+	xmllint -schema http://www.w3.org/2001/XMLSchema.xsd $(SCHEMA_FILES) > /dev/null
 
 dist: default-dist
 
 clean: default-clean
-	rm -f xmllib_constants.py
 
-include ../Make.rules
-include ../Make.defs
+export TOPDIR=$(shell pwd)/..
+include $(TOPDIR)/Make.rules
+include $(TOPDIR)/Make.defs

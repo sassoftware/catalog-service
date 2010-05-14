@@ -11,22 +11,31 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = rest utils
-
 python_files =	$(wildcard *.py)
+GENERATE_DS=~/hg/generateDS/generateDS.py
+XSD_DIR=../../../xsd
 
 dist_files = Makefile $(python_files)
 
-all: default-all subdirs
-
-subdirs: default-subdirs
+all: default-all
 
 install: all pyfiles-install default-install install-subdirs pyfiles-compile
 
 dist: default-dist
 
 clean: default-clean
-	rm -f xmllib_constants.py
 
-include ../Make.rules
-include ../Make.defs
+generate: $(patsubst $(XSD_DIR)/%.xsd,rule-%,$(wildcard $(XSD_DIR)/*.xsd))
+
+rule-%:
+	$(GENERATE_DS) -f --silence \
+                --no-dates \
+                --no-versions \
+                --member-specs=list \
+                --external-encoding=utf-8 \
+                --search-path=$(XSD_DIR) \
+                -o generateds_$(subst -,_,$(patsubst rule-%,%,$@)).py \
+                $(XSD_DIR)/$(patsubst rule-%,%,$@).xsd
+
+include ../../../Make.rules
+include ../../../Make.defs
