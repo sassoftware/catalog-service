@@ -154,6 +154,8 @@ class VimService(object):
             tracefile=None
         self._service = loc.getVimPort(url=self.sdkUrl, tracefile=tracefile,
                                        **kw)
+        # Set the user agent
+        self._service.binding.AddHeader('User-Agent', 'VMware-client')
 
         # get the service content
         req = RetrieveServiceContentRequestMsg()
@@ -1030,7 +1032,10 @@ class VimService(object):
 
         for deviceUrl in deviceUrls:
             method, filePath, fileSize = fileMap[deviceUrl.get_element_importKey()]
-            vmutils._putFile(filePath, deviceUrl.get_element_url(),
+            url = deviceUrl.get_element_url()
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
+            vmutils._putFile(filePath, url,
                 session=None, method=method, callback = progressUpdate)
             progressUpdate.updateSize(fileSize)
         progressUpdate.progress(100, 0)
