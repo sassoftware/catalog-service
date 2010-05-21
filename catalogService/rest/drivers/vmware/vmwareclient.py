@@ -756,7 +756,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                         dataCenter, computeResource,
                                         dataStore, resourcePool, vm=vm)
         else:
-            vmMor = self.client._getVM(uuid = instanceId)
+            vmMor = self.client._getVM(mor=vm)
 
         try:
             self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
