@@ -12,14 +12,12 @@ import StringIO
 
 from conary.lib import util
 
-from catalogService import clouds
-from catalogService import descriptor
 from catalogService import errors
-from catalogService import images
-from catalogService import instances
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
+from catalogService.rest.models import clouds
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
 
 
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
@@ -123,7 +121,7 @@ class InstanceStorage(storage.DiskStorage):
     def _generateString(cls, length):
         return baseDriver.BaseDriver.uuidgen()
 
-class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class VMwareClient(baseDriver.BaseDriver):
     Image = VMwareImage
     cloudType = 'vmware'
     instanceStorageClass = InstanceStorage
@@ -139,10 +137,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     # an actual server
     VimServiceTransport = None
 
+    RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
-        self._instanceStore = None
         self._virtualMachines = None
 
     @classmethod
@@ -150,8 +149,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return True
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
-        host = self._getCloudNameFromConfig(cloudConfig)
+        cloudConfig = self.getTargetConfiguration()
+        host = self.cloudName
         # This import is expensive!!! Delay it until it is actually needed
         import viclient
         debug = False
@@ -221,8 +220,8 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                            help = [
                                ('launch/dataCenter.html', None)
                            ],
-                           type = descriptor.EnumeratedType(
-            descriptor.ValueWithDescription(x.obj,
+                           type = descr.EnumeratedType(
+            descr.ValueWithDescription(x.obj,
                                             descriptions=x.properties['name'])
             for x in dataCenters),
                            default = dataCenters[0].obj,
@@ -242,16 +241,17 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                help = [
                                    ('launch/computeResource.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(
                 x.obj, descriptions=x.properties['name'])
                 for x in crs),
                                default = crs[0].obj,
-                               conditional = descriptor.Conditional(
-                fieldName='dataCenter',
-                operator='eq',
-                value=dc.obj))
-        for cr, dc in crToDc.items():
+                               conditional = descr.Conditional(
+                                    fieldName='dataCenter',
+                                    operator='eq',
+                                    fieldValue=dc.obj)
+                               )
+        for cr in crToDc.keys():
             cfg = cr.configTarget
             if cfg is None:
                 continue
@@ -265,14 +265,14 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                     help = [
                         ('launch/network.html', None)
                     ],
-                    type = descriptor.EnumeratedType(
-                        descriptor.ValueWithDescription(x.mor,
+                    type = descr.EnumeratedType(
+                        descr.ValueWithDescription(x.mor,
                             descriptions=x.name) for x in networks),
                     default = networks[0].mor,
-                    conditional = descriptor.Conditional(
+                    conditional = descr.Conditional(
                         fieldName='dataCenter',
                         operator='eq',
-                        value=dc.obj))
+                        fieldValue=dc.obj))
 
         for cr, dc in crToDc.items():
             cfg = cr.configTarget
@@ -293,19 +293,19 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                help = [
                                    ('launch/dataStore.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[1])
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1])
                 for x in dataStores),
                                default = dataStores[0][0],
-                               conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.obj,
-                operator='eq',
-                value=cr.obj)
+                               conditional = descr.Conditional(
+                                    fieldName='cr-%s' %dc.obj,
+                                    operator='eq',
+                                    fieldValue=cr.obj)
                                )
-            # FIXME: add (descriptor.Conditional(
+            # FIXME: add (descr.Conditional(
             #fieldName='dataCenter',
             #    operator='eq',
-            #    value=dc.obj),
+            #    fieldValue=dc.obj),
 
         for cr in crToDc.keys():
             # sort a list of mor, name tuples based on name
@@ -319,15 +319,15 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                help = [
                                    ('launch/resourcePool.html', None)
                                ],
-                               type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(str(x[0]),
+                               type = descr.EnumeratedType(
+                descr.ValueWithDescription(str(x[0]),
                                                 descriptions=x[1]['name'])
                 for x in cr.resourcePools.iteritems()),
                                default = defaultRp,
-                               conditional = descriptor.Conditional(
-                fieldName='cr-%s' %dc.obj,
-                operator='eq',
-                value=cr.obj)
+                               conditional = descr.Conditional(
+                                    fieldName='cr-%s' %dc.obj,
+                                    operator='eq',
+                                    fieldValue=cr.obj)
                                )
 
         return descr
@@ -347,7 +347,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def _getMintImagesByType(self, imageType):
         # start with the most general build type
         imageType = 'VMWARE_ESX_IMAGE'
-        mintImages = self._mintClient.getAllBuildsByType(imageType)
+        mintImages = self.db.imageMgr.getAllImagesByType(imageType)
         if self.client.vmwareVersion < (4, 0, 0):
             # We don't support OVF deployments, so don't even bother
             return mintImages
@@ -356,48 +356,21 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         for mintImage in mintImages:
             for fdict in mintImage['files']:
                 # This is a rather lame way to detect ovf builds
-                if fdict.get('filename', '').endswith('ovf.tar.gz'):
-                    mintImage['sha1'] = fdict['sha1']
-                    mintImage['downloadUrl'] = fdict['downloadUrl']
+                if fdict.get('fileName', '').endswith('ovf.tar.gz'):
+                    # Keep only the ovf image
+                    mintImage['files'] = [ fdict ]
                     break
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Finally, prefer OVF 1.0 images
         imageType = 'VMWARE_OVF_IMAGE'
-        for mintImage in self._mintClient.getAllBuildsByType(imageType):
+        for mintImage in self.db.imageMgr.getAllImagesByType(imageType):
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Sort data by build id
         return [ x[1] for x in sorted(mintImagesByBuildId.items()) ]
 
-    def drvGetImages(self, imageIds):
-        # currently we return the templates as available images
-        imageList = self._getTemplatesFromInventory(imageIds)
-        # The image format does not matter here, we're overriding
-        # _getMintImagesByType from parent class
-        imageFormat = 'VMWARE_ESX_IMAGE'
-        imageList = self.addMintDataToImageList(imageList, imageFormat)
-
-        # FIXME: duplicate code
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is None:
-            # no filtering required
-            newImageList = images.BaseImages()
-            newImageList.extend(imageList)
-            return newImageList
-
-        # filter the images to those requested
-        imagesById = dict((x.getImageId(), x) for x in imageList)
-        newImageList = images.BaseImages()
-        for imageId in imageIds:
-            if imageId not in imagesById:
-                continue
-            newImageList.append(imagesById[imageId])
-        return newImageList
-
     def getCloudAlias(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         return cloudConfig['alias']
 
     def _buildInstanceList(self, instanceList, instMap):
@@ -502,11 +475,15 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     @classmethod
     def getImageIdFromMintImage(cls, image):
-        return cls._uuid(image.get('sha1'))
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+        if imageSha1 is None:
+            return imageSha1
+        return cls._uuid(imageSha1)
 
-    def _getTemplatesFromInventory(self, imageIds = None):
+    def getImagesFromTarget(self, imageIds):
         """
         returns all templates in the inventory
+        currently we return the templates as available images
         """
         useTemplate = not self.client.isESX()
         if not useTemplate:
@@ -530,7 +507,6 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 imageId = templateId
             else:
                 longName = vminfo.get('config.annotation', '').decode('utf-8', 'replace')
-
             image = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
@@ -608,12 +584,20 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 vmFilesPath)
         ovfFilePath = os.path.join(vmFilesPath, ovfFiles[0])
         vmFolder = dataCenter.properties['vmFolder']
+        self._msg(job, 'Importing OVF descriptor')
         fileItems, httpNfcLease = self.client.ovfImportStart(ovfFilePath,
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
             dataStore = dataStore, network = network)
         self.client.waitForLeaseReady(httpNfcLease)
         import viclient
-        progressUpdate = viclient.client.ProgressUpdate(self.client, httpNfcLease)
+
+        class ProgressUpdate(viclient.client.ProgressUpdate):
+            def progress(slf, bytes, rate=0):
+                viclient.client.ProgressUpdate.progress(slf, bytes, rate=rate)
+                pct = slf._percent(bytes)
+                self._msg(job, "Importing OVF: %d%% complete" % pct)
+
+        progressUpdate = ProgressUpdate(self.client, httpNfcLease)
         vmMor = self.client.ovfUpload(httpNfcLease, vmFilesPath, fileItems,
             progressUpdate)
         return vmMor
@@ -629,6 +613,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                                              dataCenter=dataCenterName,
                                              dataStore=dataStoreName)
         try:
+            self._msg(job, 'Registering VM')
             vm = self.client.registerVM(dataCenter.properties['vmFolder'], vmx,
                                         vmName, asTemplate=False,
                                         host=host, pool=resourcePool)
@@ -658,7 +643,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        job.addLog(self.LogEntry('Downloading image'))
+        self._msg(job, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         try:
             path = self._downloadImage(image, tmpDir, auth = auth)
@@ -672,10 +657,10 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        job.addLog(self.LogEntry('Extracting image'))
+        self._msg(job, 'Extracting image')
         try:
             workdir = self.extractImage(path)
-            job.addLog(self.LogEntry('Uploading image to VMware'))
+            self._msg(job, 'Uploading image to VMware')
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
             import viclient
@@ -704,9 +689,11 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
 
             if reconfigVmParams:
+                self._msg(job, 'Reconfiguring VM')
                 self.client.reconfigVM(vmMor, reconfigVmParams)
 
             if asTemplate:
+                self._msg(job, 'Converting VM to template')
                 self.client.markAsTemplate(vm=vmMor)
             return vmMor
         finally:
@@ -750,7 +737,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             vm = getattr(image, 'opaqueId')
 
         if useTemplate:
-            job.addLog(self.LogEntry('Cloning template'))
+            self._msg(job, 'Cloning template')
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
                                         dataCenter, computeResource,
@@ -759,19 +746,23 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             vmMor = self.client._getVM(mor=vm)
 
         try:
-            self._attachCredentials(instanceName, vmMor, dataCenter, dataStore,
+            self._attachCredentials(job, instanceName, vmMor, dataCenter, dataStore,
                                     computeResource)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
+        self._msg(job, 'Launching')
         self.client.startVM(mor = vmMor)
-        job.addLog(self.LogEntry('Launching'))
         # Grab the real uuid
         instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
         uuid = instMap[vmMor]['config.uuid']
+        self._msg(job, 'Instance launched')
         return uuid
 
+    def _msg(self, job, msg):
+        job.addHistoryEntry(msg)
+        self.log_debug(msg)
 
-    def _attachCredentials(self, vmName, vmMor, dataCenterMor, dataStoreMor,
+    def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor):
         filename = self.getCredentialsIsoFile()
         dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
@@ -779,6 +770,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
         import viclient
         try:
+            self._msg(job, 'Uploading initial configuration')
             viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:
@@ -795,6 +787,7 @@ class VMwareClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         datastoreVolume = self.client._getVolumeName(dataStore)
         controllerMor = self.client._getIdeController(defaultDevices)
         try:
+            self._msg(job, 'Creating initial configuration disc')
             cdromSpec = self.client.createCdromConfigSpec(
                 os.path.basename(filename), vmMor, controllerMor,
                 dataStoreMor, datastoreVolume)
