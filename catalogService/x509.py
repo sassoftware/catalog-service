@@ -52,5 +52,5 @@ class X509(object):
     @classmethod
     def computeHash(cls, certFile):
         x509 = cls.load(certFile)
-        certHash = "%x" % x509.get_issuer().as_hash()
+        certHash = "%08x" % x509.get_issuer().as_hash()
         return certHash
