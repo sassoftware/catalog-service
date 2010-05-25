@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema
+targetNamespace="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
+    elementFormDefault="qualified"
+    attributeFormDefault="unqualified"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:cny="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd"
+    xmlns="http://www.rpath.com/permanent/conary/trove-diff-1.0.xsd">
+
+  <xsd:import namespace="http://www.rpath.com/permanent/conary/trove-1.0.xsd"
+    schemaLocation="trove.xsd" />
+
+  <xsd:element name="troveChange" type="cny:troveChangeType" />
+
+  <xsd:complexType name="troveChangeType">
+    <xsd:sequence>
+      <xsd:element name="name" type="xsd:token"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="from" type="cny:troveSpecType"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="to" type="cny:troveSpecType"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="versionChange" type="cny:simpleChangeType"
+          minOccurs="0" maxOccurs="1" />
+      <xsd:element name="flavorChange" type="cny:simpleChangeType"
+          minOccurs="0" maxOccurs="1" />
+      <xsd:element name="buildRequirementsChange" type="cny:buildReqsChangeType"
+          minOccurs="0" maxOccurs="1" />
+      <!-- The next two will be troveUnaryOperationType -->
+      <xsd:element name="troveAddition" type="cny:troveSpecType"
+          minOccurs="0" maxOccurs="unbounded" />
+      <xsd:element name="troveRemoval" type="cny:troveSpecType"
+          minOccurs="0" maxOccurs="unbounded" />
+      <xsd:element name="troveChange" type="cny:troveChangeType"
+          minOccurs="0" maxOccurs="unbounded" />
+    </xsd:sequence>
+    <xsd:attribute name="id" type="xsd:ID" />
+    <xsd:attribute name="href" type="xsd:ID" />
+  </xsd:complexType>
+
+  <xsd:complexType name="troveUnaryOperationType">
+  </xsd:complexType>
+
+  <xsd:complexType name="troveSpecType">
+    <xsd:sequence>
+      <xsd:element name="trove" type="cny:troveType" minOccurs="1" maxOccurs="1" />
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:complexType name="simpleChangeType">
+    <xsd:sequence>
+      <xsd:element name="from" type="xsd:string" minOccurs="1" maxOccurs="1" />
+      <xsd:element name="to" type="xsd:string" minOccurs="1" maxOccurs="1" />
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:complexType name="buildReqsChangeType">
+    <xsd:sequence>
+      <xsd:element name="addition" type="cny:troveSpecType"
+        minOccurs="0" maxOccurs="unbounded" />
+      <xsd:element name="removal" type="cny:troveSpecType"
+        minOccurs="0" maxOccurs="unbounded" />
+      <xsd:element name="change" type="cny:simpleTroveChangeType"
+        minOccurs="0" maxOccurs="unbounded" />
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:complexType name="simpleTroveChangeType">
+    <xsd:sequence>
+      <xsd:element name="name" type="xsd:token" minOccurs="1" maxOccurs="1" />
+      <xsd:element name="versionChange" type="cny:simpleChangeType"
+          minOccurs="0" maxOccurs="1" />
+      <xsd:element name="flavorChange" type="cny:simpleChangeType"
+          minOccurs="0" maxOccurs="1" />
+    </xsd:sequence>
+  </xsd:complexType>
+
+</xsd:schema>

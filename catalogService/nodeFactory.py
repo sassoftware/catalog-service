@@ -1,12 +1,13 @@
+#!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.
+# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
 #
 
 import os
 import urllib
 
-from catalogService import clouds
-from catalogService import cloud_types
+from catalogService.rest.models import clouds
+from catalogService.rest.models import cloud_types
 
 class NodeFactory(object):
     __slots__ = [ 'cloudConfigurationDescriptorFactory',
@@ -60,7 +61,7 @@ class NodeFactory(object):
     def newCloudConfigurationDescriptor(self, descr):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
-        for field in descr.iterRawDataFields():
+        for field in descr.getDataFields():
             for helpNode in (field.help or []):
                 href = helpNode.href
                 if '://' not in href:
@@ -100,46 +101,62 @@ class NodeFactory(object):
 
     def newInstance(self, *args, **kwargs):
         node = self.instanceFactory(*args, **kwargs)
-        node.setId(self.getInstanceUrl(node))
+        return self.refreshInstance(node)
+
+    def refreshInstance(self, node):
+        instanceUrl = self.getInstanceUrl(node)
+        node.setId(instanceUrl)
+        node.setForceUpdateUrl("%s/forceUpdate" % instanceUrl)
         node.setCloudType(self.cloudType)
         updateStatus = self.instanceUpdateStatusFactory()
         updateStatus.setState('')
         updateStatus.setTime('')
         node.setUpdateStatus(updateStatus)
+        # Software stuff
+        for instSoftware in (node.getInstalledSoftware() or []):
+            isid = instSoftware.getId()
+            isid = "%s/installedSoftware/%s" % (instanceUrl, isid)
+            instSoftware.setId(isid)
+
+            tc = instSoftware.getTroveChanges()
+            if tc:
+                href = tc.getHref()
+                if href:
+                    tc.setHref("%s/troveChanges" % isid)
+        for availUpdate in (node.getAvailableUpdate() or []):
+            href = os.path.basename(availUpdate.getId())
+            availUpdate.setId("%s/availableUpdates/%s" %
+                (instanceUrl, href))
+            instSoftware = availUpdate.getInstalledSoftware()
+            href = os.path.basename(instSoftware.getHref())
+            instSoftware.setHref("%s/installedSoftware/%s" %
+                (instanceUrl, href))
+            troveChanges = availUpdate.getTroveChanges()
+            href = os.path.basename(troveChanges.getHref())
+            troveChanges.setHref("%s/availableUpdates/%s/troveChanges" %
+                (instanceUrl, href))
         return node
 
-    def newInstanceLaunchJob(self, *args, **kwargs):
-        node = self.instanceLaunchJobFactory(*args, **kwargs)
-        node.setId(self.getJobIdUrl(node.getId(), node.getType()))
-        node.setImageId(self._getImageUrl(node, node.getImageId()))
-        for result in (node.getResult() or []):
-            href = result.getHref()
+    def newInstanceLaunchJob(self, node):
+        node.set_id(self.getJobIdUrl(node.get_id(), node.get_type()))
+        imageId = node.get_imageId()
+        if imageId:
+            node.set_imageId(self._getImageUrl(node, imageId))
+        for result in (node.get_resultResource() or []):
+            href = result.get_href()
             if href:
-                result.setHref(self._getInstanceUrl(node, href))
+                result.set_href(self._getInstanceUrl(node, href))
         return node
 
     def newLaunchDescriptor(self, descriptor):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
-        for field in descriptor.iterRawDataFields():
+        for field in descriptor.getDataFields():
             for helpNode in field.help:
                 href = helpNode.href
                 if '://' not in href:
                     helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
         return descriptor
-
-    def newJobType(self, *args, **kwargs):
-        node = self.jobTypeFactory(*args, **kwargs)
-        cloudTypeId = self._getCloudTypeUrl(self.cloudType)
-        node.setId(cloudTypeId)
-        node.setCloudInstances(cloud_types.CloudInstances(
-            href = self.join(cloudTypeId, 'instances')))
-        node.setDescriptorCredentials(cloud_types.DescriptorCredentials(
-            href = self.join(cloudTypeId, 'descriptor', 'credentials')))
-        node.setDescriptorInstanceConfiguration(
-            cloud_types.DescriptorInstanceConfiguration(
-                href = self.join(cloudTypeId, 'descriptor', 'configuration')))
-        return node
 
     def newSecurityGroup(self, instanceId, secGroup):
         sgId = self.join(self._getCloudUrl(self.cloudType, self.cloudName),
@@ -149,7 +166,7 @@ class NodeFactory(object):
         return secGroup
 
     def getJobIdUrl(self, jobId, jobType):
-        jobId = os.path.basename(jobId)
+        jobId = str(jobId)
         jobType = os.path.basename(jobType)
         return self.join(self.baseUrl, 'jobs', 'types', jobType, 'jobs',
             jobId)
@@ -171,7 +188,11 @@ class NodeFactory(object):
         return '/'.join(args)
 
     def getCloudUrl(self, node):
-        return self._getCloudUrl(self.cloudType, node.getCloudName())
+        if hasattr(node, "get_cloudName"):
+            cloudName = node.get_cloudName()
+        else:
+            cloudName = node.getCloudName()
+        return self._getCloudUrl(self.cloudType, cloudName)
 
     def getImageUrl(self, node):
         return self._getImageUrl(node, node.getId())
@@ -188,6 +209,7 @@ class NodeFactory(object):
     def _getInstanceUrl(self, node, instanceId):
         if instanceId is None:
             return None
+        instanceId = instanceId.split('/')[-1]
         return self.join(self.getCloudUrl(node), 'instances',
                         self._quote(instanceId))
 
