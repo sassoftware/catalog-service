@@ -358,7 +358,9 @@ class BaseDriver(object):
         job = self._jobsStore.create(cloudType = self.cloudType,
             cloudName = self.cloudName, instanceId = instanceId)
         self._jobsStore.commit()
-        self.versionJobRunner = CatalogJobRunner(self.runUpdateSoftwareVersion)
+        self.versionJobRunner = CatalogJobRunner(
+                                    self.runUpdateSoftwareVersion, 
+                                    self._logger)
         self.versionJobRunner.job = job
         self.versionJobRunner(instance, job.id, force)
 
@@ -468,7 +470,7 @@ class BaseDriver(object):
         update.setInstalledSoftwareHref(sanitizedFullSpec)
 
         n, v, f = updateNvf
-        fullSpec = self._fullSpec((n, v, f))
+        fullSpec = self._fullSpecFromString((n, v, f))
         sanitizedFullSpec = self._quoteSpec(fullSpec)
         update.setTroveChangesHref(sanitizedFullSpec)
         update.setId(sanitizedFullSpec)
@@ -872,7 +874,9 @@ class BaseDriver(object):
             cloudType = self.cloudType, restArgs = descrXml)
         job.commit()
         jobId = job.id
-        self.launchJobRunner = CatalogJobRunner(self.launchInstanceInBackground)
+        self.launchJobRunner = CatalogJobRunner(
+                                self.launchInstanceInBackground,
+                                self._logger)
         self.launchJobRunner.job = job
         self.launchJobRunner(jobId, image, auth, **params)
 
@@ -1103,7 +1107,8 @@ class BaseDriver(object):
                 cloudName=self.cloudName, instanceId=instanceId)
             self._jobsStore.commit()
 
-            self.updateJobRunner = CatalogJobRunner(self._updateInstanceJob)
+            self.updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
+                                                    self._logger)
             self.updateJobRunner.job = job
 
             newState = self.updateStatusStateUpdating
@@ -1132,7 +1137,7 @@ class BaseDriver(object):
             self.log_debug("Updating instance %s (%s))", instance, dnsName)
             self.log_debug("Updating %s: cert %s, key %s", instance, certFile, keyFile)
             x509Dict = dict(cert_file = certFile, key_file = keyFile)
-            updater = cimupdater.CIMUpdater(host, x509Dict, self._logger)
+            updater = cimupdater.CIMUpdater(host, x509Dict)
             updater.applyUpdate(troveList)
         except Exception, e:
             newState = self.updateStatusStateException
@@ -1360,11 +1365,14 @@ class CatalogJobRunner(rpath_job.BackgroundRunner):
 
     def log_error(self, msg, ei):
         if self.logger is not None:
-            self.logger.error(msg, ei)
+            self.logger.error(msg)
+            self.logger.error(str(ei[0]))
+            self.logger.error(str(ei[1]))
+            self.logger.error(''.join(traceback.format_tb(ei[2])))
 
     def handleError(self, ei):
         self.job.addHistoryEntry(str(ei[0]))
         self.job.addHistoryEntry(str(ei[1]))
-        self.job.addHistoryEntry('\n'.join(traceback.format_tb(ei[2])))
+        self.job.addHistoryEntry(''.join(traceback.format_tb(ei[2])))
         self.job.status = self.job.STATUS_FAILED
         self.job.commit()

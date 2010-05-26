@@ -169,7 +169,7 @@ class CIMUpdater(object):
         if not self.isJobSuccessful(job):
             error = self.server.getError(job)
             self.log_error(error)
-            raise RuntimeError("Error while applying updates")
+            raise RuntimeError("Error while applying updates. The error from the managed system was: %s" % error)
 
     def checkAndApplyUpdate(self, timeout = DEFAULT_TIMEOUT):
         job = self.updateCheck(timeout = timeout)
@@ -183,8 +183,7 @@ class CIMUpdater(object):
         if not self.isJobSuccessful(job):
             error = self.server.getError(job)
             self.log_error(error)
-            raise RuntimeError("Error while applying updates. The error from "
-                        "the managed system was: %s" % error)
+            raise RuntimeError("Error while applying updates. The error from the managed system was: %s" % error)
 
     def log_error(self, error):
         if self.logger:
