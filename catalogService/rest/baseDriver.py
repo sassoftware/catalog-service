@@ -454,24 +454,27 @@ class BaseDriver(object):
     def _getConaryClient(self):
         return self.db.productMgr.reposMgr.getUserClient()
 
-    def _availableUpdateModelFactory(self, nvf):
-        n, v, f = nvf
-
+    def _availableUpdateModelFactory(self, installedNvf, updateNvf):
+        n, v, f = updateNvf
         # Handle both string versions and version objects
         if type(v) == type(''):
             v = versions.ThawVersion(v)
 
         fullSpec = self._fullSpec((n, v, f))
         sanitizedFullSpec = self._quoteSpec(fullSpec)
-
         trove = self._troveModelFactory(n, v, f)
-
         update = instances.AvailableUpdate()
         update.setTrove(trove)
         update.setInstalledSoftwareHref(sanitizedFullSpec)
-        update.setId(sanitizedFullSpec)
+
+        n, v, f = updateNvf
+        fullSpec = self._fullSpec((n, v, f))
+        sanitizedFullSpec = self._quoteSpec(fullSpec)
         update.setTroveChangesHref(sanitizedFullSpec)
-        update.setTroveChangeNode(fromVersion=v, fromFlavor=f)
+        update.setId(sanitizedFullSpec)
+        if type(v) != type(''):
+            v = v.freeze()
+        update.setTroveChangeNode(fromVersion=v, fromFlavor=str(f))
         
         return update
 
@@ -493,8 +496,12 @@ class BaseDriver(object):
 
             if cachedUpdates:
                 for cachedUpdate in cachedUpdates:
-                   content.append(self._availableUpdateModelFactory(cachedUpdate))
-                   content.append(self._availableUpdateModelFactory(nvfStrs))
+                   content.append(self._availableUpdateModelFactory(
+                                    (trvName, trvVersion, trvFlavor),
+                                    cachedUpdate))
+                   content.append(self._availableUpdateModelFactory(
+                                    (trvName, trvVersion, trvFlavor),
+                                    (trvName, trvVersion, trvFlavor)))
                 instance.setOutOfDate(True)
                 continue
 
@@ -550,6 +557,7 @@ class BaseDriver(object):
                 for ver, fs in newerVersions.iteritems():
                     for flv in fs:
                         content.append(self._availableUpdateModelFactory(
+                                        (trvName, trvVersion, trvFlavor),
                                         (trvName, ver, flv)))
                         self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
                                 (trvName, ver, f)))
@@ -557,6 +565,7 @@ class BaseDriver(object):
 
             # Add the current version as well.
             content.append(self._availableUpdateModelFactory(
+                            (trvName, trvVersion, trvFlavor),
                             (trvName, repoVersion, trvFlavor)))
             # Cache the current version as an available update
             self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
