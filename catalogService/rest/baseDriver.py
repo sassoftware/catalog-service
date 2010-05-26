@@ -243,7 +243,7 @@ class BaseDriver(object):
     def _addSoftwareVersionInfo(self, instance, force=False):
         instanceId = instance.getInstanceId()
         softwareVersions = self._getSoftwareVersionsForInstance(instanceId)
-        self._updateInstalledSoftwareList(instance, force, softwareVersions)
+        self._updateInstalledSoftwareList(instance, softwareVersions, force)
         self._getAvailableUpdates(instance, softwareVersions)
         self._setVersionAndStage(instance, softwareVersions)
         self._nodeFactory.refreshInstance(instance)
@@ -281,18 +281,26 @@ class BaseDriver(object):
                     ssl_client_key=x509Key, registration_date=datetime.datetime.now())
         self.systemMgr.createSystem(system)
 
-    def _fullSpec(self, nvf):
+    def _nvfToString(self, nvf):
         flavor = nvf[2]
         if flavor is None:
             flavor = ''
         else:
             flavor = str(flavor)
-        return "%s=%s[%s]" % (nvf[0], nvf[1].freeze(), flavor)
+        version = nvf[1].freeze()
+        return (nvf[0], version, flavor)
+
+    def _fullSpec(self, nvf):
+        nvf = self._nvfToString(nvf)
+        return "%s=%s[%s]" % (nvf[0], nvf[1], nvf[2])
+
+    def _fullSpecFromString(self, nvf):
+        return "%s=%s[%s]" % (nvf[0], nvf[1], nvf[2])
 
     def _quoteSpec(self, spec):
         return urllib.quote(urllib.quote(spec, safe = ''))
 
-    def _updateInstalledSoftwareList(self, instance, force, softwareVersions):
+    def _updateInstalledSoftwareList(self, instance, softwareVersions, force=False):
         state = instance.getState()
         # XXX we really should normalize the states across drivers
         if not state or state.lower() not in ['running', 'poweredon']:
@@ -352,7 +360,7 @@ class BaseDriver(object):
         self._jobsStore.commit()
         self.versionJobRunner = CatalogJobRunner(self.runUpdateSoftwareVersion)
         self.versionJobRunner.job = job
-        self.versionJobRunner(instance, job.id)
+        self.versionJobRunner(instance, job.id, force)
 
         instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id,
                     'software-version-refresh'))
@@ -446,6 +454,27 @@ class BaseDriver(object):
     def _getConaryClient(self):
         return self.db.productMgr.reposMgr.getUserClient()
 
+    def _availableUpdateModelFactory(self, nvf):
+        n, v, f = nvf
+
+        # Handle both string versions and version objects
+        if type(v) == type(''):
+            v = versions.ThawVersion(v)
+
+        fullSpec = self._fullSpec((n, v, f))
+        sanitizedFullSpec = self._quoteSpec(fullSpec)
+
+        trove = self._troveModelFactory(n, v, f)
+
+        update = instances.AvailableUpdate()
+        update.setTrove(trove)
+        update.setInstalledSoftwareHref(sanitizedFullSpec)
+        update.setId(sanitizedFullSpec)
+        update.setTroveChangesHref(sanitizedFullSpec)
+        update.setTroveChangeNode(fromVersion=v, fromFlavor=f)
+        
+        return update
+
     def _getAvailableUpdates(self, instance, softwareVersions):
         # need to access this property as it sets user information and sets up
         # the instance store under the hood.
@@ -456,8 +485,18 @@ class BaseDriver(object):
         content = []
 
         for trvName, trvVersion, trvFlavor in softwareVersions:
-            fullSpec = self._fullSpec((trvName, trvVersion, trvFlavor))
+            nvfStrs = self._nvfToString((trvName, trvVersion, trvFlavor))
+            fullSpec = self._fullSpecFromString(nvfStrs)
             sanitizedFullSpec = self._quoteSpec(fullSpec)
+
+            cachedUpdates = self.systemMgr.getCachedUpdates(nvfStrs)
+
+            if cachedUpdates:
+                for cachedUpdate in cachedUpdates:
+                   content.append(self._availableUpdateModelFactory(cachedUpdate))
+                   content.append(self._availableUpdateModelFactory(nvfStrs))
+                instance.setOutOfDate(True)
+                continue
 
             # trvName and trvVersion are str's, trvFlavor is a
             # conary.deps.deps.Flavor.
@@ -510,30 +549,18 @@ class BaseDriver(object):
             if newerVersions:
                 for ver, fs in newerVersions.iteritems():
                     for flv in fs:
-                        trove = self._troveModelFactory(trvName, ver, f)
-                        update = instances.AvailableUpdate()
-                        update.setTrove(trove)
-                        update.setInstalledSoftwareHref(sanitizedFullSpec)
-                        updateFullSpec = self._quoteSpec(self._fullSpec(
-                            (trvName, ver, flv)))
-                        update.setId(updateFullSpec)
-                        update.setTroveChangesHref(updateFullSpec)
-                        update.setTroveChangeNode(fromVersion = ver.freeze(),
-                            fromFlavor = str(flv))
-                        content.append(update)
-
+                        content.append(self._availableUpdateModelFactory(
+                                        (trvName, ver, flv)))
+                        self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
+                                (trvName, ver, f)))
                 instance.setOutOfDate(True)
 
             # Add the current version as well.
-            trove = self._troveModelFactory(trvName, repoVersion, trvFlavor)
-            update = instances.AvailableUpdate()
-            update.setTrove(trove)
-            update.setInstalledSoftwareHref(sanitizedFullSpec)
-            update.setId(sanitizedFullSpec)
-            update.setTroveChangesHref(sanitizedFullSpec)
-            update.setTroveChangeNode(fromVersion = trvVersion.freeze(),
-                fromFlavor = str(trvFlavor))
-            content.append(update)
+            content.append(self._availableUpdateModelFactory(
+                            (trvName, repoVersion, trvFlavor)))
+            # Cache the current version as an available update
+            self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
+                    (trvName, repoVersion, trvFlavor)))
 
             # Can only have one repositoryUrl set on the instance, so set it
             # if this is a top level group.
@@ -545,7 +572,7 @@ class BaseDriver(object):
 
         return instance
 
-    def runUpdateSoftwareVersion(self, instance, jobId):
+    def runUpdateSoftwareVersion(self, instance, jobId, forced=False):
         self.db.db.reopen_fork()
 
         job = self._jobsStore.get(jobId, commitAfterChange = True)
@@ -567,7 +594,7 @@ class BaseDriver(object):
         self._instanceStore.setSoftwareVersionLastChecked(instanceId)
         self._instanceStore.setSoftwareVersionNextCheck(instanceId)
         try:
-            self.runUpdateSoftwareVersionJob(instanceId, instance, job)
+            self.runUpdateSoftwareVersionJob(instanceId, instance, job, forced)
         finally:
             job.pid = None
             self._instanceStore.setSoftwareVersionJobStatus(instanceId,
@@ -575,7 +602,7 @@ class BaseDriver(object):
             self._instanceStore.setSoftwareVersionLastChecked(instanceId)
             self._instanceStore.setSoftwareVersionNextCheck(instanceId)
 
-    def runUpdateSoftwareVersionJob(self, instanceId, instance, job):
+    def runUpdateSoftwareVersionJob(self, instanceId, instance, job, forced=False):
         ipAddr = instance.getPublicDnsName()
         port = 5989
         self.log_debug("software version: probing %s:%s" % (ipAddr, port))
@@ -601,6 +628,9 @@ class BaseDriver(object):
             job.addResults(installedGroups)
             groups = [self._getNVF(g) for g in installedGroups]
             self.systemMgr.setSoftwareVersionForInstanceId(instanceId, groups)
+            if forced:
+                # Clear the available updates cache
+                self.systemMgr.clearCachedUpdates(groups)
         except Exception, e:
             job.addHistoryEntry("Error retrieving software version for %s: %s" %
                 (ipAddr, str(e)))
