@@ -483,15 +483,12 @@ class BaseDriver(object):
         # the instance store under the hood.
         client = self.client
 
-        instanceId = instance.getInstanceId()
-            
         cclient = self._getConaryClient()
         content = []
 
         for trvName, trvVersion, trvFlavor in softwareVersions:
             nvfStrs = self._nvfToString((trvName, trvVersion, trvFlavor))
             fullSpec = self._fullSpecFromString(nvfStrs)
-            sanitizedFullSpec = self._quoteSpec(fullSpec)
 
             cachedUpdates = self.systemMgr.getCachedUpdates(nvfStrs)
 
@@ -1110,15 +1107,12 @@ class BaseDriver(object):
                                                     self._logger)
             self.updateJobRunner.job = job
 
-            newState = self.updateStatusStateUpdating
-            # TODO comment this out for now until it's in the db.
-            # self._setInstanceUpdateStatus(instance, newState)
             self.updateJobRunner(instance, dnsName,
                     troveSpecs, system.ssl_client_certificate,
                     system.ssl_client_key, job)
         else:
-            # system is not manageable
-            pass
+            self.log_error("Instance %s is not manageable." % \
+                instance.getInstanceId())
 
         instance = self.getInstance(instance.getInstanceId())
         jobHref = instances.BaseInstanceJobHref(
@@ -1138,14 +1132,10 @@ class BaseDriver(object):
             x509Dict = dict(cert_file = certFile, key_file = keyFile)
             updater = cimupdater.CIMUpdater(host, x509Dict)
             updater.applyUpdate(troveList)
-        except Exception, e:
-            newState = self.updateStatusStateException
-            # TODO comment this out for now until it's in the db.
-            # self._setInstanceUpdateStatus(instance, newState)
+        except Exception:
             raise
         else:
             # Mark the update status as done.
-            newState = self.updateStatusStateDone
             job.status = job.STATUS_COMPLETED
             job.commit()
 
@@ -1154,9 +1144,6 @@ class BaseDriver(object):
             self._instanceStore = self._getInstanceStore()
             self._instanceStore.setSoftwareVersionNextCheck(
                 instance.getInstanceId(), timestamp=time.time(), delta=0)
-
-            # TODO comment this out for now until it's in the db.
-            # self._setInstanceUpdateStatus(instance, newState)
 
     def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
         if newTime is None:
