@@ -488,8 +488,6 @@ class BaseDriver(object):
 
         for trvName, trvVersion, trvFlavor in softwareVersions:
             nvfStrs = self._nvfToString((trvName, trvVersion, trvFlavor))
-            fullSpec = self._fullSpecFromString(nvfStrs)
-
             cachedUpdates = self.systemMgr.getCachedUpdates(nvfStrs)
 
             if cachedUpdates:
