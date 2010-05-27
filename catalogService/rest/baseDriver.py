@@ -470,13 +470,11 @@ class BaseDriver(object):
         update.setInstalledSoftwareHref(sanitizedFullSpec)
 
         n, v, f = updateNvf
-        fullSpec = self._fullSpecFromString((n, v, f))
+        fullSpec = self._fullSpec((n, v, f))
         sanitizedFullSpec = self._quoteSpec(fullSpec)
         update.setTroveChangesHref(sanitizedFullSpec)
         update.setId(sanitizedFullSpec)
-        if type(v) != type(''):
-            v = v.freeze()
-        update.setTroveChangeNode(fromVersion=v, fromFlavor=str(f))
+        update.setTroveChangeNode(fromVersion=v.freeze(), fromFlavor=str(f))
         
         return update
 
@@ -486,6 +484,7 @@ class BaseDriver(object):
         client = self.client
 
         instanceId = instance.getInstanceId()
+            
         cclient = self._getConaryClient()
         content = []
 
