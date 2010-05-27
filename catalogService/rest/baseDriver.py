@@ -287,7 +287,10 @@ class BaseDriver(object):
             flavor = ''
         else:
             flavor = str(flavor)
-        version = nvf[1].freeze()
+        if hasattr(nvf[1], 'freeze'):
+            version = nvf[1].freeze()
+        else:
+            version = nvf[1]
         return (nvf[0], version, flavor)
 
     def _fullSpec(self, nvf):
