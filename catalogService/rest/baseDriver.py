@@ -490,15 +490,15 @@ class BaseDriver(object):
             nvfStrs = self._nvfToString((trvName, trvVersion, trvFlavor))
             cachedUpdates = self.systemMgr.getCachedUpdates(nvfStrs)
 
-            if cachedUpdates:
+            if cachedUpdates is not None:
                 for cachedUpdate in cachedUpdates:
                     content.append(self._availableUpdateModelFactory(
                                    (trvName, trvVersion, trvFlavor),
                                    cachedUpdate))
-                    # Add the current version as well.
-                    content.append(self._availableUpdateModelFactory(
-                                   (trvName, trvVersion, trvFlavor),
-                                   (trvName, trvVersion, trvFlavor)))
+                # Add the current version as well.
+                content.append(self._availableUpdateModelFactory(
+                               (trvName, trvVersion, trvFlavor),
+                               (trvName, trvVersion, trvFlavor)))
                 instance.setOutOfDate(True)
                 continue
 
@@ -559,6 +559,10 @@ class BaseDriver(object):
                         self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
                                 (trvName, ver, f)))
                 instance.setOutOfDate(True)
+            else:
+                # Cache that no update was available
+                self.systemMgr.cacheUpdate(nvfStrs, None)
+                
 
             # Add the current version as well.
             content.append(self._availableUpdateModelFactory(
