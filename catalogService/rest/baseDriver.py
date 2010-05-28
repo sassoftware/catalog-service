@@ -492,12 +492,13 @@ class BaseDriver(object):
 
             if cachedUpdates:
                 for cachedUpdate in cachedUpdates:
-                   content.append(self._availableUpdateModelFactory(
-                                    (trvName, trvVersion, trvFlavor),
-                                    cachedUpdate))
-                   content.append(self._availableUpdateModelFactory(
-                                    (trvName, trvVersion, trvFlavor),
-                                    (trvName, trvVersion, trvFlavor)))
+                    content.append(self._availableUpdateModelFactory(
+                                   (trvName, trvVersion, trvFlavor),
+                                   cachedUpdate))
+                    # Add the current version as well.
+                    content.append(self._availableUpdateModelFactory(
+                                   (trvName, trvVersion, trvFlavor),
+                                   (trvName, trvVersion, trvFlavor)))
                 instance.setOutOfDate(True)
                 continue
 
@@ -563,9 +564,6 @@ class BaseDriver(object):
             content.append(self._availableUpdateModelFactory(
                             (trvName, trvVersion, trvFlavor),
                             (trvName, repoVersion, trvFlavor)))
-            # Cache the current version as an available update
-            self.systemMgr.cacheUpdate(nvfStrs, self._nvfToString(
-                    (trvName, repoVersion, trvFlavor)))
 
             # Can only have one repositoryUrl set on the instance, so set it
             # if this is a top level group.
