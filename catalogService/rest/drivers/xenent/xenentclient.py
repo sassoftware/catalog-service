@@ -704,7 +704,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         vmUuid = client.xenapi.VM.get_uuid(vmRef)
         vdiRef = self._newVdi(vmUuid, fileObj, srRef)
         try:
-            vbdRef = self._newVbd(vmRef, vdiRef)
+            self._newVbd(vmRef, vdiRef)
         except:
             client.xenapi.VDI.destroy(vdiRef)
             raise
