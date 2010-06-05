@@ -550,9 +550,6 @@ class XenEntClient(baseDriver.BaseDriver):
     def _deployImage(self, job, image, auth, srUuid):
         tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
         try:
-            downloadUrl = image.getDownloadUrl()
-            checksum = image.getImageId()
-
             job.addHistoryEntry('Downloading image')
             path = self._downloadImage(image, tmpDir, auth = auth, extension = '.xva')
 
