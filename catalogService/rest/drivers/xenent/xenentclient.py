@@ -12,15 +12,13 @@ import httplib
 
 from conary.lib import util
 
-from catalogService import clouds
 from catalogService import errors
-from catalogService import descriptor
-from catalogService import images
-from catalogService import instances
 from catalogService import instanceStore
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.mixins import storage_mixin
+from catalogService.rest.models import clouds
+from catalogService.rest.models import images
+from catalogService.rest.models import instances
 
 XenAPI = None
 xenprov = None
@@ -226,9 +224,8 @@ class UploadClient(object):
             raise
         return None
 
-class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
+class XenEntClient(baseDriver.BaseDriver):
     Image = XenEnt_Image
-
     cloudType = 'xen-enterprise'
 
     _credNameMap = [
@@ -243,9 +240,9 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
     _XmlRpcWrapper = "<methodResponse><params><param>%s</param></params></methodResponse>"
 
+    RBUILDER_BUILD_TYPE = 'XEN_OVA'
     minSizeRe = re.compile(".*VDI size must be between (.*) and .*|"
         "VDI size must be a minimum of (.*)")
-
 
     @classmethod
     def isDriverFunctional(cls):
@@ -254,12 +251,12 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         return True
 
     def drvCreateCloudClient(self, credentials):
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         if self.XenSessionClass:
             klass = self.XenSessionClass
         else:
             klass = XenAPI.Session
-        sess = klass("https://%s" % self._getCloudNameFromConfig(cloudConfig))
+        sess = klass("https://%s" % self.cloudName)
         try:
             # password is a ProtectedString, we have to convert to string
             sess.login_with_password(credentials['username'],
@@ -308,23 +305,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
 
-    def drvGetImages(self, imageIds):
-        imageList = self._getImagesFromGrid()
-        imageList = self.addMintDataToImageList(imageList, 'XEN_OVA')
-
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
-        if imageIds is not None:
-            imagesById = dict((x.getImageId(), x) for x in imageList )
-            newImageList = images.BaseImages()
-            for imageId in imageIds:
-                if imageId is None or imageId not in imagesById:
-                    continue
-                newImageList.append(imagesById[imageId])
-            imageList = newImageList
-        return imageList
-
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Xen Enterprise Launch Parameters")
         descr.addDescription("Xen Enterprise Launch Parameters")
@@ -354,8 +334,8 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             help = [
                 ("launch/storageRepository.html", None)
             ],
-            type = descriptor.EnumeratedType(
-                descriptor.ValueWithDescription(x[0], descriptions = x[1][0])
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1][0])
                 for x in storageRepos),
             default = storageRepos[0][0],
             )
@@ -529,7 +509,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
     def _xePutFile(self, urlSelector, fileObj, taskRef, loopCount = 1000,
             loopTimeout = 0.5, **kwargs):
         urlTemplate = 'http://%s:%s@%s/%s?%s'
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         cloudName = cloudConfig['name']
         creds = self.credentials
         username, password = creds['username'], creds['password']
@@ -573,10 +553,10 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             downloadUrl = image.getDownloadUrl()
             checksum = image.getImageId()
 
-            job.addLog(self.LogEntry('Downloading image'))
+            job.addHistoryEntry('Downloading image')
             path = self._downloadImage(image, tmpDir, auth = auth, extension = '.xva')
 
-            job.addLog(self.LogEntry('Importing image'))
+            job.addHistoryEntry('Importing image')
             templRef, templUuid = self._importImage(image, path, srUuid)
 
             image.setImageId(templUuid)
@@ -598,7 +578,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
 
-        cloudConfig = self.drvGetCloudConfiguration()
+        cloudConfig = self.getTargetConfiguration()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
@@ -607,19 +587,19 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
 
         imageId = image.getInternalTargetId()
 
-        job.addLog(self.LogEntry('Cloning template'))
+        job.addHistoryEntry('Cloning template')
         realId = self.cloneTemplate(job, imageId, instanceName,
             instanceDescription)
-        job.addLog(self.LogEntry('Attaching credentials'))
+        job.addHistoryEntry('Attaching credentials')
         try:
             self._attachCredentials(realId, srUuid)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
-        job.addLog(self.LogEntry('Launching'))
+        job.addHistoryEntry('Launching')
         self.startVm(realId)
         return realId
 
-    def _getImagesFromGrid(self):
+    def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
         instMap  = self.client.xenapi.VM.get_all_records()
 
@@ -637,6 +617,9 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                 is_rBuilderImage = False
                 imageId = vm['uuid']
 
+            if imageIdsFilter is not None and imageId not in imageIdsFilter:
+                continue
+
             image = self._nodeFactory.newImage(id = imageId,
                     imageId = imageId, isDeployed = True,
                     is_rBuilderImage = is_rBuilderImage,
@@ -647,10 +630,6 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
-
-    @classmethod
-    def getImageIdFromMintImage(cls, image):
-        return image.get('sha1')
 
     def _killRunningProcessesForInstances(self, synthesizedInstIds):
         # For synthesized instances, try to kill the pid

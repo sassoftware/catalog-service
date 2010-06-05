@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema
+targetNamespace="http://www.rpath.com/permanent/conary/trove-1.0.xsd"
+    elementFormDefault="qualified"
+    attributeFormDefault="unqualified"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:cny="http://www.rpath.com/permanent/conary/trove-1.0.xsd"
+    xmlns="http://www.rpath.com/permanent/conary/trove-1.0.xsd">
+
+  <xsd:element name="trove" type="cny:troveType" />
+
+  <xsd:complexType name="troveType">
+    <xsd:sequence>
+      <xsd:element name="name" type="xsd:token"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="version" type="cny:versionType"
+          minOccurs="0" maxOccurs="1" />
+      <xsd:element name="flavor" type="xsd:token"
+          minOccurs="0" maxOccurs="1" />
+    </xsd:sequence>
+    <xsd:attribute name="id" type="xsd:ID" />
+    <xsd:attribute name="href" type="xsd:ID" />
+  </xsd:complexType>
+
+  <xsd:complexType name="versionType">
+    <xsd:sequence>
+      <xsd:element name="full" type="xsd:token"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="label" type="xsd:token"
+          minOccurs="1" maxOccurs="1" />
+      <xsd:element name="ordering" type="xsd:token"
+          minOccurs="1" maxOccurs="1">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:decimal">
+            <xsd:fractionDigits value="3" />
+            <xsd:minInclusive value="0" />
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="revision" type="xsd:token"
+          minOccurs="1" maxOccurs="1" />
+    </xsd:sequence>
+  </xsd:complexType>
+</xsd:schema>
