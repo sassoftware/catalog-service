@@ -7,6 +7,8 @@ from mint.rest.middleware import auth
 
 public = auth.public
 
+admin = auth.admin
+
 class AuthenticationCallback(auth.AuthenticationCallback):
     def __init__(self, restdb, controller):
         auth.AuthenticationCallback.__init__(self, restdb.cfg, restdb, controller)

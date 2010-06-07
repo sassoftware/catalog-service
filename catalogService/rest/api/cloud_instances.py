@@ -11,6 +11,7 @@ from catalogService.errors import InvalidCloudName
 from catalogService.rest.database import commitafter
 from catalogService.rest.api.base import BaseCloudController
 from catalogService.rest.api import trove_change
+from catalogService.rest.middleware import auth
 from catalogService.rest.middleware.response import XmlResponse, XmlStringResponse, XmlSerializableObjectResponse
 
 class ImagesController(BaseCloudController):
@@ -161,10 +162,12 @@ class CloudTypeModelController(BaseCloudController):
     def get(self, request, cloudName):
         return XmlResponse(self.driver(request).getCloud(cloudName))
 
+    @auth.admin
     @commitafter
     def create(self, request):
         return XmlResponse(self.driver(request).createCloud(request.read()))
 
+    @auth.admin
     @commitafter
     def destroy(self, request, cloudName):
         return XmlResponse(self.driver(request, cloudName).removeCloud())
