@@ -495,11 +495,11 @@ class BaseDriver(object):
                     content.append(self._availableUpdateModelFactory(
                                    (trvName, trvVersion, trvFlavor),
                                    cachedUpdate))
+                    instance.setOutOfDate(True)
                 # Add the current version as well.
                 content.append(self._availableUpdateModelFactory(
                                (trvName, trvVersion, trvFlavor),
                                (trvName, trvVersion, trvFlavor)))
-                instance.setOutOfDate(True)
                 continue
 
             # trvName and trvVersion are str's, trvFlavor is a
