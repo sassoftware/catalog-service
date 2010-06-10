@@ -361,8 +361,9 @@ class BaseDriver(object):
             job = self._jobsStore.create(cloudType = self.cloudType,
                 cloudName = self.cloudName, instanceId = instanceId)
         except Exception, e:
-            self.log_error("Exception creating version update job: %s" % \
-                str(e))
+            self.log_error(
+                "Exception creating version update job for %s: %s" % \
+                (instanceId, str(e)))
             return
             
         self._jobsStore.commit()
