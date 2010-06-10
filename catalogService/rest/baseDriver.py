@@ -355,8 +355,16 @@ class BaseDriver(object):
         if not ipAddr:
             return
 
-        job = self._jobsStore.create(cloudType = self.cloudType,
-            cloudName = self.cloudName, instanceId = instanceId)
+        # Catch and log any exception when creating a job. A quick fix for
+        # RBL-6462
+        try:
+            job = self._jobsStore.create(cloudType = self.cloudType,
+                cloudName = self.cloudName, instanceId = instanceId)
+        except Exception, e:
+            self.log_error("Exception creating version update job: %s" % \
+                str(e))
+            return
+            
         self._jobsStore.commit()
         self.versionJobRunner = CatalogJobRunner(
                                     self.runUpdateSoftwareVersion, 
