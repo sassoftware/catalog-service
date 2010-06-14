@@ -362,8 +362,8 @@ class EC2Client(baseDriver.BaseDriver):
             if key not in credentials or not credentials[key]:
                 raise errors.MissingCredentials()
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo()
-        return EC2Connection(credentials['publicAccessKeyId'],
-                             credentials['secretAccessKey'],
+        return EC2Connection(self._strip(credentials['publicAccessKeyId']),
+                             self._strip(credentials['secretAccessKey']),
                              proxy_user = proxyUser,
                              proxy_pass = proxyPass,
                              proxy = proxy,
