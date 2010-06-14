@@ -585,6 +585,23 @@ class VMwareClient(baseDriver.BaseDriver):
         ovfFilePath = os.path.join(vmFilesPath, ovfFiles[0])
         vmFolder = dataCenter.properties['vmFolder']
         self._msg(job, 'Importing OVF descriptor')
+
+        from ZSI import FaultException
+        msg =  'The object has already been deleted or has not been completely created'
+        for i in range(5):
+            try:
+                return self._uploadOvf_1(job, ovfFilePath, vmFilesPath, vmName,
+                    vmFolder, resourcePool, dataStore, network)
+            except FaultException, e:
+                if e.fault.string != msg:
+                    raise
+                self._msg(job, 'Import failed, retrying...')
+        else: # for
+            # We failed repeatedly. Give up.
+            raise
+
+    def _uploadOvf_1(self, job, ovfFilePath, vmFilesPath, vmName, vmFolder,
+                     resourcePool, dataStore, network):
         fileItems, httpNfcLease = self.client.ovfImportStart(ovfFilePath,
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
             dataStore = dataStore, network = network)
