@@ -594,7 +594,7 @@ class XenEntClient(baseDriver.BaseDriver):
             self.log_exception("Exception attaching credentials: %s" % e)
         job.addHistoryEntry('Launching')
         self.startVm(realId)
-        return realId
+        return self.client.xenapi.VM.get_uuid(realId)
 
     def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
