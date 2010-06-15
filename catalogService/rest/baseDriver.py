@@ -411,12 +411,12 @@ class BaseDriver(object):
         name, version, flavor = nvf
         label = version.trailingLabel()
         try:
-            product = self.db.productMgr.getProduct(label.getHost())
+            product = self.db.getProduct(label.getHost())
+            prodVersions = self.db.listProductVersions(product.hostname)
         except mint_rest_errors.ProductNotFound:
             # Not a product that lives on this rba
             return None, None
 
-        prodVersions = self.db.listProductVersions(product.hostname)
         for version in prodVersions.versions:
             stages = self.db.getProductVersionStages(product.hostname, version.name)
             for stage in stages.stages:
