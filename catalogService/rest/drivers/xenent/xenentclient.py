@@ -614,7 +614,7 @@ class XenEntClient(storage_mixin.StorageMixin, baseDriver.BaseDriver):
             self.log_exception("Exception attaching credentials: %s" % e)
         job.addLog(self.LogEntry('Launching'))
         self.startVm(realId)
-        return realId
+        return self.client.xenapi.VM.get_uuid(realId)
 
     def _getImagesFromGrid(self):
         cloudAlias = self.getCloudAlias()
