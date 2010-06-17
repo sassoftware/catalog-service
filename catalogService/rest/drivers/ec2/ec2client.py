@@ -134,7 +134,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 12 characters</desc>
         </descriptions>
         <length>12</length>
       </constraints>
@@ -149,7 +149,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 100 characters</desc>
         </descriptions>
         <length>100</length>
       </constraints>
@@ -164,7 +164,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 256 characters</desc>
         </descriptions>
         <length>256</length>
       </constraints>
@@ -214,7 +214,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 32 characters</desc>
         </descriptions>
         <length>32</length>
       </constraints>
@@ -241,7 +241,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 14 characters</desc>
         </descriptions>
         <length>14</length>
       </constraints>
@@ -255,7 +255,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 100 characters</desc>
         </descriptions>
         <length>100</length>
       </constraints>
@@ -269,7 +269,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Maximum Characters</desc>
+          <desc>Field must contain between 1 and 256 characters</desc>
         </descriptions>
         <length>256</length>
       </constraints>

@@ -136,6 +136,8 @@ class JobTypeController(base.BaseController):
 
         self._setStore(jobType)
         job = self.jobStore.get(jobId, readOnly=True)
+        if job is None:
+            raise NotImplementedError
         ret = self.jobModelFromJob(request, job, jobType)
         return XmlSerializableObjectResponse(ret)
 
