@@ -378,9 +378,10 @@ class EC2Client(baseDriver.BaseDriver):
             cloudAlias = targetData.get('alias', EC2_ALIAS),
             fullDescription = targetData.get('description', EC2_DESCRIPTION),
             description = targetData.get('description', EC2_DESCRIPTION),
+            accountId = targetData.get('ec2AccountId', ''),
             )
         if isAdmin:
-            ret.update(dict(accountId = targetData.get('ec2AccountId', ''),
+            ret.update(dict(
                 publicAccessKeyId = targetData.get('ec2PublicKey', ''),
                 secretAccessKey = targetData.get('ec2PrivateKey', ''),
                 certificateData = fixPEM(targetData.get('ec2Certificate', ''),
@@ -617,7 +618,12 @@ x509-cert(base64)=%s
         return insts
 
     def getImagesFromTarget(self, imageIds):
-        rs = self.client.get_all_images(image_ids = imageIds)
+        ownerId = self.getTargetConfiguration()['accountId']
+        if ownerId:
+            ownerIds = [ ownerId ]
+        else:
+            ownerIds = None
+        rs = self.client.get_all_images(image_ids = imageIds, owners = ownerIds)
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith('ami-') ]
 
