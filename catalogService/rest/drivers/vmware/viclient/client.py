@@ -934,6 +934,11 @@ class VimService(object):
 
         self._service.HttpNfcLeaseComplete(req)
 
+    def leaseAbort(self, httpNfcLease):
+        req = HttpNfcLeaseAbortRequestMsg()
+        req.set_element__this(httpNfcLease)
+        self._service.HttpNfcLeaseAbort(req)
+
     def getOvfManager(self):
         return getattr(self._sic, '_ovfManager', None)
 
@@ -1033,16 +1038,26 @@ class VimService(object):
         progressUpdate.totalSize = totalSize
         progressUpdate.progress(0, 0)
 
-        for deviceUrl in deviceUrls:
-            method, filePath, fileSize = fileMap[deviceUrl.get_element_importKey()]
-            url = deviceUrl.get_element_url()
-            if url.startswith("https://*/"):
-                url = self.baseUrl + url[10:]
-            vmutils._putFile(filePath, url,
-                session=None, method=method, callback = progressUpdate)
-            progressUpdate.updateSize(fileSize)
-        progressUpdate.progress(100, 0)
-        self.leaseComplete(httpNfcLease)
+        try:
+            for deviceUrl in deviceUrls:
+                method, filePath, fileSize = fileMap[deviceUrl.get_element_importKey()]
+                url = deviceUrl.get_element_url()
+                if url.startswith("https://*/"):
+                    url = self.baseUrl + url[10:]
+                vmutils._putFile(filePath, url,
+                    session=None, method=method, callback = progressUpdate)
+                progressUpdate.updateSize(fileSize)
+            progressUpdate.progress(100, 0)
+            self.leaseComplete(httpNfcLease)
+        except:
+            # Save this exception, so we can re-raise it further down
+            exc_info = sys.exc_info()
+            try:
+                self.leaseAbort(httpNfcLease)
+            except:
+                # Ignore errors related to aborting the lease
+                pass
+            raise exc_info[0], exc_info[1], exc_info[2]
 
         return vmMor
 
