@@ -712,6 +712,7 @@ class BaseDriver(object):
                 #os.setsid()
 
                 os.chdir('/')
+                self.postFork()
                 function(*args, **kw)
             except Exception:
                 try:
@@ -722,6 +723,10 @@ class BaseDriver(object):
                     os._exit(1)
         finally:
             os._exit(0)
+
+    def postFork(self):
+        # Force the client to reopen the connection to the cloud
+        self._cloudClient = None
 
     def _getMintImagesByType(self, imageType):
         return self._mintClient.getAllBuildsByType(imageType)
