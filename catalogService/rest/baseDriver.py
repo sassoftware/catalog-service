@@ -367,11 +367,12 @@ class BaseDriver(object):
             return
             
         self._jobsStore.commit()
-        self.versionJobRunner = CatalogJobRunner(
-                                    self.runUpdateSoftwareVersion, 
-                                    self._logger)
-        self.versionJobRunner.job = job
-        self.versionJobRunner(instance, job.id, force)
+        versionJobRunner = CatalogJobRunner(
+                                    self.runUpdateSoftwareVersion,
+                                    self._logger,
+                                    postFork=self.postFork)
+        versionJobRunner.job = job
+        versionJobRunner(instance, job.id, force)
 
         instance.setSoftwareVersionJobId(self._nodeFactory.getJobIdUrl(job.id,
                     'software-version-refresh'))
@@ -880,11 +881,12 @@ class BaseDriver(object):
             cloudType = self.cloudType, restArgs = descrXml)
         job.commit()
         jobId = job.id
-        self.launchJobRunner = CatalogJobRunner(
+        launchJobRunner = CatalogJobRunner(
                                 self.launchInstanceInBackground,
-                                self._logger)
-        self.launchJobRunner.job = job
-        self.launchJobRunner(jobId, image, auth, **params)
+                                self._logger,
+                                postFork=self.postFork)
+        launchJobRunner.job = job
+        launchJobRunner(jobId, image, auth, **params)
 
         newInstanceParams = self.getNewInstanceParameters(job, image,
             descriptorData, params)
@@ -1113,11 +1115,12 @@ class BaseDriver(object):
                 cloudName=self.cloudName, instanceId=instanceId)
             self._jobsStore.commit()
 
-            self.updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
-                                                    self._logger)
-            self.updateJobRunner.job = job
+            updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
+                                               self._logger,
+                                               postFork=self.postFork)
+            updateJobRunner.job = job
 
-            self.updateJobRunner(instance, dnsName,
+            updateJobRunner(instance, dnsName,
                     troveSpecs, system.ssl_client_certificate,
                     system.ssl_client_key, job)
         else:
@@ -1355,13 +1358,21 @@ class CookieClient(object):
         return ret
 
 class CatalogJobRunner(rpath_job.BackgroundRunner):
-    def __init__(self, function, logger=None):
+    def __init__(self, function, logger=None, preFork=None, postFork=None):
         self.logger = logger
+        self._preFork = preFork
+        self._postFork = postFork
         rpath_job.BackgroundRunner.__init__(self, function)
 
     def preFork(self):
-        # Setting this to None forces the child to re-open the connection.
-        self._cloudClient = None
+        if self._preFork is None:
+            return None
+        return self._preFork()
+
+    def postFork(self):
+        if self._postFork is None:
+            return None
+        return self._postFork()
 
     def log_error(self, msg, ei):
         if self.logger is not None:
