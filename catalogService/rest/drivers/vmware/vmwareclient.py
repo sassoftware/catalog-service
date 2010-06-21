@@ -332,6 +332,13 @@ class VMwareClient(baseDriver.BaseDriver):
 
         return descr
 
+    def postFork(self):
+        if self._cloudClient is not None:
+            # Pretend that we're not logged in, otherwise the __del__ method
+            # will log out the parent
+            self._cloudClient._loggedIn = False
+        return baseDriver.BaseDriver.postFork(self)
+
     def terminateInstances(self, instanceIds):
         insts = self.getInstances(instanceIds)
         for instanceId in instanceIds:

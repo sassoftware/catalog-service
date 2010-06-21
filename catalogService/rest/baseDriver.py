@@ -1167,6 +1167,10 @@ class BaseDriver(object):
         # Set the expiration to 3 hours for now.
         self._instanceStore.setExpiration(instanceId, 10800)
 
+    def postFork(self):
+        # Force the client to reopen the connection to the cloud
+        self._cloudClient = None
+
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
 
