@@ -112,6 +112,7 @@ class NodeFactory(object):
         updateStatus.setState('')
         updateStatus.setTime('')
         node.setUpdateStatus(updateStatus)
+        node.setOutOfDate(False)
         # Software stuff
         for instSoftware in (node.getInstalledSoftware() or []):
             isid = instSoftware.getId()
