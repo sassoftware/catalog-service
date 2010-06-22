@@ -86,7 +86,12 @@ class JobTypeController(base.BaseController):
         jobm.set_cloudName(job.cloudName)
         if hasattr(job, 'instanceId'):
             jobm.set_instanceId(job.instanceId)
-        jobm.history.extend(job.history)
+        hist = job.history
+        jobm.history.extend(hist)
+        if hist:
+            # Until statusMessage is a real field, we set it to be the
+            # contents of the last history entry (RBL-6643)
+            jobm.set_statusMessage(hist[-1].content)
         jobId = self.url(request, 'jobs', 'types', jobType,
             'jobs', str(job.id))
         results = job.result
