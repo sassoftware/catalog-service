@@ -627,7 +627,8 @@ class BaseDriver(object):
             self._probeHost(ipAddr, port)
         except self.ProbeHostError, e:
             job.addHistoryEntry("Error contacting system %s: %s" % (ipAddr, str(e)))
-            raise
+            job.status = job.STATUS_FAILED
+            return
 
         job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
         system = self.systemMgr.getSystemByInstanceId(instanceId)
