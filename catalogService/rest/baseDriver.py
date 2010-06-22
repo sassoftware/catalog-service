@@ -1155,18 +1155,6 @@ class BaseDriver(object):
             self._instanceStore.setSoftwareVersionNextCheck(
                 instance.getInstanceId(), timestamp=time.time(), delta=0)
 
-    def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
-        if newTime is None:
-            newTime = int(time.time())
-        instance.getUpdateStatus().setState(newState)
-        instance.getUpdateStatus().setTime(newTime)
-        # Save the update status in the instance store
-        instanceId = instance.getId()
-        self._instanceStore.setUpdateStatusState(instanceId, newState)
-        self._instanceStore.setUpdateStatusTime(instanceId, newTime)
-        # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instanceId, 10800)
-
     def postFork(self):
         # Force the client to reopen the connection to the cloud
         self._cloudClient = None
