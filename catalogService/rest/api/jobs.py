@@ -92,8 +92,6 @@ class JobTypeController(base.BaseController):
             # Until statusMessage is a real field, we set it to be the
             # contents of the last history entry (RBL-6643)
             jobm.set_statusMessage(hist[-1].content)
-        jobId = self.url(request, 'jobs', 'types', jobType,
-            'jobs', str(job.id))
         results = job.result
         resultClass = self.supportedJobTypes[jobType][1].resultClass
         if results:
