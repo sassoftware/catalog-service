@@ -667,7 +667,7 @@ class XenEntClient(baseDriver.BaseDriver):
 
     def _attachCredentials(self, vmRef, srUuid):
         client = self.client
-        srRef = self._cachedGet(srUuid, client.SR.get_by_uuid)
+        srRef = self._cachedGet(srUuid, client.xenapi.SR.get_by_uuid)
         filename = self.getCredentialsIsoFile()
         fileObj = file(filename)
         os.unlink(filename)
