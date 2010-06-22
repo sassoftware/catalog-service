@@ -325,6 +325,9 @@ class BaseDriver(object):
                     fromFlavor = str(nvf[2]))
                 versions.append(installedSoftware)
             instance.setInstalledSoftware(versions)
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
+        if not system.is_manageable:
+            return
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
