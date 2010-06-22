@@ -591,8 +591,6 @@ class BaseDriver(object):
         return instance
 
     def runUpdateSoftwareVersion(self, instance, jobId, forced=False):
-        self.db.db.reopen_fork()
-
         job = self._jobsStore.get(jobId, commitAfterChange = True)
 
         # RBL-5979 fix race condition. just because the instance is in the
@@ -819,9 +817,6 @@ class BaseDriver(object):
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
     def launchInstanceInBackground(self, jobId, image, auth, **params):
-        # We need to reopen the db, so we don't share a cursor with the parent
-        # process
-        self.db.db.reopen_fork()
         job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
         job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
         job.addHistoryEntry('Running')
@@ -1110,22 +1105,24 @@ class BaseDriver(object):
         instanceId = instance.getInstanceId()
         system = self.systemMgr.getSystemByInstanceId(instanceId)
 
-        if system.is_manageable:
-            job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
-                cloudName=self.cloudName, instanceId=instanceId)
-            self._jobsStore.commit()
-
-            updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
-                                               self._logger,
-                                               postFork=self.postFork)
-            updateJobRunner.job = job
-
-            updateJobRunner(instance, dnsName,
-                    troveSpecs, system.ssl_client_certificate,
-                    system.ssl_client_key, job)
-        else:
+        if not system.is_manageable:
+            instance = self.getInstance(instance.getInstanceId())
             self.log_error("Instance %s is not manageable." % \
                 instance.getInstanceId())
+            return instance
+
+        job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
+            cloudName=self.cloudName, instanceId=instanceId)
+        self._jobsStore.commit()
+
+        updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
+                                           self._logger,
+                                           postFork=self.postFork)
+        updateJobRunner.job = job
+
+        updateJobRunner(instance, dnsName,
+                troveSpecs, system.ssl_client_certificate,
+                system.ssl_client_key, job)
 
         instance = self.getInstance(instance.getInstanceId())
         jobHref = instances.BaseInstanceJobHref(
@@ -1137,7 +1134,6 @@ class BaseDriver(object):
     def _updateInstanceJob(self, instance, dnsName, troveList, certFile,
                         keyFile, job):
         job.status = job.STATUS_RUNNING
-        self.db.db.reopen_fork()
         try:
             host = 'https://%s' % dnsName
             self.log_debug("Updating instance %s (%s))", instance, dnsName)
@@ -1173,6 +1169,9 @@ class BaseDriver(object):
     def postFork(self):
         # Force the client to reopen the connection to the cloud
         self._cloudClient = None
+        # We need to reopen the db, so we don't share a cursor with the parent
+        # process
+        self.db.db.reopen_fork()
 
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
