@@ -1356,6 +1356,8 @@ class CatalogJobRunner(rpath_job.BackgroundRunner):
         rpath_job.BackgroundRunner.__init__(self, function)
 
     def preFork(self):
+        from django import db
+        db.close_connection()
         if self._preFork is None:
             return None
         return self._preFork()
