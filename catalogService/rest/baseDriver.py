@@ -325,6 +325,9 @@ class BaseDriver(object):
                     fromFlavor = str(nvf[2]))
                 versions.append(installedSoftware)
             instance.setInstalledSoftware(versions)
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
+        if not system.is_manageable:
+            return
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
@@ -627,7 +630,8 @@ class BaseDriver(object):
             self._probeHost(ipAddr, port)
         except self.ProbeHostError, e:
             job.addHistoryEntry("Error contacting system %s: %s" % (ipAddr, str(e)))
-            raise
+            job.status = job.STATUS_FAILED
+            return
 
         job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
         system = self.systemMgr.getSystemByInstanceId(instanceId)
@@ -1153,18 +1157,6 @@ class BaseDriver(object):
             self._instanceStore = self._getInstanceStore()
             self._instanceStore.setSoftwareVersionNextCheck(
                 instance.getInstanceId(), timestamp=time.time(), delta=0)
-
-    def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
-        if newTime is None:
-            newTime = int(time.time())
-        instance.getUpdateStatus().setState(newState)
-        instance.getUpdateStatus().setTime(newTime)
-        # Save the update status in the instance store
-        instanceId = instance.getId()
-        self._instanceStore.setUpdateStatusState(instanceId, newState)
-        self._instanceStore.setUpdateStatusTime(instanceId, newTime)
-        # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instanceId, 10800)
 
     def postFork(self):
         # Force the client to reopen the connection to the cloud
