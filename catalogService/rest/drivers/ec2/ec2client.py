@@ -169,7 +169,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>256</length>
       </constraints>
       <required>true</required>
-      <password>true</password>
       <help href='configuration/secretAccessKey.html'/>
     </field>
     <field>

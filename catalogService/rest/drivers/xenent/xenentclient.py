@@ -97,9 +97,9 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Field must contain between 1 and 64 characters</desc>
+          <desc>Field must contain between 1 and 32 characters</desc>
         </descriptions>
-        <length>64</length>
+        <length>32</length>
       </constraints>
       <required>true</required>
     </field>
@@ -111,9 +111,9 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Field must contain between 1 and 64 characters</desc>
+          <desc>Field must contain between 1 and 32 characters</desc>
         </descriptions>
-        <length>64</length>
+        <length>32</length>
       </constraints>
       <required>true</required>
       <password>true</password>
@@ -667,7 +667,7 @@ class XenEntClient(baseDriver.BaseDriver):
 
     def _attachCredentials(self, vmRef, srUuid):
         client = self.client
-        srRef = self._cachedGet(srUuid, client.SR.get_by_uuid)
+        srRef = self._cachedGet(srUuid, client.xenapi.SR.get_by_uuid)
         filename = self.getCredentialsIsoFile()
         fileObj = file(filename)
         os.unlink(filename)

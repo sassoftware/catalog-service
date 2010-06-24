@@ -325,6 +325,9 @@ class BaseDriver(object):
                     fromFlavor = str(nvf[2]))
                 versions.append(installedSoftware)
             instance.setInstalledSoftware(versions)
+        system = self.systemMgr.getSystemByInstanceId(instanceId)
+        if not system.is_manageable:
+            return
         nextCheck = self._instanceStore.getSoftwareVersionNextCheck(instanceId)
         lastChecked = self._instanceStore.getSoftwareVersionLastChecked(instanceId)
         jobId = self._instanceStore.getSoftwareVersionJobId(instanceId)
@@ -591,8 +594,6 @@ class BaseDriver(object):
         return instance
 
     def runUpdateSoftwareVersion(self, instance, jobId, forced=False):
-        self.db.db.reopen_fork()
-
         job = self._jobsStore.get(jobId, commitAfterChange = True)
 
         # RBL-5979 fix race condition. just because the instance is in the
@@ -629,7 +630,8 @@ class BaseDriver(object):
             self._probeHost(ipAddr, port)
         except self.ProbeHostError, e:
             job.addHistoryEntry("Error contacting system %s: %s" % (ipAddr, str(e)))
-            raise
+            job.status = job.STATUS_FAILED
+            return
 
         job.addHistoryEntry("Successfully probed %s:%s" % (ipAddr, port))
         system = self.systemMgr.getSystemByInstanceId(instanceId)
@@ -819,9 +821,6 @@ class BaseDriver(object):
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
     def launchInstanceInBackground(self, jobId, image, auth, **params):
-        # We need to reopen the db, so we don't share a cursor with the parent
-        # process
-        self.db.db.reopen_fork()
         job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
         job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
         job.addHistoryEntry('Running')
@@ -1110,22 +1109,24 @@ class BaseDriver(object):
         instanceId = instance.getInstanceId()
         system = self.systemMgr.getSystemByInstanceId(instanceId)
 
-        if system.is_manageable:
-            job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
-                cloudName=self.cloudName, instanceId=instanceId)
-            self._jobsStore.commit()
-
-            updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
-                                               self._logger,
-                                               postFork=self.postFork)
-            updateJobRunner.job = job
-
-            updateJobRunner(instance, dnsName,
-                    troveSpecs, system.ssl_client_certificate,
-                    system.ssl_client_key, job)
-        else:
+        if not system.is_manageable:
+            instance = self.getInstance(instance.getInstanceId())
             self.log_error("Instance %s is not manageable." % \
                 instance.getInstanceId())
+            return instance
+
+        job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
+            cloudName=self.cloudName, instanceId=instanceId)
+        self._jobsStore.commit()
+
+        updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
+                                           self._logger,
+                                           postFork=self.postFork)
+        updateJobRunner.job = job
+
+        updateJobRunner(instance, dnsName,
+                troveSpecs, system.ssl_client_certificate,
+                system.ssl_client_key, job)
 
         instance = self.getInstance(instance.getInstanceId())
         jobHref = instances.BaseInstanceJobHref(
@@ -1137,7 +1138,6 @@ class BaseDriver(object):
     def _updateInstanceJob(self, instance, dnsName, troveList, certFile,
                         keyFile, job):
         job.status = job.STATUS_RUNNING
-        self.db.db.reopen_fork()
         try:
             host = 'https://%s' % dnsName
             self.log_debug("Updating instance %s (%s))", instance, dnsName)
@@ -1158,21 +1158,12 @@ class BaseDriver(object):
             self._instanceStore.setSoftwareVersionNextCheck(
                 instance.getInstanceId(), timestamp=time.time(), delta=0)
 
-    def _setInstanceUpdateStatus(self, instance, newState, newTime = None):
-        if newTime is None:
-            newTime = int(time.time())
-        instance.getUpdateStatus().setState(newState)
-        instance.getUpdateStatus().setTime(newTime)
-        # Save the update status in the instance store
-        instanceId = instance.getId()
-        self._instanceStore.setUpdateStatusState(instanceId, newState)
-        self._instanceStore.setUpdateStatusTime(instanceId, newTime)
-        # Set the expiration to 3 hours for now.
-        self._instanceStore.setExpiration(instanceId, 10800)
-
     def postFork(self):
         # Force the client to reopen the connection to the cloud
         self._cloudClient = None
+        # We need to reopen the db, so we don't share a cursor with the parent
+        # process
+        self.db.db.reopen_fork()
 
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
@@ -1365,6 +1356,8 @@ class CatalogJobRunner(rpath_job.BackgroundRunner):
         rpath_job.BackgroundRunner.__init__(self, function)
 
     def preFork(self):
+        from django import db
+        db.close_connection()
         if self._preFork is None:
             return None
         return self._preFork()
