@@ -9,9 +9,9 @@ import xmlNode
 
 class UserInfo(xmlNode.BaseNode):
     tag = 'userinfo'
-    __slots__ = [ 'id', 'username', 'isAdmin', 'preferences' ]
+    __slots__ = [ 'id', 'username', 'isAdmin', 'preferences', 'displayRepositories']
     _slotAttributes = set(['id'])
-    _slotTypeMap = dict(isAdmin = bool)
+    _slotTypeMap = dict(isAdmin = bool, displayRepositories = bool)
 
 class Preferences(xmlNode.BaseNode):
     tag = "preferences"
