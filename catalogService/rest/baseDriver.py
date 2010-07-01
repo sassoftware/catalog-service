@@ -40,6 +40,7 @@ from mint.rest import errors as mint_rest_errors
 from mint.django_rest.rbuilder.inventory import systemdbmgr
 
 from rpath_job import api1 as rpath_job
+from rpath_models import System
 
 class BaseDriver(object):
     # Enumerate the factories we support.
