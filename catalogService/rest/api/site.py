@@ -46,7 +46,8 @@ class CatalogServiceController(base.BaseController):
         response = userInfo.UserInfo(id = responseId,
             username = request.mintAuth.username,
             isAdmin = bool(request.mintAuth.admin),
-            preferences = preferences)
+            preferences = preferences,
+            displayRepositories = bool(self.hasRepositories()))
         return XmlResponse(response)
     
     def serviceinfo(self, request):
@@ -57,3 +58,7 @@ class CatalogServiceController(base.BaseController):
             version = "1",
             type = "full")
         return XmlResponse(response)
+
+    # See if there are any repositories that the current user can browse
+    def hasRepositories(self):
+        return len(self.db.listProducts(prodtype = 'Repository').products)
