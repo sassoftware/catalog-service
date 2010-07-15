@@ -281,7 +281,7 @@ class BaseDriver(object):
                     ssl_client_key=x509Key,
                     registration_date=datetime.datetime.now(),
                     available=True)
-        self.systemMgr.createSystem(system)
+        self.systemMgr.launchSystem(system)
 
     def _nvfToString(self, nvf):
         flavor = nvf[2]
