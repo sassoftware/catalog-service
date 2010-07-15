@@ -279,7 +279,7 @@ class BaseDriver(object):
         system = System(target_system_id=instanceId, target_type=cloudType,
                     target_name=cloudName, ssl_client_certificate=x509Cert, 
                     ssl_client_key=x509Key,
-                    registration_date=datetime.datetime.now(),
+                    launch_date=datetime.datetime.now(),
                     available=True)
         self.systemMgr.launchSystem(system)
 
