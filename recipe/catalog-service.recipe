@@ -20,8 +20,11 @@ class CatalogService(PackageRecipe):
         # remove this
         'rmake:python',
         'rpath-common:python',
+        'rpath-job:python',
+        'rpath-models:python',
         'rpath-storage:python',
         'rpath-xmllib:python',
+        'smartform:python',
         'XenAPI:python',
         'restlib:python',
     ]
