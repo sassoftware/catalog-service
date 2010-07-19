@@ -1,0 +1,40 @@
+#
+# Copyright (c) 2008 rPath, Inc.
+# This file is distributed under the terms of the MIT License.
+# A copy is available at http://www.rpath.com/permanent/mit-license.html
+#
+
+class CatalogService(PackageRecipe):
+    name = 'catalog-service'
+    version = '0.1'
+
+    buildRequires = [
+        'boto:python',
+        'lxml:python',
+        'make:runtime',
+        'm2crypto:python',
+        'pywbem:python',
+        'python:devel',
+        'python:lib',
+        # Should we decide to no longer use rmake's gencert.py, we should
+        # remove this
+        'rmake:python',
+        'rpath-common:python',
+        'rpath-storage:python',
+        'rpath-xmllib:python',
+        'XenAPI:python',
+        'restlib:python',
+    ]
+
+    def setup(r):
+        r.addMercurialSnapshot()
+        r.MakeInstall()
+
+        r.Requires('workspace-cloud-client:runtime',
+            r'drivers/vws/globuslib\.py.*')
+        r.Requires('sun-jre:runtime',
+            r'drivers/vws/globuslib\.py.*')
+        r.Requires('mkisofs:runtime', r'rest/baseDriver\.py.*')
+        r.Requires('unzip:runtime', r'rest/baseDriver\.py.*')
+        r.CompilePython('/usr/lib/python2.4/site-packages/catalogService/')
+        r.PackageSpec('catalog-service-sources', '.*\.py$')
