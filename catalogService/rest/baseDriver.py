@@ -599,7 +599,8 @@ class BaseDriver(object):
         # RBL-5979 fix race condition. just because the instance is in the
         # 'running' state, doesn't mean sfcb is started.  If the instance was
         # launched within the last minute, wait 5 seconds.
-        if (time.time() - instance.getLaunchTime()) < 60:
+        if instance.getLaunchTime() and \
+           (time.time() - instance.getLaunchTime()) < 60:
             time.sleep(5)
 
         instanceId = instance.getInstanceId()
