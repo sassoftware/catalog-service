@@ -37,10 +37,10 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
-from mint.django_rest.rbuilder import inventory
 from mint.django_rest.rbuilder.inventory import systemdbmgr
 
 from rpath_job import api1 as rpath_job
+from rpath_models import System
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -276,10 +276,12 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        system = inventory.System(target_system_id=instanceId, target_type=cloudType,
+        system = System(target_system_id=instanceId, target_type=cloudType,
                     target_name=cloudName, ssl_client_certificate=x509Cert, 
-                    ssl_client_key=x509Key, registration_date=datetime.datetime.now())
-        self.systemMgr.createSystem(system)
+                    ssl_client_key=x509Key,
+                    launch_date=datetime.datetime.now(),
+                    available=True)
+        self.systemMgr.launchSystem(system)
 
     def _nvfToString(self, nvf):
         flavor = nvf[2]
