@@ -37,7 +37,7 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
-from mint.django_rest.rbuilder.inventory import systemdbmgr
+from mint.django_rest.rbuilder.inventory import manager
 
 from rpath_job import api1 as rpath_job
 from rpath_models import System
@@ -93,7 +93,8 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
 
-        self.systemMgr = systemdbmgr.SystemDBManager(cfg, userId)
+        self.inventoryManager = manager.Manager()
+        self.systemMgr = self.inventoryManager.sysMgr
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
