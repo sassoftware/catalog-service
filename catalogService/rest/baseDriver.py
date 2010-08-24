@@ -93,7 +93,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
 
-        self.inventoryManager = manager.Manager()
+        self.inventoryManager = manager.Manager(cfg, userId)
         self.systemMgr = self.inventoryManager.sysMgr
 
     def _getInstanceStore(self):
