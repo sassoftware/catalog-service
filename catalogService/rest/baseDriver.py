@@ -35,7 +35,6 @@ from catalogService.utils import timeutils
 from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
-from mint.rest import errors as mint_rest_errors
 from mint.django_rest.rbuilder import models as rbuildermodels
 from mint.django_rest.rbuilder.inventory import manager
 from mint.django_rest.rbuilder.inventory import models as inventorymodels
