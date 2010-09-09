@@ -247,14 +247,19 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        target = rbuildermodels.Targets.get(cloudName)
+        instance = self.getInstance(instanceId)
+        target = rbuildermodels.Targets.objects.get(targetname=cloudName)
         # For bayonet, target instances are only available through the local
         # zone.
-        zone = inventorymodels.Zone.get(name='Local rBuilder')
-        system = inventorymodels.System(target_system_id=instanceId,
-            target=target, ssl_client_certificate=x509Cert,
-            ssl_client_key=x509Key, available=True, 
+        zone = inventorymodels.Zone.objects.get(name='Local rBuilder')
+        network = inventorymodels.Network(
+            dns_name=instance.getPublicDnsName(), active=True)
+        system = inventorymodels.System(name=instanceId,
+            target_system_id=instanceId, target=target,
+            ssl_client_certificate=x509Cert, ssl_client_key=x509Key,
             managing_zone=zone)
+        created, system = inventorymodels.System.objects.load_or_create(system)
+        system.networks.add(network)
         self.inventoryManager.addSystem(system)
 
     def getInstance(self, instanceId, force=False):
