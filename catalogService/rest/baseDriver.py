@@ -31,7 +31,6 @@ from catalogService.rest.models import instances
 from catalogService.rest.models import jobs as jobmodels
 from catalogService.rest.models import keypairs
 from catalogService.rest.models import securityGroups
-from catalogService.utils import cimupdater
 from catalogService.utils import timeutils
 from catalogService.utils import x509
 
@@ -672,81 +671,6 @@ class BaseDriver(object):
             if val is not None:
                 return val
         return None
-
-    def updateInstance(self, instanceXml):
-        hdlr = instances.Handler()
-        instance = hdlr.parseString(instanceXml)
-        return self._updateInstance(instance)
-
-    def _updateInstance(self, instance):
-        dnsName = instance.getPublicDnsName()
-        if not dnsName:
-            # We can't do anything unless we know how to contact the box
-            return
-
-        troveSpecs = []
-        for sw in instance.getInstalledSoftware():
-            trove = sw.getTrove()
-            n = trove.name.getText()
-            f = deps.parseFlavor(trove.getFlavor())
-
-            version = trove.getVersion()
-            v = versions.VersionFromString(version.getFull())
-            v = str(v)
-
-            troveSpecs.append(conaryclient.cmdline.toTroveSpec(n, v, f))
-
-        instanceId = instance.getInstanceId()
-        system = self.systemMgr.getSystemByInstanceId(instanceId)
-
-        if not system.is_manageable:
-            instance = self.getInstance(instance.getInstanceId())
-            self.log_error("Instance %s is not manageable." % \
-                instance.getInstanceId())
-            return instance
-
-        job = self._instanceUpdateJobStore.create(cloudType=self.cloudType,
-            cloudName=self.cloudName, instanceId=instanceId)
-        self._jobsStore.commit()
-
-        updateJobRunner = CatalogJobRunner(self._updateInstanceJob,
-                                           self._logger,
-                                           postFork=self.postFork)
-        updateJobRunner.job = job
-
-        updateJobRunner(instance, dnsName,
-                troveSpecs, system.ssl_client_certificate,
-                system.ssl_client_key, job)
-
-        instance = self.getInstance(instance.getInstanceId())
-        jobHref = instances.BaseInstanceJobHref(
-            href=self._nodeFactory.getJobIdUrl(job.id, 'instance-update'))
-        jobHref.setId(job.id)
-        instance.setJob(jobHref)
-        return instance
-
-    def _updateInstanceJob(self, instance, dnsName, troveList, certFile,
-                        keyFile, job):
-        job.status = job.STATUS_RUNNING
-        try:
-            host = 'https://%s' % dnsName
-            self.log_debug("Updating instance %s (%s))", instance, dnsName)
-            self.log_debug("Updating %s: cert %s, key %s", instance, certFile, keyFile)
-            x509Dict = dict(cert_file = certFile, key_file = keyFile)
-            updater = cimupdater.CIMUpdater(host, x509Dict)
-            updater.applyUpdate(troveList)
-        except Exception:
-            raise
-        else:
-            # Mark the update status as done.
-            job.status = job.STATUS_COMPLETED
-            job.commit()
-
-            # Refetch the instance and force an update the installed version
-            # information.
-            self._instanceStore = self._getInstanceStore()
-            self._instanceStore.setSoftwareVersionNextCheck(
-                instance.getInstanceId(), timestamp=time.time(), delta=0)
 
     def postFork(self):
         # Force the client to reopen the connection to the cloud
