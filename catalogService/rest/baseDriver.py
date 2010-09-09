@@ -37,10 +37,11 @@ from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
 from mint.rest import errors as mint_rest_errors
+from mint.django_rest.rbuilder import models as rbuildermodels
 from mint.django_rest.rbuilder.inventory import manager
+from mint.django_rest.rbuilder.inventory import models as inventorymodels
 
 from rpath_job import api1 as rpath_job
-from rpath_models import System
 
 class BaseDriver(object):
     # Enumerate the factories we support.
@@ -94,7 +95,6 @@ class BaseDriver(object):
         self._x509Key = None
 
         self.inventoryManager = manager.Manager(cfg, userId)
-        self.systemMgr = self.inventoryManager.sysMgr
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -277,12 +277,15 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        system = System(target_system_id=instanceId, target_type=cloudType,
-                    target_name=cloudName, ssl_client_certificate=x509Cert, 
-                    ssl_client_key=x509Key,
-                    launch_date=datetime.datetime.now(),
-                    available=True)
-        self.systemMgr.launchSystem(system)
+        target = rbuildermodels.Targets.get(cloudName)
+        # For bayonet, target instances are only available through the local
+        # zone.
+        zone = inventorymodels.Zone.get(name='Local rBuilder')
+        system = inventorymodels.System(target_system_id=instanceId,
+            target=target, ssl_client_certificate=x509Cert,
+            ssl_client_key=x509Key, available=True, 
+            managing_zone=zone)
+        self.inventoryManager.addSystem(system)
 
     def _nvfToString(self, nvf):
         flavor = nvf[2]
