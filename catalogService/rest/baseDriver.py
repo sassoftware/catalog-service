@@ -251,7 +251,7 @@ class BaseDriver(object):
         # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
         # publicDnsName is populated on the instance
         sleptTime = 0
-        while slepTime < 60:
+        while sleptTime < 60:
             instance = self.getInstance(instanceId)
             if not instance.getPublicDnsName():
                 time.sleep(3)
