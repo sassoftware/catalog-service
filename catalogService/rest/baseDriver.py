@@ -247,7 +247,18 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        instance = self.getInstance(instanceId)
+        # TODO: something smarter
+        # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
+        # publicDnsName is populated on the instance
+        sleptTime = 0
+        while slepTime < 60:
+            instance = self.getInstance(instanceId)
+            if not instance.getPublicDnsName():
+                time.sleep(3)
+                sleptTime += 3
+            else:
+                break
+
         target = rbuildermodels.Targets.objects.get(targetname=cloudName)
         # For bayonet, target instances are only available through the local
         # zone.
