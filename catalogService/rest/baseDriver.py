@@ -249,7 +249,8 @@ class BaseDriver(object):
                          x509Key):
         # TODO: something smarter
         # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
-        # publicDnsName is populated on the instance
+        # publicDnsName is populated on the instance. Without publicDnsName,
+        # the registration event will not be scheduled.
         sleptTime = 0
         while sleptTime < 60:
             instance = self.getInstance(instanceId)
