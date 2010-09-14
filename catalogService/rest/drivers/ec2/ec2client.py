@@ -111,7 +111,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>cloudAlias</name>
       <descriptions>
-        <desc>Cloud Alias</desc>
+        <desc>Name</desc>
       </descriptions>
       <type>str</type>
       <default>ec2</default>
