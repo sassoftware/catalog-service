@@ -251,10 +251,12 @@ class BaseDriver(object):
         # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
         # publicDnsName is populated on the instance. Without publicDnsName,
         # the registration event will not be scheduled.
+        instanceDnsName = None
         sleptTime = 0
         while sleptTime < 60:
             instance = self.getInstance(instanceId)
-            if not instance.getPublicDnsName():
+            instanceDnsName = instance.getPublicDnsName()
+            if not instanceDnsName:
                 time.sleep(3)
                 sleptTime += 3
             else:
@@ -264,14 +266,15 @@ class BaseDriver(object):
         # For bayonet, target instances are only available through the local
         # zone.
         zone = inventorymodels.Zone.objects.get(name='Local rBuilder')
-        network = inventorymodels.Network(
-            dns_name=instance.getPublicDnsName(), active=True)
         system = inventorymodels.System(name=instanceId,
             target_system_id=instanceId, target=target,
             ssl_client_certificate=x509Cert, ssl_client_key=x509Key,
             managing_zone=zone)
         created, system = inventorymodels.System.objects.load_or_create(system)
-        system.networks.add(network)
+        if instanceDnsName:
+            network = inventorymodels.Network(dns_name=instanceDnsName,
+                active=True)
+            system.networks.add(network)
         self.inventoryManager.addSystem(system)
 
     def getInstance(self, instanceId, force=False):
