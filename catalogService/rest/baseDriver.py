@@ -268,9 +268,12 @@ class BaseDriver(object):
         zone = inventorymodels.Zone.objects.get(name='Local rBuilder')
         system = inventorymodels.System(name=instanceId,
             target_system_id=instanceId, target=target,
-            ssl_client_certificate=x509Cert, ssl_client_key=x509Key,
             managing_zone=zone)
         created, system = inventorymodels.System.objects.load_or_create(system)
+        # Add fields that are read-only through the API (thus ignored by
+        # load_or_create)
+        system.ssl_client_certificate = x509Cert
+        system.ssl_client_key = x509Key
         if instanceDnsName:
             network = inventorymodels.Network(dns_name=instanceDnsName,
                 active=True)
@@ -444,11 +447,12 @@ class BaseDriver(object):
                 if not isinstance(realInstanceId, list):
                     realInstanceId = [ realInstanceId ]
                 x509Cert, x509Key = self.getWbemX509()
+                # Read the cert files
+                x509Cert = file(x509Cert).read()
+                x509Key = file(x509Key).read()
                 for instanceId in realInstanceId:
-                    x509CertPath, x509KeyPath = self._instanceStore.storeX509(
-                                                    instanceId, x509Cert, x509Key)
                     self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509CertPath, x509KeyPath)
+                        job.cloudName, x509Cert, x509Key)
                 job.addResults(realInstanceId)
                 job.addHistoryEntry('Done')
                 job.status = job.STATUS_COMPLETED
