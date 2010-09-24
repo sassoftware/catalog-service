@@ -256,6 +256,12 @@ class BaseDriver(object):
             time.sleep(3)
         return instance
 
+    @classmethod
+    def _toStr(cls, obj):
+        if obj is None:
+            return None
+        return unicode(obj).encode("utf-8")
+
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
         # TODO: something smarter
@@ -263,14 +269,15 @@ class BaseDriver(object):
         # publicDnsName is populated on the instance. Without publicDnsName,
         # the registration event will not be scheduled.
         instance = self._waitForInstanceDnsName(instanceId)
-        instanceDnsName = instance.getPublicDnsName()
-        instanceName = instance.getInstanceName()
-        instanceDescription = instance.getInstanceDescription()
+        instanceDnsName = self._toStr(instance.getPublicDnsName())
+        instanceName = self._toStr(instance.getInstanceName())
+        instanceDescription = self._toStr(instance.getInstanceDescription())
+        instanceState = self._toStr(instance.getState())
         system = inventorymodels.System(
             target_system_id=instanceId,
             target_system_name=instanceName,
             target_system_description=instanceDescription,
-            target_system_state=instance.getState(),
+            target_system_state=instanceState,
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
         )
