@@ -71,6 +71,8 @@ class BaseDriver(object):
 
     HistoryEntry = jobs.HistoryEntry
 
+    SLEEP_FOR_IP_ADDR = 60
+
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None):
         self.userId = userId
@@ -245,40 +247,35 @@ class BaseDriver(object):
         instances = self.drvGetInstances(instanceIds)
         return instances
 
+    def _waitForInstanceDnsName(self, instanceId):
+        timeToFinish = time.time() + self.SLEEP_FOR_IP_ADDR
+        while time.time() < timeToFinish:
+            instance = self.getInstance(instanceId)
+            if instance.getPublicDnsName():
+                return instance
+            time.sleep(3)
+        return instance
+
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
         # TODO: something smarter
         # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
         # publicDnsName is populated on the instance. Without publicDnsName,
         # the registration event will not be scheduled.
-        instanceDnsName = None
-        sleptTime = 0
-        while sleptTime < 60:
-            instance = self.getInstance(instanceId)
-            instanceDnsName = instance.getPublicDnsName()
-            if not instanceDnsName:
-                time.sleep(3)
-                sleptTime += 3
-            else:
-                break
-
-        target = rbuildermodels.Targets.objects.get(targetname=cloudName)
-        # For bayonet, target instances are only available through the local
-        # zone.
-        zone = inventorymodels.Zone.objects.get(name='Local rBuilder')
-        system = inventorymodels.System(name=instanceId,
-            target_system_id=instanceId, target=target,
-            managing_zone=zone)
-        created, system = inventorymodels.System.objects.load_or_create(system)
-        # Add fields that are read-only through the API (thus ignored by
-        # load_or_create)
-        system.ssl_client_certificate = x509Cert
-        system.ssl_client_key = x509Key
-        if instanceDnsName:
-            network = inventorymodels.Network(dns_name=instanceDnsName,
-                active=True)
-            system.networks.add(network)
-        self.inventoryManager.addSystem(system)
+        instance = self._waitForInstanceDnsName(instanceId)
+        instanceDnsName = instance.getPublicDnsName()
+        instanceName = instance.getInstanceName()
+        instanceDescription = instance.getInstanceDescription()
+        system = inventorymodels.System(
+            target_system_id=instanceId,
+            target_system_name=instanceName,
+            target_system_description=instanceDescription,
+            target_system_state=instance.getState(),
+            ssl_client_certificate = x509Cert,
+            ssl_client_key = x509Key,
+        )
+        self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
+            targetType=cloudType, targetName=cloudName)
 
     def getInstance(self, instanceId, force=False):
         if self.client is None:
