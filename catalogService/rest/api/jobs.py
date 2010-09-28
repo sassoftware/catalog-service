@@ -4,7 +4,6 @@
 #
 
 from lxml import etree
-import os
 import urlparse
 
 from catalogService import nodeFactory
