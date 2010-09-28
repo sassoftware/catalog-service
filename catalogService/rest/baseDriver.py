@@ -283,6 +283,7 @@ class BaseDriver(object):
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
             targetType=cloudType, targetName=cloudName)
+        return system
 
     def getInstance(self, instanceId, force=False):
         if self.client is None:
@@ -455,10 +456,11 @@ class BaseDriver(object):
                 x509Cert = file(x509Cert).read()
                 x509Key = file(x509Key).read()
                 for instanceId in realInstanceId:
-                    self._updateInventory(instanceId, job.cloudType,
+                    system = self._updateInventory(instanceId, job.cloudType,
                         job.cloudName, x509Cert, x509Key)
                 job.addResults(realInstanceId)
                 job.addHistoryEntry('Done')
+                job.system = system.pk
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
                 err = errors.CatalogErrorResponse(e.status,
