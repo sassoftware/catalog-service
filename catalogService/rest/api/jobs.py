@@ -94,7 +94,7 @@ class JobTypeController(base.BaseController):
             systemHref = jobmodels.System(
                 href=urlparse.urlunparse(
                     (scheme, netloc, 
-                     '/api/inventory/systems/%s/' % job.system, 
+                     '/api/inventory/systems/%s' % job.system, 
                      '', '', '')))
             jobm.set_system(systemHref)
         if hist:
