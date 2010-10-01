@@ -93,6 +93,7 @@ class BaseDriver(object):
         self._instanceUpdateJobStore = jobs.ApplianceUpdateJobSqlStore(self.db)
         self._x509Cert = None
         self._x509Key = None
+        self._bootUuid = None
 
         self.inventoryManager = manager.Manager(cfg, userId)
 
@@ -495,7 +496,8 @@ class BaseDriver(object):
         params = self.getLaunchInstanceParameters(image, descriptorData)
 
         job = self._instanceLaunchJobStore.create(cloudName = self.cloudName,
-            cloudType = self.cloudType, restArgs = descrXml)
+            cloudType = self.cloudType, restArgs = descrXml,
+            jobUuid = self.getBootUuid())
         job.commit()
         jobId = job.id
         launchJobRunner = CatalogJobRunner(
@@ -784,6 +786,14 @@ class BaseDriver(object):
         self._x509Cert, self._x509Key = self.newX509(certDir)
         return self._x509Cert, self._x509Key
 
+    def getBootUuid(self):
+        if self._bootUuid is None:
+            self._bootUuid = self._getBootUuid()
+        return self._bootUuid
+
+    def _getBootUuid(self):
+        return self.uuidgen()
+
     def cleanUpX509(self):
         if not self._x509Cert:
             return
@@ -825,11 +835,17 @@ class BaseDriver(object):
         # Load the cert, we need the hash
         certHash = self.computeX509CertHash(certFile)
 
+        bootUuidFile = x509.tempfile.NamedTemporaryFile()
+        bootUuidFile.write(self.getBootUuid())
+        bootUuidFile.flush()
+
         # Make ISO, if it doesn't exist already
         cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
             "-o", isoFile,
             "SECURITY-CONTEXT-BOOTSTRAP=%s" % empty,
-            "etc/sfcb/clients/%s.0=%s" % (certHash, certFile) ]
+            "etc/sfcb/clients/%s.0=%s" % (certHash, certFile),
+            "etc/conary/rpath-tools/boot-uuid=%s" % bootUuidFile.name,
+        ]
 
         devnull = file(os.devnull, "w")
         p = subprocess.Popen(cmd, shell = False, stdout=devnull,
