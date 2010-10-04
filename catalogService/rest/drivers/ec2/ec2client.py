@@ -531,6 +531,7 @@ class EC2Client(baseDriver.BaseDriver):
 [sfcb-client-setup]
 x509-cert-hash=%s
 x509-cert(base64)=%s
+boot-uuid=%s
 """
         certPath = self.getWbemClientCert()
         try:
@@ -540,8 +541,9 @@ x509-cert(base64)=%s
 
         certHash = self.computeX509CertHash(certPath)
         certData = base64.b64encode(certData)
+        bootUuid = self.getBootUuid()
 
-        sect = templ % (certHash, certData)
+        sect = templ % (certHash, certData, bootUuid)
         if not userData:
             return sect
         return userData + '\n' + sect
