@@ -256,6 +256,7 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
+        instance = self.getInstance(instanceId)
         instanceDnsName = self._toStr(instance.getPublicDnsName())
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
