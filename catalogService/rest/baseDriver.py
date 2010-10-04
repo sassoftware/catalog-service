@@ -248,15 +248,6 @@ class BaseDriver(object):
         instances = self.drvGetInstances(instanceIds)
         return instances
 
-    def _waitForInstanceDnsName(self, instanceId):
-        timeToFinish = time.time() + self.SLEEP_FOR_IP_ADDR
-        while time.time() < timeToFinish:
-            instance = self.getInstance(instanceId)
-            if instance.getPublicDnsName():
-                return instance
-            time.sleep(3)
-        return instance
-
     @classmethod
     def _toStr(cls, obj):
         if obj is None:
@@ -265,11 +256,6 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
-        # TODO: something smarter
-        # Sleep for 3 seconds at a time, up to a maximum of 60 seconds, until
-        # publicDnsName is populated on the instance. Without publicDnsName,
-        # the registration event will not be scheduled.
-        instance = self._waitForInstanceDnsName(instanceId)
         instanceDnsName = self._toStr(instance.getPublicDnsName())
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
