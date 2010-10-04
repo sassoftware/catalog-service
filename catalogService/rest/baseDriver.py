@@ -256,6 +256,8 @@ class BaseDriver(object):
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
                          x509Key):
+        self.log_info("Adding launched instance %s to system inventory. " % \
+            instanceId)
         instance = self.getInstance(instanceId)
         instanceDnsName = self._toStr(instance.getPublicDnsName())
         instanceName = self._toStr(instance.getInstanceName())
