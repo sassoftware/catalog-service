@@ -32,7 +32,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>name</name>
       <descriptions>
-        <desc>Server Name</desc>
+        <desc>Server Address</desc>
       </descriptions>
       <type>str</type>
       <required>true</required>
@@ -41,7 +41,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>alias</name>
       <descriptions>
-        <desc>Cloud Alias</desc>
+        <desc>Name</desc>
       </descriptions>
       <type>str</type>
       <required>true</required>

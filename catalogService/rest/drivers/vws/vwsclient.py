@@ -52,7 +52,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>alias</name>
       <descriptions>
-        <desc>Cloud Alias</desc>
+        <desc>Name</desc>
       </descriptions>
       <type>str</type>
       <required>true</required>

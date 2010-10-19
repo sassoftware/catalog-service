@@ -4,7 +4,7 @@
 #
 
 from lxml import etree
-import os
+import urlparse
 
 from catalogService import nodeFactory
 from catalogService.rest.api import base
@@ -88,6 +88,15 @@ class JobTypeController(base.BaseController):
             jobm.set_instanceId(job.instanceId)
         hist = job.history
         jobm.history.extend(hist)
+        system = getattr(job, 'system', None)
+        if system:
+            scheme, netloc = urlparse.urlparse(request.baseUrl)[0:2]
+            systemHref = jobmodels.System(
+                href=urlparse.urlunparse(
+                    (scheme, netloc, 
+                     '/api/inventory/systems/%s' % job.system, 
+                     '', '', '')))
+            jobm.set_system(systemHref)
         if hist:
             # Until statusMessage is a real field, we set it to be the
             # contents of the last history entry (RBL-6643)
