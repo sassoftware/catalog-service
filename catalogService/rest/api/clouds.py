@@ -20,7 +20,7 @@ class CloudTypeController(BaseCloudController):
         'help' : cloud_help.CloudHelpController,
     }
 
-SUPPORTED_MODULES = [ 'ec2', 'vmware', 'vws', 'xenent' ]
+SUPPORTED_MODULES = [ 'ec2', 'vmware', 'xenent' ]
 
 class AllCloudController(BaseController):
 
