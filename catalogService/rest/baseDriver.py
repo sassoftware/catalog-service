@@ -95,7 +95,7 @@ class BaseDriver(object):
         self._x509Key = None
         self._bootUuid = None
 
-        self.inventoryManager = manager.Manager(cfg, userId)
+        self.inventoryManager = manager.Manager(cfg=None, userName=userId)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
