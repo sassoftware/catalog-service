@@ -413,6 +413,8 @@ class EC2Client(baseDriver.BaseDriver):
 
     def _validateS3Bucket(self, publicAccessKeyId, secretAccessKey, bucket):
         conn = self._getS3Connection(publicAccessKeyId, secretAccessKey)
+        # boto 2.0 enforces that bucket names don't have upper case
+        bucket = bucket.lower()
 
         try:
             conn.create_bucket(bucket)
