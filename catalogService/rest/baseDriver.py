@@ -750,7 +750,10 @@ class BaseDriver(object):
         image.setBuildId(buildId)
 
         for key, methodName in methodMap.iteritems():
-            getattr(image, methodName)(mintImageData.get(key))
+            value = mintImageData.get(key)
+            if isinstance(value, str):
+                value = value.decode('utf-8')
+            getattr(image, methodName)(value)
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # Add the rest of the images coming from mint
