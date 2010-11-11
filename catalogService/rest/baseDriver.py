@@ -71,8 +71,6 @@ class BaseDriver(object):
 
     HistoryEntry = jobs.HistoryEntry
 
-    SLEEP_FOR_IP_ADDR = 60
-
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None):
         self.userId = userId
@@ -273,6 +271,8 @@ class BaseDriver(object):
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
             targetType=cloudType, targetName=cloudName)
+        self.log_info("System id %s added to inventory for instance %s." % \
+            (system.pk, instanceId))
         return system
 
     def getInstance(self, instanceId, force=False):
