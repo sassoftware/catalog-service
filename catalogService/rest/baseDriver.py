@@ -4,10 +4,8 @@
 
 import datetime
 import os
-import sys
 import subprocess
 import tempfile
-import time
 import traceback
 import urllib
 import urllib2
