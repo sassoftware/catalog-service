@@ -11,7 +11,7 @@ class X509(object):
     class Options(object):
         __slots__ = ['C', 'ST', 'L', 'O', 'OU', 'CN', 'site_user',
                      'key_length', 'expiry', 'output', 'output_key']
-        _defaults = dict(key_length = 2048, expiry = 3 * 365)
+        _defaults = dict(key_length = 2048, expiry = 10 * 365)
         def __init__(self, **kwargs):
             params = self._defaults.copy()
             params.update(kwargs)
