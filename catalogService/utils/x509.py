@@ -4,7 +4,6 @@
 "Simple module for generating x509 certificates"
 
 import os
-import tempfile
 from rmake.lib import gencert
 
 class X509(object):
@@ -28,21 +27,21 @@ class X509(object):
         Returns absolute paths to cert file and key file
         """
 
-        fd, tempFile = tempfile.mkstemp(dir = certDir, prefix = 'new-cert-')
-        os.close(fd)
-        certFile = tempFile
-        keyFile = certFile + '.key'
+        o = cls.Options(CN = commonName)
+        subject, extensions = gencert.name_from_options(o)
+        rsa, x509 = gencert.new_cert(o.key_length,
+            subject, o.expiry, isCA=False, extensions=extensions,
+            timestamp_offset=-86400)
 
-        o = cls.Options(CN = commonName, output = certFile,
-            output_key = keyFile)
-        gencert.new_ca(o, isCA = False)
+        certHash = cls.computeHashFromX509(x509)
 
-        hash = cls.computeHash(certFile)
-        newCertFile = os.path.join(certDir, hash + '.0')
-        newKeyFile = os.path.join(certDir, hash + '.0.key')
-        os.rename(certFile, newCertFile)
-        os.rename(keyFile, newKeyFile)
-        return newCertFile, newKeyFile
+        certFile = os.path.join(certDir, certHash + '.0')
+        keyFile = os.path.join(certDir, certHash + '.0.key')
+
+        o.output = certFile
+        o.output_key = keyFile
+        gencert.writeCert(o, rsa, x509)
+        return certFile, keyFile
 
     @classmethod
     def load(cls, certFile):
@@ -52,5 +51,9 @@ class X509(object):
     @classmethod
     def computeHash(cls, certFile):
         x509 = cls.load(certFile)
+        return cls.computeHashFromX509(x509)
+
+    @classmethod
+    def computeHashFromX509(cls, x509):
         certHash = "%08x" % x509.get_issuer().as_hash()
         return certHash

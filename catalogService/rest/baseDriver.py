@@ -6,6 +6,7 @@ import datetime
 import os
 import sys
 import subprocess
+import tempfile
 import time
 import traceback
 import urllib
@@ -816,7 +817,7 @@ class BaseDriver(object):
         util.mkdirChain(certDir)
         isoDir = os.path.join(self._cfg.storagePath, 'credentials')
         util.mkdirChain(isoDir)
-        fd, isoFile = x509.tempfile.mkstemp(dir = isoDir,
+        fd, isoFile = tempfile.mkstemp(dir = isoDir,
              prefix = 'credentials-', suffix = '.iso')
         os.close(fd)
 
@@ -827,7 +828,7 @@ class BaseDriver(object):
         # Load the cert, we need the hash
         certHash = self.computeX509CertHash(certFile)
 
-        bootUuidFile = x509.tempfile.NamedTemporaryFile()
+        bootUuidFile = tempfile.NamedTemporaryFile()
         bootUuidFile.write(self.getBootUuid())
         bootUuidFile.flush()
 
