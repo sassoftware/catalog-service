@@ -1,4 +1,4 @@
-#!/usr/bin/python2.4
+#!/usr/bin/python
 #
 # Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
 #
