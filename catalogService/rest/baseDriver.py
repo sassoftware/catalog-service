@@ -34,8 +34,7 @@ from catalogService.utils import timeutils
 from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
-from mint.django_rest.rbuilder import models as rbuildermodels
-from mint.django_rest.rbuilder.inventory import manager
+from mint.django_rest.rbuilder.manager import rbuildermanager
 from mint.django_rest.rbuilder.inventory import models as inventorymodels
 
 from rpath_job import api1 as rpath_job
@@ -92,7 +91,7 @@ class BaseDriver(object):
         self._x509Key = None
         self._bootUuid = None
 
-        self.inventoryManager = manager.Manager(cfg=self.db.cfg, userName=userId)
+        self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
