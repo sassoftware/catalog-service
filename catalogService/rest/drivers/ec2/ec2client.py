@@ -664,8 +664,7 @@ boot-uuid=%s
         cloudAlias = targetConfiguration.get('cloudAlias')
         imageList = images.BaseImages()
         for image in rs:
-            productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
-                for x in image.product_codes ]
+            productCodes = self._productCodesForImage(image)
             longName = "%s (%s)" % (image.location, image.id)
             i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
                                            ownerId=image.ownerId,
@@ -679,6 +678,10 @@ boot-uuid=%s
                                            )
             imageList.append(i)
         return imageList
+
+    def _productCodesForImage(self, image):
+        return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
+            for x in image.product_codes ]
 
     def getImageIdFromMintImage(self, imageData):
         return imageData.get('amiId')
@@ -844,7 +847,7 @@ boot-uuid=%s
         imageIdToImageMap = dict((x.getImageId(), x)
             for x in self.drvGetImages(list(imageIds)))
 
-        properties = {}
+        properties = dict(cloudAlias = self.getCloudAlias())
         if reservation:
             properties.update(ownerId=reservation.owner_id,
                               reservationId=reservation.id)

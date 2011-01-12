@@ -283,13 +283,24 @@ class EucalyptusClient(ec2client.EC2Client):
         return (self.cloudName, port, '/services/Walrus', False,
             self.CallingFormat)
 
-    def getImageIdFromMintImage(self, imageData):
-        return ec2client.baseDriver.BaseDriver.getImageIdFromMintImage(imageData)
+    def getImageIdFromMintImage(self, image):
+        files = image.get('files', [])
+        if not files:
+            return None
+        fdata = files[0]
+        targetImageIds = [ x[2] for x in fdata['targetImages']
+            if x[0] == self.cloudType and x[1] == self.cloudName ]
+        if targetImageIds:
+            return targetImageIds[0]
+        return fdata['sha1']
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # We do want to expose mint images in the list
         return ec2client.baseDriver.BaseDriver.addExtraImagesFromMint(
             self, imageList, mintImages, cloudAlias)
+
+    def _productCodesForImage(self, image):
+        return None
 
     def _getProxyInfo(self, https = True):
         # We are going to assume there's no need to talk to an external proxy
