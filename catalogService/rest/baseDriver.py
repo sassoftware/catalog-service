@@ -620,7 +620,7 @@ class BaseDriver(object):
             return {}
         if isAdmin and not self.db.auth.auth.admin:
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
-        if not forceAdmin and self._targetConfig is not None:
+        if not forceAdmin and bool(self._targetConfig):
             return self._targetConfig
         try:
             targetData = self.db.targetMgr.getTargetData(self.cloudType,
