@@ -878,8 +878,7 @@ boot-uuid=%s
         if properties['launchTime']:
             properties['launchTime'] = self.utctime(properties['launchTime'])
 
-        productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
-            for x in instance.product_codes ]
+        productCodes = self._productCodesForImage(instance)
         properties['productCode'] = productCodes
 
         i = self._nodeFactory.newInstance(id=instance.id,
