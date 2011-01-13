@@ -762,7 +762,9 @@ class BaseDriver(object):
         # XXX this overly simplifies the fact that there may be more than one
         # file associated with a build
         if imageFiles:
-            image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
+            imgf = imageFiles[0]
+            image.setDownloadUrl(imgf.get('downloadUrl'))
+            image._fileId = imgf.get('fileId')
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
 

@@ -370,6 +370,8 @@ class EucalyptusClient(ec2client.EC2Client):
                 cloudX509CertFile=cloudX509CertFile.name)
             manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
             emiId = self._registerImage(job, bucketName, manifestName, tconf)
+            self.db.targetMgr.linkTargetImageToImage(
+                self.cloudType, self.cloudName, image._fileId, emiId)
             self._msg(job, "Registered %s" % emiId)
             return emiId
         finally:
