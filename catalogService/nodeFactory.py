@@ -104,10 +104,11 @@ class NodeFactory(object):
         return self.refreshInstance(node)
 
     def refreshInstance(self, node):
+        node.setCloudType(self.cloudType)
+        node.setCloudName(self.cloudName)
         instanceUrl = self.getInstanceUrl(node)
         node.setId(instanceUrl)
         node.setForceUpdateUrl("%s/forceUpdate" % instanceUrl)
-        node.setCloudType(self.cloudType)
         updateStatus = self.instanceUpdateStatusFactory()
         updateStatus.setState('')
         updateStatus.setTime('')

@@ -90,8 +90,10 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
         self._bootUuid = None
+        self._targetConfig = None
 
         self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
+        self._postInit()
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -105,6 +107,9 @@ class BaseDriver(object):
 
     def _getUserIdForInstanceStore(self):
         return self._sanitizeKey(self.userId)
+
+    def _postInit(self):
+        pass
 
     @classmethod
     def _sanitizeKey(cls, key):
@@ -243,6 +248,10 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         instances = self.drvGetInstances(instanceIds)
         return instances
+
+    def _msg(self, job, msg):
+        job.addHistoryEntry(msg)
+        self.log_debug(msg)
 
     @classmethod
     def _toStr(cls, obj):
@@ -603,18 +612,27 @@ class BaseDriver(object):
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
-    def getTargetConfiguration(self, isAdmin = False):
+    def getTargetConfiguration(self, isAdmin = False, forceAdmin = False):
+        # We can't set both isAdmin and forceAdmin at the same time
+        assert int(bool(isAdmin)) + int(bool(forceAdmin)) != 2
         if not self.db:
             return {}
         if isAdmin and not self.db.auth.auth.admin:
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        if not forceAdmin and bool(self._targetConfig):
+            return self._targetConfig
         try:
             targetData = self.db.targetMgr.getTargetData(self.cloudType,
                                                          self.cloudName)
         except TargetMissing:
             targetData = {}
 
-        return self.drvGetTargetConfiguration(targetData, isAdmin = isAdmin)
+        # If we force admin, don't pollute _targetConfig
+        ret = self.drvGetTargetConfiguration(targetData,
+            isAdmin = (isAdmin or forceAdmin))
+        if not forceAdmin:
+            self._targetConfig = ret
+        return ret
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
         if not targetData:
@@ -743,7 +761,9 @@ class BaseDriver(object):
         # XXX this overly simplifies the fact that there may be more than one
         # file associated with a build
         if imageFiles:
-            image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
+            imgf = imageFiles[0]
+            image.setDownloadUrl(imgf.get('downloadUrl'))
+            image._fileId = imgf.get('fileId')
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
 
@@ -846,7 +866,14 @@ class BaseDriver(object):
     @classmethod
     def utctime(cls, timestr, timeFormat = None):
         if timeFormat is None:
-            timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
+            if isinstance(timestr, basestring):
+                timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr[-4:]
+                # The last 4 chars should normally be milliseconds and Z
+                if not timeFormat.endswith('Z'):
+                    raise ValueError("Invalid time string %s" % (timestr, ))
+            else:
+                timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
+
         return timeutils.utctime(timestr, timeFormat)
 
     @classmethod
