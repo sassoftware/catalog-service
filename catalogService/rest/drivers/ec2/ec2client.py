@@ -665,7 +665,8 @@ boot-uuid=%s
         imageList = images.BaseImages()
         for image in rs:
             productCodes = self._productCodesForImage(image)
-            longName = "%s (%s)" % (image.location, image.id)
+            iloc = image.location.replace(".manifest.xml", "")
+            longName = "%s (%s)" % (iloc, image.id)
             i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
                                            ownerId=image.ownerId,
                                            longName=longName,
@@ -683,7 +684,7 @@ boot-uuid=%s
         return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
             for x in image.product_codes ]
 
-    def getImageIdFromMintImage(self, imageData):
+    def getImageIdFromMintImage(self, imageData, targetImageIds):
         return imageData.get('amiId')
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):

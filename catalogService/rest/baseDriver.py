@@ -719,13 +719,18 @@ class BaseDriver(object):
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
 
+    def hashMintImages(self, mintImageList, imageList):
+        targetImageIds = set(x.getImageId() for x in imageList)
+        return dict((self.getImageIdFromMintImage(x, targetImageIds), x)
+            for x in mintImageList)
+
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
 
         mintImages = self._getMintImagesByType(imageType)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
-        mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
+        mintImages = self.hashMintImages(mintImages, imageList)
 
         for image in imageList:
             imageId = image.getImageId()
@@ -742,23 +747,28 @@ class BaseDriver(object):
         return imageList
 
     @classmethod
-    def getImageIdFromMintImage(cls, image):
+    def getImageIdFromMintImage(cls, image, targetImageIds):
         files = image.get('files', [])
         if not files:
             return None
         return files[0]['sha1']
 
     @classmethod
-    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
-        imageFiles = mintImageData.get('files', [])
-        baseFileName = mintImageData.get('baseFileName')
+    def setImageNamesFromMintData(cls, image, mintImageData):
         buildId = mintImageData.get('buildId')
+        baseFileName = mintImageData.get('baseFileName')
         if baseFileName:
             shortName = os.path.basename(baseFileName)
             longName = "%s/%s" % (buildId, shortName)
             image.setShortName(shortName)
             image.setLongName(longName)
             image.setBaseFileName(baseFileName)
+
+    @classmethod
+    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        imageFiles = mintImageData.get('files', [])
+        buildId = mintImageData.get('buildId')
+        cls.setImageNamesFromMintData(image, mintImageData)
         # XXX this overly simplifies the fact that there may be more than one
         # file associated with a build
         if imageFiles:

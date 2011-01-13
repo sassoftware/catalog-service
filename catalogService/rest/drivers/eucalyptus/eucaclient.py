@@ -283,16 +283,29 @@ class EucalyptusClient(ec2client.EC2Client):
         return (self.cloudName, port, '/services/Walrus', False,
             self.CallingFormat)
 
-    def getImageIdFromMintImage(self, image):
+    def getImageIdFromMintImage(self, image, targetImageIds):
         files = image.get('files', [])
         if not files:
             return None
+        # Look for image ids that match this target
         fdata = files[0]
-        targetImageIds = [ x[2] for x in fdata['targetImages']
-            if x[0] == self.cloudType and x[1] == self.cloudName ]
-        if targetImageIds:
-            return targetImageIds[0]
+        targetImageIdsFromMint = set(x[2] for x in fdata['targetImages']
+            if x[0] == self.cloudType and x[1] == self.cloudName)
+        # Some of them may have been removed, so only look for the overlapping
+        # ones
+        inters = targetImageIdsFromMint.intersection(targetImageIds)
+        if inters:
+            return inters.pop()
         return fdata['sha1']
+
+    @classmethod
+    def setImageNamesFromMintData(cls, image, mintImageData):
+        ec2client.baseDriver.BaseDriver.setImageNamesFromMintData(image,
+            mintImageData)
+        imageId = image.getImageId()
+        if imageId.startswith('emi-'):
+            image.setShortName("%s (%s)" % (image.getShortName(), imageId))
+            image.setLongName("%s (%s)" % (image.getLongName(), imageId))
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # We do want to expose mint images in the list
@@ -370,9 +383,9 @@ class EucalyptusClient(ec2client.EC2Client):
                 cloudX509CertFile=cloudX509CertFile.name)
             manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
             emiId = self._registerImage(job, bucketName, manifestName, tconf)
+            self._msg(job, "Associating image %s" % emiId)
             self.db.targetMgr.linkTargetImageToImage(
                 self.cloudType, self.cloudName, image._fileId, emiId)
-            self._msg(job, "Registered %s" % emiId)
             return emiId
         finally:
             # clean up our mess
@@ -433,7 +446,9 @@ class EucalyptusClient(ec2client.EC2Client):
         self._msg(job, "Registering image")
         ec2conn = self._getEC2Connection(targetConfiguration)
         loc = "%s/%s" % (bucketName, os.path.basename(manifestName))
-        return ec2conn.register_image(image_location=loc)
+        emiId = ec2conn.register_image(image_location=loc)
+        self._msg(job, "Registered %s" % emiId)
+        return emiId
 
     class UploadCallback(object):
         def __init__(self, job, msg):

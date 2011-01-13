@@ -481,8 +481,9 @@ class VMwareClient(baseDriver.BaseDriver):
         return instMap
 
     @classmethod
-    def getImageIdFromMintImage(cls, image):
-        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+    def getImageIdFromMintImage(cls, image, targetImageIds):
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image,
+            targetImageIds)
         if imageSha1 is None:
             return imageSha1
         return cls._uuid(imageSha1)
