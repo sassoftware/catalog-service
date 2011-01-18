@@ -286,8 +286,8 @@ class EucalyptusClient(ec2client.EC2Client):
         return (self.cloudName, port, '/services/Walrus', False,
             self.CallingFormat)
 
-    def getImageIdFromMintImage(self, image, targetImageIds):
-        files = image.get('files', [])
+    def getImageIdFromMintImage(self, imageData, targetImageIds):
+        files = imageData.get('files', [])
         if not files:
             return None
         # Look for image ids that match this target
@@ -297,18 +297,27 @@ class EucalyptusClient(ec2client.EC2Client):
         # Some of them may have been removed, so only look for the overlapping
         # ones
         inters = targetImageIdsFromMint.intersection(targetImageIds)
+        mintImageId = imageData['_mintImageId'] = fdata['sha1']
         if inters:
-            return inters.pop()
-        return fdata['sha1']
+            imageId = imageData['_targetImageId'] = inters.pop()
+            return imageId
+        return mintImageId
 
     @classmethod
     def setImageNamesFromMintData(cls, image, mintImageData):
         ec2client.baseDriver.BaseDriver.setImageNamesFromMintData(image,
             mintImageData)
         imageId = image.getImageId()
-        if imageId.startswith('emi-'):
-            image.setShortName("%s (%s)" % (image.getShortName(), imageId))
-            image.setLongName("%s (%s)" % (image.getLongName(), imageId))
+        targetImageId = mintImageData.get('_targetImageId')
+        if targetImageId:
+            image.setShortName("%s (%s)" % (image.getShortName(), targetImageId))
+            image.setLongName("%s (%s)" % (image.getLongName(), targetImageId))
+            # The image ID gets replaced, we want to keep the ID from mint in
+            # the list
+            mintImageId = mintImageData.get('_mintImageId')
+            image.setImageId(mintImageId)
+            oldImageId = image.getId()
+            image.setId("%s%s" % (oldImageId[:-len(imageId)], mintImageId))
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # We do want to expose mint images in the list
