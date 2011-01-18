@@ -237,6 +237,8 @@ class EucalyptusClient(ec2client.EC2Client):
             certificateKeyData=certificateKeyData)
         config.update((k, self._strip(v)) for k, v in config.items())
 
+        # Seed the target configuration
+        self._targetConfig = config
         # Validate credentials
         cli = self.drvCreateCloudClient(config)
         # Do a call to force cred validation
@@ -244,6 +246,7 @@ class EucalyptusClient(ec2client.EC2Client):
             cli.get_all_regions()
         except ec2client.EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
+        self._targetConfig = None
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
         publicAccessKeyId = targetData.get('publicAccessKeyId')
