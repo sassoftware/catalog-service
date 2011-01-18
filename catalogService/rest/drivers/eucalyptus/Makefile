@@ -12,7 +12,7 @@
 # full details.
 #
 
-SUBDIRS = help
+SUBDIRS = 
 python_files =	$(wildcard *.py)
 
 dist_files = Makefile $(python_files)
