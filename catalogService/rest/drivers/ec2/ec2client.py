@@ -665,8 +665,11 @@ boot-uuid=%s
         imageList = images.BaseImages()
         for image in rs:
             productCodes = self._productCodesForImage(image)
-            iloc = image.location.replace(".manifest.xml", "")
-            longName = "%s (%s)" % (iloc, image.id)
+            if image.location:
+                iloc = image.location.replace(".manifest.xml", "")
+                longName = "%s (%s)" % (iloc, image.id)
+            else:
+                longName = None
             i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
                                            ownerId=image.ownerId,
                                            longName=longName,
