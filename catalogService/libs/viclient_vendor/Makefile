@@ -25,5 +25,5 @@ dist: default-dist
 
 clean: default-clean
 
-include ../../../../../Make.rules
-include ../../../../../Make.defs
+include ../../../Make.rules
+include ../../../Make.defs

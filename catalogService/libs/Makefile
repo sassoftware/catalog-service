@@ -11,18 +11,21 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
+SUBDIRS = viclient viclient_vendor
 
-python_files =  $(wildcard *.py)
+python_files =	$(wildcard *.py)
 
 dist_files = Makefile $(python_files)
 
-all: default-all
+all: default-all subdirs
 
-install: all pyfiles-install default-install install-subdirs
+subdirs: default-subdirs
+
+install: all pyfiles-install default-install install-subdirs pyfiles-compile
 
 dist: default-dist
 
 clean: default-clean
 
-include ../../../../../Make.rules
-include ../../../../../Make.defs
+include ../../Make.rules
+include ../../Make.defs
