@@ -419,8 +419,7 @@ class EC2Client(baseDriver.BaseDriver):
         secretAccessKey = credentials['secretAccessKey']
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo(https=True)
         botoHost, botoPort, path, isSecure, callingFormat = self._getS3ConnectionInfo(credentials)
-        return S3Connection(self._strip(publicAccessKeyId),
-                            self._strip(secretAccessKey),
+        kw = dict(
                             proxy_user = proxyUser,
                             proxy_pass = proxyPass,
                             proxy = proxy,
@@ -430,7 +429,20 @@ class EC2Client(baseDriver.BaseDriver):
                             is_secure = isSecure,
                             path = path,
                             calling_format = callingFormat,
-                            )
+        )
+        kwargs = self._updateDict({}, kw)
+        return S3Connection(self._strip(publicAccessKeyId),
+                            self._strip(secretAccessKey),
+                            **kwargs)
+
+    @classmethod
+    def _updateDict(cls, dst, src):
+        """
+        Update dictionary dst with items from src for which the value is not
+        None
+        """
+        dst.update((x, y) for (x, y) in src.iteritems() if y is not None)
+        return dst
 
     def _createRandomKey(self):
         return base64.b64encode(file("/dev/urandom").read(8))
