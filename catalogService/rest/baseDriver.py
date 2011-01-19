@@ -158,6 +158,7 @@ class BaseDriver(object):
 
     def _createNodeFactory(self):
         factory = nodeFactory.NodeFactory(
+            cloudName = self.cloudName,
             cloudType = self.cloudType,
             cloudConfigurationDescriptorFactory = self.CloudConfigurationDescriptor,
             credentialsDescriptorFactory = self.CredentialsDescriptor,
