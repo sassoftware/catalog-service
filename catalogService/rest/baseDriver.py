@@ -93,6 +93,7 @@ class BaseDriver(object):
         self._targetConfig = None
 
         self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
+        self._postInit()
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
