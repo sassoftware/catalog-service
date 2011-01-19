@@ -29,3 +29,8 @@ class BaseCloudController(BaseGenericController):
         if 'HTTP_X_FLASH_VERSION' in request.headers:
             return XmlStringResponse(msg, status=403)
         return XmlStringResponse(msg, status = 401)
+
+    def getController(self, *args, **kwargs):
+        # Reset target configuration
+        self.driver._targetConfig = None
+        return BaseGenericController.getController(self, *args, **kwargs)

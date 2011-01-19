@@ -11,7 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = rest utils
+SUBDIRS = libs rest utils
 
 python_files =	$(wildcard *.py)
 

@@ -11,6 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
+SUBDIRS = generate twisted wstools
 
 python_files =  $(wildcard *.py)
 
@@ -18,11 +19,13 @@ dist_files = Makefile $(python_files)
 
 all: default-all
 
+subdirs: default-subdirs
+
 install: all pyfiles-install default-install install-subdirs
 
 dist: default-dist
 
 clean: default-clean
 
-include ../../../../../../../Make.rules
-include ../../../../../../../Make.defs
+include ../../../../Make.rules
+include ../../../../Make.defs

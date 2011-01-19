@@ -11,7 +11,7 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = ec2 eucalyptus xenent vmware
+SUBDIRS = viclient viclient_vendor
 
 python_files =	$(wildcard *.py)
 
@@ -26,7 +26,6 @@ install: all pyfiles-install default-install install-subdirs pyfiles-compile
 dist: default-dist
 
 clean: default-clean
-	rm -f xmllib_constants.py
 
-include ../../../Make.rules
-include ../../../Make.defs
+include ../../Make.rules
+include ../../Make.defs

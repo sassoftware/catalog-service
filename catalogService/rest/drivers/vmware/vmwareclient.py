@@ -152,7 +152,7 @@ class VMwareClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         host = self.cloudName
         # This import is expensive!!! Delay it until it is actually needed
-        import viclient
+        from catalogService.libs import viclient
         debug = False
         #debug = True
         try:
@@ -481,8 +481,9 @@ class VMwareClient(baseDriver.BaseDriver):
         return instMap
 
     @classmethod
-    def getImageIdFromMintImage(cls, image):
-        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image)
+    def getImageIdFromMintImage(cls, image, targetImageIds):
+        imageSha1 = baseDriver.BaseDriver.getImageIdFromMintImage(image,
+            targetImageIds)
         if imageSha1 is None:
             return imageSha1
         return cls._uuid(imageSha1)
@@ -613,7 +614,7 @@ class VMwareClient(baseDriver.BaseDriver):
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
             dataStore = dataStore, network = network)
         self.client.waitForLeaseReady(httpNfcLease)
-        import viclient
+        from catalogService.libs import viclient
 
         class ProgressUpdate(viclient.client.ProgressUpdate):
             def progress(slf, bytes, rate=0):
@@ -630,7 +631,7 @@ class VMwareClient(baseDriver.BaseDriver):
                      dataStoreName, host, resourcePool, network,
                      asTemplate = False):
         dataCenterName = dataCenter.properties['name']
-        import viclient
+        from catalogService.libs import viclient
         vmx = viclient.vmutils.uploadVMFiles(self.client,
                                              vmFiles,
                                              vmName,
@@ -687,7 +688,7 @@ class VMwareClient(baseDriver.BaseDriver):
             self._msg(job, 'Uploading image to VMware')
             vmFiles = os.path.join(workdir, image.getBaseFileName())
             # This import is expensive!!! Delay it until it is actually needed
-            import viclient
+            from catalogService.libs import viclient
             if self.client.vmwareVersion >= (4, 0, 0):
                 vmMor = self._deployOvf(job, vmName, uuid,
                     vmFiles, dc, dataStore=ds,
@@ -782,17 +783,13 @@ class VMwareClient(baseDriver.BaseDriver):
         self._msg(job, 'Instance launched')
         return uuid
 
-    def _msg(self, job, msg):
-        job.addHistoryEntry(msg)
-        self.log_debug(msg)
-
     def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor):
         filename = self.getCredentialsIsoFile()
         dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
         dsInfo = self.vicfg.getMOR(dataStoreMor)
         dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
-        import viclient
+        from catalogService.libs import viclient
         try:
             self._msg(job, 'Uploading initial configuration')
             viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,

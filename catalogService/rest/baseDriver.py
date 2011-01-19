@@ -90,6 +90,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
         self._bootUuid = None
+        self._targetConfig = None
 
         self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
 
@@ -105,6 +106,9 @@ class BaseDriver(object):
 
     def _getUserIdForInstanceStore(self):
         return self._sanitizeKey(self.userId)
+
+    def _postInit(self):
+        pass
 
     @classmethod
     def _sanitizeKey(cls, key):
@@ -243,6 +247,10 @@ class BaseDriver(object):
             raise errors.MissingCredentials("Target credentials not set for user")
         instances = self.drvGetInstances(instanceIds)
         return instances
+
+    def _msg(self, job, msg):
+        job.addHistoryEntry(msg)
+        self.log_debug(msg)
 
     @classmethod
     def _toStr(cls, obj):
@@ -603,18 +611,27 @@ class BaseDriver(object):
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
-    def getTargetConfiguration(self, isAdmin = False):
+    def getTargetConfiguration(self, isAdmin = False, forceAdmin = False):
+        # We can't set both isAdmin and forceAdmin at the same time
+        assert int(bool(isAdmin)) + int(bool(forceAdmin)) != 2
         if not self.db:
             return {}
         if isAdmin and not self.db.auth.auth.admin:
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
+        if not forceAdmin and bool(self._targetConfig):
+            return self._targetConfig
         try:
             targetData = self.db.targetMgr.getTargetData(self.cloudType,
                                                          self.cloudName)
         except TargetMissing:
             targetData = {}
 
-        return self.drvGetTargetConfiguration(targetData, isAdmin = isAdmin)
+        # If we force admin, don't pollute _targetConfig
+        ret = self.drvGetTargetConfiguration(targetData,
+            isAdmin = (isAdmin or forceAdmin))
+        if not forceAdmin:
+            self._targetConfig = ret
+        return ret
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
         if not targetData:
@@ -700,13 +717,18 @@ class BaseDriver(object):
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
 
+    def hashMintImages(self, mintImageList, imageList):
+        targetImageIds = set(x.getImageId() for x in imageList)
+        return dict((self.getImageIdFromMintImage(x, targetImageIds), x)
+            for x in mintImageList)
+
     def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
 
         mintImages = self._getMintImagesByType(imageType)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
-        mintImages = dict((self.getImageIdFromMintImage(x), x) for x in mintImages)
+        mintImages = self.hashMintImages(mintImages, imageList)
 
         for image in imageList:
             imageId = image.getImageId()
@@ -723,27 +745,34 @@ class BaseDriver(object):
         return imageList
 
     @classmethod
-    def getImageIdFromMintImage(cls, image):
+    def getImageIdFromMintImage(cls, image, targetImageIds):
         files = image.get('files', [])
         if not files:
             return None
         return files[0]['sha1']
 
     @classmethod
-    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
-        imageFiles = mintImageData.get('files', [])
-        baseFileName = mintImageData.get('baseFileName')
+    def setImageNamesFromMintData(cls, image, mintImageData):
         buildId = mintImageData.get('buildId')
+        baseFileName = mintImageData.get('baseFileName')
         if baseFileName:
             shortName = os.path.basename(baseFileName)
             longName = "%s/%s" % (buildId, shortName)
             image.setShortName(shortName)
             image.setLongName(longName)
             image.setBaseFileName(baseFileName)
+
+    @classmethod
+    def addImageDataFromMintData(cls, image, mintImageData, methodMap):
+        imageFiles = mintImageData.get('files', [])
+        buildId = mintImageData.get('buildId')
+        cls.setImageNamesFromMintData(image, mintImageData)
         # XXX this overly simplifies the fact that there may be more than one
         # file associated with a build
         if imageFiles:
-            image.setDownloadUrl(imageFiles[0].get('downloadUrl'))
+            imgf = imageFiles[0]
+            image.setDownloadUrl(imgf.get('downloadUrl'))
+            image._fileId = imgf.get('fileId')
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
 
@@ -846,7 +875,14 @@ class BaseDriver(object):
     @classmethod
     def utctime(cls, timestr, timeFormat = None):
         if timeFormat is None:
-            timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
+            if isinstance(timestr, basestring):
+                timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr[-4:]
+                # The last 4 chars should normally be milliseconds and Z
+                if not timeFormat.endswith('Z'):
+                    raise ValueError("Invalid time string %s" % (timestr, ))
+            else:
+                timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
+
         return timeutils.utctime(timestr, timeFormat)
 
     @classmethod

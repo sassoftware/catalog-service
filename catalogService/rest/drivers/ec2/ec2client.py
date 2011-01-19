@@ -321,6 +321,7 @@ class EC2Client(baseDriver.BaseDriver):
         securityGroupClass = EC2_SecurityGroup
 
     DefaultCloudName = 'aws'
+    ImagePrefix = 'ami-'
 
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
@@ -359,13 +360,31 @@ class EC2Client(baseDriver.BaseDriver):
         for key in ('publicAccessKeyId', 'secretAccessKey'):
             if key not in credentials or not credentials[key]:
                 raise errors.MissingCredentials()
+        return self._getEC2Connection(credentials)
+
+    def _getEC2Connection(self, credentials):
+        publicAccessKeyId = credentials['publicAccessKeyId']
+        secretAccessKey = credentials['secretAccessKey']
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo()
-        return EC2Connection(self._strip(credentials['publicAccessKeyId']),
-                             self._strip(credentials['secretAccessKey']),
+        region, port, path, isSecure = self._getEC2ConnectionInfo(
+            credentials)
+        return EC2Connection(self._strip(publicAccessKeyId),
+                             self._strip(secretAccessKey),
                              proxy_user = proxyUser,
                              proxy_pass = proxyPass,
                              proxy = proxy,
-                             proxy_port = proxyPort)
+                             proxy_port = proxyPort,
+                             region = region,
+                             port = port,
+                             path = path,
+                             is_secure = isSecure,
+                             )
+
+    def _getEC2ConnectionInfo(self, credentials):
+        return None, None, None, True
+
+    def _getS3ConnectionInfo(self, credentials):
+        return S3Connection.DefaultHost, None, None, True, None
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
         if 'ec2PublicKey' not in targetData:
@@ -395,24 +414,31 @@ class EC2Client(baseDriver.BaseDriver):
             return obj
         return obj.strip()
 
-    def _getS3Connection(self, publicAccessKeyId, secretAccessKey):
-        proxyUrl = self.db.cfg.proxy.get('https')
-        if proxyUrl:
-            splitUrl = helperfuncs.urlSplit(proxyUrl)
-            proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
-        else:
-            proxyUser, proxyPass, proxy, proxyPort = None, None, None, None
-        return S3Connection(publicAccessKeyId, secretAccessKey,
+    def _getS3Connection(self, credentials):
+        publicAccessKeyId = credentials['publicAccessKeyId']
+        secretAccessKey = credentials['secretAccessKey']
+        proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo(https=True)
+        botoHost, botoPort, path, isSecure, callingFormat = self._getS3ConnectionInfo(credentials)
+        return S3Connection(self._strip(publicAccessKeyId),
+                            self._strip(secretAccessKey),
                             proxy_user = proxyUser,
                             proxy_pass = proxyPass,
                             proxy = proxy,
-                            proxy_port = proxyPort)
+                            proxy_port = proxyPort,
+                            host = botoHost,
+                            port = botoPort,
+                            is_secure = isSecure,
+                            path = path,
+                            calling_format = callingFormat,
+                            )
 
     def _createRandomKey(self):
         return base64.b64encode(file("/dev/urandom").read(8))
 
     def _validateS3Bucket(self, publicAccessKeyId, secretAccessKey, bucket):
-        conn = self._getS3Connection(publicAccessKeyId, secretAccessKey)
+        conn = self._getS3Connection(credentials=dict(
+            publicAccessKeyId=publicAccessKeyId,
+            secretAccessKey=secretAccessKey))
         # boto 2.0 enforces that bucket names don't have upper case
         bucket = bucket.lower()
 
@@ -579,14 +605,19 @@ boot-uuid=%s
             # Replace placeholder dynamic security group with generated security group
             securityGroups.remove(CATALOG_DYN_SECURITY_GROUP)
             securityGroups.append(dynSecurityGroup)
+        launchParams.update(securityGroups=securityGroups)
 
+        return self._launchInstances(job, image, launchParams)
+
+    def _launchInstances(self, job, image, launchParams):
         imageId = launchParams.pop('imageId')
+        self._msg(job, "Launching instance %s" % imageId)
         try:
             reservation = self.client.run_instances(imageId,
                     min_count=launchParams.get('minCount'),
                     max_count=launchParams.get('maxCount'),
                     key_name=launchParams.get('keyName'),
-                    security_groups=securityGroups,
+                    security_groups=launchParams.get('securityGroups'),
                     user_data=self.createUserData(launchParams.get('userData')),
                     instance_type=launchParams.get('instanceType'),
                     placement=launchParams.get('availabilityZone'))
@@ -620,29 +651,43 @@ boot-uuid=%s
         return insts
 
     def getImagesFromTarget(self, imageIds):
-        ownerId = self.getTargetConfiguration()['accountId']
+        targetConfiguration = self.getTargetConfiguration()
+        ownerId = targetConfiguration.get('accountId')
         if ownerId:
             ownerIds = [ ownerId ]
         else:
             ownerIds = None
         rs = self.client.get_all_images(image_ids = imageIds, owners = ownerIds)
         # avoid returning amazon kernel images.
-        rs = [ x for x in rs if x.id.startswith('ami-') ]
+        rs = [ x for x in rs if x.id.startswith(self.ImagePrefix) ]
 
+        cloudAlias = targetConfiguration.get('cloudAlias')
         imageList = images.BaseImages()
         for image in rs:
-            productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
-                for x in image.product_codes ]
+            productCodes = self._productCodesForImage(image)
+            if image.location:
+                iloc = image.location.replace(".manifest.xml", "")
+                longName = "%s (%s)" % (iloc, image.id)
+            else:
+                longName = None
             i = self._nodeFactory.newImage(id=image.id, imageId=image.id,
                                            ownerId=image.ownerId,
-                                           longName=image.location,
+                                           longName=longName,
                                            state=image.state,
                                            isPublic=image.is_public,
-                                           productCode=productCodes)
+                                           productCode=productCodes,
+                                           cloudAlias=cloudAlias,
+                                           cloudName=self.cloudName,
+                                           cloudType=self.cloudType,
+                                           )
             imageList.append(i)
         return imageList
 
-    def getImageIdFromMintImage(self, imageData):
+    def _productCodesForImage(self, image):
+        return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
+            for x in image.product_codes ]
+
+    def getImageIdFromMintImage(self, imageData, targetImageIds):
         return imageData.get('amiId')
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
@@ -806,7 +851,7 @@ boot-uuid=%s
         imageIdToImageMap = dict((x.getImageId(), x)
             for x in self.drvGetImages(list(imageIds)))
 
-        properties = {}
+        properties = dict(cloudAlias = self.getCloudAlias())
         if reservation:
             properties.update(ownerId=reservation.owner_id,
                               reservationId=reservation.id)
@@ -837,8 +882,7 @@ boot-uuid=%s
         if properties['launchTime']:
             properties['launchTime'] = self.utctime(properties['launchTime'])
 
-        productCodes = [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
-            for x in instance.product_codes ]
+        productCodes = self._productCodesForImage(instance)
         properties['productCode'] = productCodes
 
         i = self._nodeFactory.newInstance(id=instance.id,
@@ -858,7 +902,7 @@ boot-uuid=%s
             rs = self.client.get_all_zones()
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
-        return [ (x.name, x.regionName) for x in rs ]
+        return [ (x.name, getattr(x, 'regionName', x.name)) for x in rs ]
 
     def _getUnfilteredSecurityGroups(self, groupNames = None):
         ret = []

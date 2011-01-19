@@ -11,7 +11,8 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-python_files = $(wildcard *.py)
+
+python_files =  $(wildcard *.py)
 
 dist_files = Makefile $(python_files)
 

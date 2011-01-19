@@ -10,6 +10,7 @@ class CatalogService(PackageRecipe):
 
     buildRequires = [
         'boto:python',
+        'ec2-ami-tools:runtime',
         'lxml:python',
         'make:runtime',
         'm2crypto:python',
@@ -39,5 +40,7 @@ class CatalogService(PackageRecipe):
             r'drivers/vws/globuslib\.py.*')
         r.Requires('mkisofs:runtime', r'rest/baseDriver\.py.*')
         r.Requires('unzip:runtime', r'rest/baseDriver\.py.*')
+        r.Requires('ec2-ami-tools:runtime',
+            r'rest/drivers/eucalyptus/eucaclient\.py.*')
         r.CompilePython('/usr/lib/python2.4/site-packages/catalogService/')
         r.PackageSpec('catalog-service-sources', '.*\.py$')
