@@ -368,8 +368,7 @@ class EC2Client(baseDriver.BaseDriver):
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo()
         region, port, path, isSecure = self._getEC2ConnectionInfo(
             credentials)
-        return EC2Connection(self._strip(publicAccessKeyId),
-                             self._strip(secretAccessKey),
+        kw = dict(
                              proxy_user = proxyUser,
                              proxy_pass = proxyPass,
                              proxy = proxy,
@@ -378,7 +377,11 @@ class EC2Client(baseDriver.BaseDriver):
                              port = port,
                              path = path,
                              is_secure = isSecure,
-                             )
+        )
+        kwargs = self._updateDict({}, kw)
+        return EC2Connection(self._strip(publicAccessKeyId),
+                             self._strip(secretAccessKey),
+                             **kwargs)
 
     def _getEC2ConnectionInfo(self, credentials):
         return None, None, None, True
