@@ -318,6 +318,7 @@ class EucalyptusClient(ec2client.EC2Client):
             image.setImageId(mintImageId)
             oldImageId = image.getId()
             image.setId("%s%s" % (oldImageId[:-len(imageId)], mintImageId))
+            image._targetImageId = targetImageId
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # We do want to expose mint images in the list
@@ -348,6 +349,10 @@ class EucalyptusClient(ec2client.EC2Client):
         if not image.getIsDeployed():
             imageId = self._deployImage(job, image, auth, launchParams)
             launchParams.update(imageId=imageId)
+        elif image._targetImageId is not None:
+            imageId = image._targetImageId
+            launchParams.update(imageId=imageId)
+        launchParams.update(imageId=imageId)
         instanceIds = self._launchInstances(job, image, launchParams)
         return instanceIds
 
