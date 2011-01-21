@@ -25,12 +25,7 @@ class BaseNode(xmllib.BaseNode):
 
     def __init__(self, attrs=None, nsMap = None, **kwargs):
         xmllib.BaseNode.__init__(self, attrs, nsMap = nsMap)
-        if '_xmlNodeHash' in self.__slots__:
-            self._xmlNodeHash = None
-
         for slot in self.__slots__:
-            if slot.startswith('_'):
-                continue
             setattr(self, slot, None)
 
         kwargs.update(self._constructorOverrides)

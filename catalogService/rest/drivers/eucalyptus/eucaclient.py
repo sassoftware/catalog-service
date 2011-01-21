@@ -352,7 +352,6 @@ class EucalyptusClient(ec2client.EC2Client):
         elif image._targetImageId is not None:
             imageId = image._targetImageId
             launchParams.update(imageId=imageId)
-        launchParams.update(imageId=imageId)
         instanceIds = self._launchInstances(job, image, launchParams)
         return instanceIds
 
