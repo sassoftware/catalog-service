@@ -235,19 +235,21 @@ class BaseDriver(object):
             imageIdsFilter = sorted(x.getImageId() for x in imageList)
 
         # filter the images to those requested
-        imagesById = dict((x.getImageId(), x) for x in imageList)
+        imagesById = self._ImageMap(imageList)
         newImageList = images.BaseImages()
         for imageId in imageIdsFilter:
-            imageId = self._imageIdInMap(imageId, imagesById)
-            if imageId is None:
+            img = imagesById.get(imageId)
+            if img is None:
                 continue
-            newImageList.append(imagesById[imageId])
+            newImageList.append(img)
         return newImageList
 
-    def _imageIdInMap(self, imageId, imageIdMap):
-        if imageId is None:
-            return None
-        return (imageId in imageIdMap and imageId) or None
+    class _ImageMap(object):
+        def __init__(self, imageList):
+            self._ids = dict((x.getImageId(), x) for x in imageList)
+
+        def get(self, imageId):
+            return self._ids.get(imageId)
 
     def getAllInstances(self):
         return self.getInstances(None)

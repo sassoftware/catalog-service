@@ -863,8 +863,8 @@ boot-uuid=%s
         # Grab images first
         imageIds = set(x.image_id for x in instancesIterable
             if x.image_id is not None)
-        imageIdToImageMap = dict((x.getImageId(), x)
-            for x in self.drvGetImages(list(imageIds)))
+        imageIdToImageMap = self._ImageMap(
+            self.drvGetImages(list(imageIds)))
 
         properties = dict(cloudAlias = self.getCloudAlias())
         if reservation:
