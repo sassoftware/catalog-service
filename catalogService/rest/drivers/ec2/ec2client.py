@@ -708,9 +708,13 @@ boot-uuid=%s
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         pass
 
+    def drvLaunchDescriptorCommonFields(self, descr):
+        pass
+
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
         descr.addDescription("Amazon EC2 Launch Parameters")
+        self.drvLaunchDescriptorCommonFields(descr)
         descr.addDataField("instanceType",
             descriptions = [
                 ("Instance Type", None),

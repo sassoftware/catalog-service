@@ -271,15 +271,19 @@ class BaseDriver(object):
         return unicode(obj).encode("utf-8")
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key):
+                         x509Key, launchParams):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
         instanceDnsName = self._toStr(instance.getPublicDnsName())
+        systemName = self._toStr(launchParams['instanceName'])
+        systemDescription = self._toStr(launchParams['instanceDescription'])
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
         system = inventorymodels.System(
+            name=systemName,
+            description=systemDescription,
             target_system_id=instanceId,
             target_system_name=instanceName,
             target_system_description=instanceDescription,
@@ -435,6 +439,27 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
+    def drvLaunchDescriptorCommonFields(self, descr):
+        descr.addDataField('instanceName',
+                           descriptions = 'Instance Name',
+                           type = 'str',
+                           required = True,
+                           help = [
+                               ('launch/instanceName.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 32))
+
+        descr.addDataField('instanceDescription',
+                           descriptions = 'Instance Description',
+                           type = 'str',
+                           help = [
+                               ('launch/instanceDescription.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 128))
+        return descr
+
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
@@ -466,7 +491,7 @@ class BaseDriver(object):
                 x509Key = file(x509Key).read()
                 for instanceId in realInstanceId:
                     system = self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509Cert, x509Key)
+                        job.cloudName, x509Cert, x509Key, params)
                 job.addResults(realInstanceId)
                 job.addHistoryEntry('Done')
                 job.system = system.pk
@@ -544,20 +569,15 @@ class BaseDriver(object):
         return self._nodeFactory.newInstanceLaunchJob(job)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        getField = descriptorData.getField
-        imageId = image.getImageId()
-        instanceName = getField('instanceName')
-        instanceName = instanceName or self.getInstanceNameFromImage(image)
-        instanceDescription = getField('instanceDescription')
-        instanceDescription = (instanceDescription
-                               or self.getInstanceDescriptionFromImage(image)
-                               or instanceName)
-        return dict(
-            imageId = imageId,
-            instanceName = instanceName,
-            instanceDescription = instanceDescription,
-            instanceType = getField('instanceType'),
-        )
+        params = dict((x.getName(), x.getValue())
+            for x in descriptorData.getFields())
+        if params.get('instanceName') is None:
+            params['instanceName'] = self.getInstanceNameFromImage(image)
+        if params.get('instanceDescription') is None:
+            params['instanceDescription'] = self.getInstanceDescriptionFromImage(image) or params['instanceName']
+        # Make sure we use the right image id
+        params.update(imageId = image.getImageId())
+        return params
 
     def getNewInstanceParameters(self, job, image, descriptorData, launchParams):
         imageId = launchParams['imageId']

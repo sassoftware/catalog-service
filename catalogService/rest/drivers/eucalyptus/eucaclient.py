@@ -353,6 +353,11 @@ class EucalyptusClient(ec2client.EC2Client):
         descr.addDescription("Eucalyptus Launch Parameters")
         return descr
 
+    def drvLaunchDescriptorCommonFields(self, descr):
+        descr = ec2client.baseDriver.BaseDriver.drvLaunchDescriptorCommonFields(
+            self, descr)
+        return descr
+
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         if not image.getIsDeployed():
             imageId = self._deployImage(job, image, auth, launchParams)
