@@ -6,6 +6,7 @@ import datetime
 import os
 import subprocess
 import tempfile
+import time
 import traceback
 import urllib
 import urllib2
@@ -68,6 +69,12 @@ class BaseDriver(object):
     instanceStorageClass = storage.DiskStorage
 
     HistoryEntry = jobs.HistoryEntry
+
+    # Timeout for waiting for an instance to show up as running
+    LAUNCH_TIMEOUT = 600
+    PENDING_STATES = set([ 'pending' ])
+    RUNNING_STATES = set([ 'running' ])
+    FAILED_STATES = set([ 'terminated' ])
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None):
@@ -227,19 +234,21 @@ class BaseDriver(object):
             imageIdsFilter = sorted(x.getImageId() for x in imageList)
 
         # filter the images to those requested
-        imagesById = dict((x.getImageId(), x) for x in imageList)
+        imagesById = self._ImageMap(imageList)
         newImageList = images.BaseImages()
         for imageId in imageIdsFilter:
-            imageId = self._imageIdInMap(imageId, imagesById)
-            if imageId is None:
+            img = imagesById.get(imageId)
+            if img is None:
                 continue
-            newImageList.append(imagesById[imageId])
+            newImageList.append(img)
         return newImageList
 
-    def _imageIdInMap(self, imageId, imageIdMap):
-        if imageId is None:
-            return None
-        return (imageId in imageIdMap and imageId) or None
+    class _ImageMap(object):
+        def __init__(self, imageList):
+            self._ids = dict((x.getImageId(), x) for x in imageList)
+
+        def get(self, imageId):
+            return self._ids.get(imageId)
 
     def getAllInstances(self):
         return self.getInstances(None)
@@ -261,15 +270,19 @@ class BaseDriver(object):
         return unicode(obj).encode("utf-8")
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key):
+                         x509Key, launchParams):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
         instanceDnsName = self._toStr(instance.getPublicDnsName())
+        systemName = self._toStr(launchParams['instanceName'])
+        systemDescription = self._toStr(launchParams['instanceDescription'])
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
         system = inventorymodels.System(
+            name=systemName,
+            description=systemDescription,
             target_system_id=instanceId,
             target_system_name=instanceName,
             target_system_description=instanceDescription,
@@ -425,6 +438,27 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
+    def drvLaunchDescriptorCommonFields(self, descr):
+        descr.addDataField('instanceName',
+                           descriptions = 'Instance Name',
+                           type = 'str',
+                           required = True,
+                           help = [
+                               ('launch/instanceName.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 32))
+
+        descr.addDataField('instanceDescription',
+                           descriptions = 'Instance Description',
+                           type = 'str',
+                           help = [
+                               ('launch/instanceDescription.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 128))
+        return descr
+
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
@@ -449,13 +483,14 @@ class BaseDriver(object):
                 # multiple instances with the same call.
                 if not isinstance(realInstanceId, list):
                     realInstanceId = [ realInstanceId ]
+                self.waitForRunningState(job, realInstanceId)
                 x509Cert, x509Key = self.getWbemX509()
                 # Read the cert files
                 x509Cert = file(x509Cert).read()
                 x509Key = file(x509Key).read()
                 for instanceId in realInstanceId:
                     system = self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509Cert, x509Key)
+                        job.cloudName, x509Cert, x509Key, params)
                 job.addResults(realInstanceId)
                 job.addHistoryEntry('Done')
                 job.system = system.pk
@@ -475,6 +510,28 @@ class BaseDriver(object):
             job.pid = None
             job.commit()
             self.launchInstanceInBackgroundCleanup(image, **params)
+
+    def waitForRunningState(self, job, instanceIds):
+        # Wait until all instances get out of the PENDING state
+        expired = time.time() + self.LAUNCH_TIMEOUT
+        first = True
+        while time.time() < expired:
+            instances = self.drvGetInstances(instanceIds)
+            states = set(x.getState().lower() for x in instances)
+            instanceIds = sorted(x.getInstanceId() for x in instances)
+            msg = ', '.join(instanceIds)
+            if not states.intersection(self.PENDING_STATES):
+                self._msg(job, "Instance(s) running: %s" % msg)
+                return
+            if first:
+                self._msg(job, "Instance(s): %s" % msg)
+                first = False
+            else:
+                self._msg(job, "Waiting for a running state...")
+            time.sleep(2)
+        results = [ (x.getInstanceId(), x.getState()) for x in instances ]
+        msg = '; '.join("Instance %s state: %s" % r for r in results)
+        self._msg(job, msg)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         self.cleanUpX509()
@@ -511,20 +568,15 @@ class BaseDriver(object):
         return self._nodeFactory.newInstanceLaunchJob(job)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        getField = descriptorData.getField
-        imageId = image.getImageId()
-        instanceName = getField('instanceName')
-        instanceName = instanceName or self.getInstanceNameFromImage(image)
-        instanceDescription = getField('instanceDescription')
-        instanceDescription = (instanceDescription
-                               or self.getInstanceDescriptionFromImage(image)
-                               or instanceName)
-        return dict(
-            imageId = imageId,
-            instanceName = instanceName,
-            instanceDescription = instanceDescription,
-            instanceType = getField('instanceType'),
-        )
+        params = dict((x.getName(), x.getValue())
+            for x in descriptorData.getFields())
+        if params.get('instanceName') is None:
+            params['instanceName'] = self.getInstanceNameFromImage(image)
+        if params.get('instanceDescription') is None:
+            params['instanceDescription'] = self.getInstanceDescriptionFromImage(image) or params['instanceName']
+        # Make sure we use the right image id
+        params.update(imageId = image.getImageId())
+        return params
 
     def getNewInstanceParameters(self, job, image, descriptorData, launchParams):
         imageId = launchParams['imageId']
@@ -878,7 +930,8 @@ class BaseDriver(object):
     def utctime(cls, timestr, timeFormat = None):
         if timeFormat is None:
             if isinstance(timestr, basestring):
-                timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr[-4:]
+                # This is trying to get rid of the milliseconds part
+                timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr.rsplit('.', 1)[-1]
                 # The last 4 chars should normally be milliseconds and Z
                 if not timeFormat.endswith('Z'):
                     raise ValueError("Invalid time string %s" % (timestr, ))

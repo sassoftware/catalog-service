@@ -708,9 +708,13 @@ boot-uuid=%s
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         pass
 
+    def drvLaunchDescriptorCommonFields(self, descr):
+        pass
+
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Amazon EC2 Launch Parameters")
         descr.addDescription("Amazon EC2 Launch Parameters")
+        self.drvLaunchDescriptorCommonFields(descr)
         descr.addDataField("instanceType",
             descriptions = [
                 ("Instance Type", None),
@@ -863,8 +867,8 @@ boot-uuid=%s
         # Grab images first
         imageIds = set(x.image_id for x in instancesIterable
             if x.image_id is not None)
-        imageIdToImageMap = dict((x.getImageId(), x)
-            for x in self.drvGetImages(list(imageIds)))
+        imageIdToImageMap = self._ImageMap(
+            self.drvGetImages(list(imageIds)))
 
         properties = dict(cloudAlias = self.getCloudAlias())
         if reservation:

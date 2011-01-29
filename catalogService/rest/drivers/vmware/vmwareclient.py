@@ -192,25 +192,7 @@ class VMwareClient(baseDriver.BaseDriver):
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName('VMware Launch Parameters')
         descr.addDescription('VMware Launch Parameters')
-
-        descr.addDataField('instanceName',
-                           descriptions = 'Instance Name',
-                           type = 'str',
-                           required = True,
-                           help = [
-                               ('launch/instanceName.html', None)
-                           ],
-                           constraints = dict(constraintName = 'length',
-                                              value = 32))
-
-        descr.addDataField('instanceDescription',
-                           descriptions = 'Instance Description',
-                           type = 'str',
-                           help = [
-                               ('launch/instanceDescription.html', None)
-                           ],
-                           constraints = dict(constraintName = 'length',
-                                              value = 128))
+        self.drvLaunchDescriptorCommonFields(descr)
 
         vicfg = self.vicfg
         dataCenters = vicfg.getDatacenters()

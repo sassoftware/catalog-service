@@ -226,6 +226,14 @@ class EucalyptusClient(ec2client.EC2Client):
     class Instance(ec2client.EC2_Instance):
         _constructorOverrides = {}
 
+    class _ImageMap(ec2client.EC2Client._ImageMap):
+        def __init__(self, imageList):
+            ec2client.EC2Client._ImageMap.__init__(self, imageList)
+            for img in imageList:
+                # Hash images by target image id too
+                if img._targetImageId is not None:
+                    self._ids[img._targetImageId] = img
+
     def drvCreateCloud(self, descriptorData):
         return ec2client.baseDriver.BaseDriver.drvCreateCloud(self,
             descriptorData)
@@ -343,6 +351,11 @@ class EucalyptusClient(ec2client.EC2Client):
         ec2client.EC2Client.drvPopulateLaunchDescriptor(self, descr)
         descr.setDisplayName("Eucalyptus Launch Parameters")
         descr.addDescription("Eucalyptus Launch Parameters")
+        return descr
+
+    def drvLaunchDescriptorCommonFields(self, descr):
+        descr = ec2client.baseDriver.BaseDriver.drvLaunchDescriptorCommonFields(
+            self, descr)
         return descr
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):

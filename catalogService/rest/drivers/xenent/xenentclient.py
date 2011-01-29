@@ -308,22 +308,7 @@ class XenEntClient(baseDriver.BaseDriver):
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("Xen Enterprise Launch Parameters")
         descr.addDescription("Xen Enterprise Launch Parameters")
-        descr.addDataField("instanceName",
-            descriptions = "Instance Name",
-            type = "str",
-            help = [
-                ("launch/instanceName.html", None)
-            ],
-            constraints = dict(constraintName = 'length',
-                               value = 32))
-        descr.addDataField("instanceDescription",
-            descriptions = "Instance Description",
-            type = "str",
-            help = [
-                ("launch/instanceDescription.html", None)
-            ],
-            constraints = dict(constraintName = 'length',
-                               value = 128))
+        self.drvLaunchDescriptorCommonFields(descr)
         storageRepos = self._getStorageRepos()
         if not storageRepos:
             # No storage repositories defined; fail
