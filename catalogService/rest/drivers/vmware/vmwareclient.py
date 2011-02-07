@@ -195,7 +195,8 @@ class VMwareClient(baseDriver.BaseDriver):
         self.drvLaunchDescriptorCommonFields(descr)
 
         vicfg = self.vicfg
-        dataCenters = vicfg.getDatacenters()
+        dataCenters = [ x for x in vicfg.getDatacenters()
+            if x.getComputeResources() ]
         descr.addDataField('dataCenter',
                            descriptions = 'Data Center',
                            required = True,
