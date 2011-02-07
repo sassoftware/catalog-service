@@ -998,12 +998,11 @@ class VimService(object):
         hardwareSection.append(item)
         cls._text(item, "Caption", "ethernet0", ns=rasdNs)
         cls._text(item, "Description", "E1000 ethernet adapter", ns=rasdNs)
-        cls._text(item, "InstanceID", "8", ns=rasdNs)
+        cls._text(item, "InstanceId", str(len(hardwareSection)), ns=rasdNs)
         cls._text(item, "ResourceType", "10", ns=rasdNs)
         cls._text(item, "ResourceSubType", "E1000", ns=rasdNs)
         cls._text(item, "AutomaticAllocation", "true", ns=rasdNs)
         cls._text(item, "Connection", "bridged", ns=rasdNs)
-        cls._text(item, "AddressOnParent", "0", ns=rasdNs)
 
         return etree.tostring(doc, encoding = "UTF-8")
 
