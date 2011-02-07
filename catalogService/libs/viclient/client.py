@@ -993,7 +993,28 @@ class VimService(object):
             i = todelete.pop()
             del hardwareSection[i]
 
+        # Add back ethernet0 as E1000
+        item = hardwareSection.makeelement("Item")
+        hardwareSection.append(item)
+        cls._text(item, "Caption", "ethernet0", ns=rasdNs)
+        cls._text(item, "Description", "E1000 ethernet adapter", ns=rasdNs)
+        cls._text(item, "InstanceID", "8", ns=rasdNs)
+        cls._text(item, "ResourceType", "10", ns=rasdNs)
+        cls._text(item, "ResourceSubType", "E1000", ns=rasdNs)
+        cls._text(item, "AutomaticAllocation", "true", ns=rasdNs)
+        cls._text(item, "Connection", "bridged", ns=rasdNs)
+        cls._text(item, "AddressOnParent", "0", ns=rasdNs)
+
         return etree.tostring(doc, encoding = "UTF-8")
+
+    @classmethod
+    def _text(cls, element, tag, text, ns=None):
+        if ns is not None:
+            tag = "{%s}%s" % (ns, tag)
+        item = element.makeelement(tag)
+        item.text = text
+        element.append(item)
+        return item
 
     def ovfImportStart(self, ovfFilePath, vmName,
             vmFolder, resourcePool, dataStore, network):
