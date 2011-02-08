@@ -983,6 +983,12 @@ class VimService(object):
             if node.tag != 'Item':
                 continue
 
+            captionText = cls._getNodeText(node, "Caption", ns=rasdNs)
+            # We are creating cdroms and networks as part of the deployment,
+            # so remove these sections
+            if captionText in [ 'cdrom1', 'ethernet0' ]:
+                todelete.append(i)
+                continue
             instanceId = cls._getNodeText(node, "InstanceId", ns=rasdNs)
             try:
                 instanceId = int(instanceId or 0)
@@ -990,11 +996,6 @@ class VimService(object):
                 # In case the instance id is not a number
                 instanceId = 0
             maxInstanceId = max(maxInstanceId, instanceId)
-            captionText = cls._getNodeText(node, "Caption", ns=rasdNs)
-            # We are creating cdroms and networks as part of the deployment,
-            # so remove these sections
-            if captionText in [ 'cdrom1', 'ethernet0' ]:
-                todelete.append(i)
 
         # Remove items to be deleted, in reverse order
         while todelete:
