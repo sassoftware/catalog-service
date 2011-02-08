@@ -975,8 +975,6 @@ class VimService(object):
             return ovfContents
         hardwareSection = hardwareSection[0]
         # Iterate through all items
-        captionTag = "{%s}%s" % (rasdNs, "Caption")
-        instanceIdTag = "{%s}%s" % (rasdNs, "InstanceId")
         todelete = []
         # instanceId is supposed to be unique, so compute the max; we'll add
         # our new devices starting with this max
