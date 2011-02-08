@@ -976,16 +976,26 @@ class VimService(object):
         hardwareSection = hardwareSection[0]
         # Iterate through all items
         captionTag = "{%s}%s" % (rasdNs, "Caption")
+        instanceIdTag = "{%s}%s" % (rasdNs, "InstanceId")
         todelete = []
+        # instanceId is supposed to be unique, so compute the max; we'll add
+        # our new devices starting with this max
+        maxInstanceId = 0
         for i, node in enumerate(hardwareSection.iterchildren()):
             if node.tag != 'Item':
                 continue
-            caption = node.find(captionTag)
-            if caption is None:
-                continue
+
+            instanceId = cls._getNodeText(node, "InstanceId", ns=rasdNs)
+            try:
+                instanceId = int(instanceId or 0)
+            except ValueError:
+                # In case the instance id is not a number
+                instanceId = 0
+            maxInstanceId = max(maxInstanceId, instanceId)
+            captionText = cls._getNodeText(node, "Caption", ns=rasdNs)
             # We are creating cdroms and networks as part of the deployment,
             # so remove these sections
-            if caption.text in [ 'cdrom1', 'ethernet0' ]:
+            if captionText in [ 'cdrom1', 'ethernet0' ]:
                 todelete.append(i)
 
         # Remove items to be deleted, in reverse order
@@ -998,13 +1008,22 @@ class VimService(object):
         hardwareSection.append(item)
         cls._text(item, "Caption", "ethernet0", ns=rasdNs)
         cls._text(item, "Description", "E1000 ethernet adapter", ns=rasdNs)
-        cls._text(item, "InstanceId", str(len(hardwareSection)), ns=rasdNs)
+        cls._text(item, "InstanceId", str(maxInstanceId + 1), ns=rasdNs)
         cls._text(item, "ResourceType", "10", ns=rasdNs)
         cls._text(item, "ResourceSubType", "E1000", ns=rasdNs)
         cls._text(item, "AutomaticAllocation", "true", ns=rasdNs)
         cls._text(item, "Connection", "bridged", ns=rasdNs)
 
         return etree.tostring(doc, encoding = "UTF-8")
+
+    @classmethod
+    def _getNodeText(cls, element, tag, ns=None):
+        if ns is not None:
+            tag = "{%s}%s" % (ns, tag)
+        node = element.find(tag)
+        if node is None:
+            return None
+        return node.text
 
     @classmethod
     def _text(cls, element, tag, text, ns=None):
