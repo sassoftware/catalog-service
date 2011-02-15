@@ -17,7 +17,7 @@ class BaseImage(xmlNode.BaseNode):
                   'isPrivate_rBuilder', 'productCode', 'productDescription',
                   'is_rBuilderImage', 'cloudName', 'cloudType',
                   'cloudAlias', 'isDeployed', 'buildId',
-                  'internalTargetId',
+                  'internalTargetId', 'architecture',
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
                   '_xmlNodeHash', '_fileId', '_targetImageId', ]
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
@@ -61,6 +61,7 @@ class Handler(xmlNode.Handler):
 # map the way rBuilder refers to data to the call to set the node's
 # data to match.
 buildToNodeFieldMap = {'buildDescription': 'setBuildDescription',
+            'architecture' : 'setArchitecture',
             'productDescription': 'setProductDescription',
             'productName': 'setProductName',
             'isPrivate': 'setIsPrivate_rBuilder',
