@@ -722,6 +722,15 @@ class BaseDriver(object):
         return workdir
 
     @classmethod
+    def findFile(cls, topdir, extensions):
+        for (dirPath, dirNames, fileNames) in os.walk(topdir):
+            for fileName in fileNames:
+                for extension in extensions:
+                    if fileName.endswith(extension):
+                        return dirPath, fileName
+        return None, None
+
+    @classmethod
     def downloadFile(cls, url, destFile, headers = None):
         """Download the contents of the url into a file"""
         req = urllib2.Request(url, headers = headers or {})

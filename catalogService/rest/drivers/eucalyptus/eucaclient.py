@@ -393,18 +393,20 @@ class EucalyptusClient(ec2client.EC2Client):
             util.rmtree(tmpDir, ignore_errors=True)
             raise
 
+        fileExtensions = [ '.ext3' ]
         try:
             self._msg(job, "Uncompressing image")
             workdir = self.extractImage(dlpath)
-            extractedDir = os.path.join(workdir, image.getBaseFileName())
             # XXX make this more robust
-            imageFileName = [ x for x in os.listdir(extractedDir)
-                if x.endswith('.ext3') ][0]
-            imageFilePath = os.path.join(extractedDir, imageFileName)
+            imageFileDir, imageFileName = self.findFile(workdir, fileExtensions)
+            if imageFileDir is None:
+                raise RuntimeError("No file(s) found: %s" %
+                    ', '.join("*%s" % x for x in fileExtensions))
+            imageFilePath = os.path.join(imageFileDir, imageFileName)
             bundlePath = os.path.join(workdir, "bundled")
             util.mkdirChain(bundlePath)
             imagePrefix = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
-            architecture = "x86_64" # XXX
+            architecture = 'x86_64' # XXX should be image.architecture
             self._msg(job, "Bundling image")
             self._bundleImage(imageFilePath, accountId,
                 x509CertFile.name, x509KeyFile.name,

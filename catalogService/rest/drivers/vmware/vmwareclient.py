@@ -665,11 +665,15 @@ class VMwareClient(baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
+        fileExtensions = [ '.ovf', '.vmx' ]
         self._msg(job, 'Extracting image')
         try:
             workdir = self.extractImage(path)
             self._msg(job, 'Uploading image to VMware')
-            vmFiles = os.path.join(workdir, image.getBaseFileName())
+            vmFiles, _ = self.findFile(workdir, fileExtensions)
+            if vmFiles is None:
+                raise RuntimeError("No file(s) found: %s" %
+                    ', '.join("*%s" % x for x in fileExtensions))
             # This import is expensive!!! Delay it until it is actually needed
             from catalogService.libs import viclient
             if self.client.vmwareVersion >= (4, 0, 0):
