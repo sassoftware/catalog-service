@@ -674,8 +674,6 @@ class VMwareClient(baseDriver.BaseDriver):
             if vmFiles is None:
                 raise RuntimeError("No file(s) found: %s" %
                     ', '.join("*%s" % x for x in fileExtensions))
-            # This import is expensive!!! Delay it until it is actually needed
-            from catalogService.libs import viclient
             if self.client.vmwareVersion >= (4, 0, 0):
                 vmMor = self._deployOvf(job, vmName, uuid,
                     vmFiles, dc, dataStore=ds,
