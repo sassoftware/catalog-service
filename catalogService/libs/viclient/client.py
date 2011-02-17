@@ -960,15 +960,24 @@ class VimService(object):
         return parseDescriptorResult
 
     @classmethod
+    def _xmltag(cls, name, namespace):
+        if namespace is None:
+            return name
+        return "{%s}%s" % (namespace, name)
+
+    @classmethod
     def sanitizeOvfDescriptor(cls, ovfContents):
         # Get rid of the network specification, it breaks older vSphere 4.0
         # nodes
         xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
         rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
         doc = etree.fromstring(ovfContents)
-        contentNode = doc.find('Content')
-        sections = contentNode.findall('Section')
-        typeAttrib = "{%s}%s" % (xsiNs, "type")
+        xmlns = doc.nsmap.get(None, None)
+        contentNode = doc.find(cls._xmltag('Content', xmlns))
+        sections = contentNode.findall(cls._xmltag('Section', xmlns))
+        typeAttrib = cls._xmltag("type", xsiNs)
+        # XXX Technically, if they chose to use a different namespace prefix
+        # than ovf:, this would stop working.
         hardwareSection = [ x for x in sections
             if x.get(typeAttrib) == 'ovf:VirtualHardwareSection_Type' ]
         if not hardwareSection:
@@ -979,14 +988,15 @@ class VimService(object):
         # instanceId is supposed to be unique, so compute the max; we'll add
         # our new devices starting with this max
         maxInstanceId = 0
+        itemTag = cls._xmltag('Item', xmlns)
         for i, node in enumerate(hardwareSection.iterchildren()):
-            if node.tag != 'Item':
+            if node.tag != itemTag:
                 continue
 
-            captionText = cls._getNodeText(node, "Caption", ns=rasdNs)
+            resourceTypeText = cls._getNodeText(node, "ResourceType", ns=rasdNs)
             # We are creating cdroms and networks as part of the deployment,
             # so remove these sections
-            if captionText in [ 'cdrom1', 'ethernet0' ]:
+            if resourceTypeText in [ '10', '15' ]: # [ 'cdrom1', 'ethernet0' ]
                 todelete.append(i)
                 continue
             instanceId = cls._getNodeText(node, "InstanceId", ns=rasdNs)
