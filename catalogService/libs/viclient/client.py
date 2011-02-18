@@ -971,18 +971,17 @@ class VimService(object):
         # nodes
         xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
         rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
+        ovfNs = 'http://www.vmware.com/schema/ovf/1/envelope'
         doc = etree.fromstring(ovfContents)
         xmlns = doc.nsmap.get(None, None)
         contentNode = doc.find(cls._xmltag('Content', xmlns))
-        sections = contentNode.findall(cls._xmltag('Section', xmlns))
-        typeAttrib = cls._xmltag("type", xsiNs)
-        # XXX Technically, if they chose to use a different namespace prefix
-        # than ovf:, this would stop working.
-        hardwareSection = [ x for x in sections
-            if x.get(typeAttrib) == 'ovf:VirtualHardwareSection_Type' ]
+        hardwareSection = cls._getSectionsByType(contentNode,
+            'VirtualHardwareSection_Type', xmlns, xsiNs)
         if not hardwareSection:
             return ovfContents
         hardwareSection = hardwareSection[0]
+
+        networkNames = cls._getNetworkNames(doc, xmlns, xsiNs, ovfNs)
         # Iterate through all items
         todelete = []
         # instanceId is supposed to be unique, so compute the max; we'll add
@@ -1021,9 +1020,41 @@ class VimService(object):
         cls._text(item, "ResourceType", "10", ns=rasdNs)
         cls._text(item, "ResourceSubType", "E1000", ns=rasdNs)
         cls._text(item, "AutomaticAllocation", "true", ns=rasdNs)
-        cls._text(item, "Connection", "bridged", ns=rasdNs)
+        if networkNames:
+            cls._text(item, "Connection", networkNames[0], ns=rasdNs)
 
         return etree.tostring(doc, encoding = "UTF-8")
+
+    @classmethod
+    def _getNetworkNames(cls, doc, xmlns, xsins, ovfns):
+        sections = cls._getSectionsByType(doc, 'NetworkSection_Type',
+            xmlns, xsins)
+        ret = []
+        for section in sections:
+            for network in cls._getNodeByName(section, 'Network', xmlns):
+                name = cls._getNodeAttribute(network, 'name', ovfns)
+                if name:
+                    ret.append(name)
+        return ret
+
+    @classmethod
+    def _getNodeByName(cls, node, name, xmlns):
+        return node.findall(cls._xmltag(name, xmlns)) or []
+
+    @classmethod
+    def _getSectionsByType(cls, node, xstype, xmlns, xsins):
+        # XXX Technically, if they chose to use a different namespace prefix
+        # than ovf:, this would stop working.
+        xstype = "ovf:" + xstype
+        typeAttrib = cls._xmltag("type", xsins)
+        sections = cls._getNodeByName(node, 'Section', xmlns)
+        return [ x for x in sections if x.get(typeAttrib) == xstype ]
+
+    @classmethod
+    def _getNodeAttribute(cls, element, attribute, ns=None):
+        if ns is not None:
+            attribute = "{%s}%s" % (ns, attribute)
+        return element.attrib.get(attribute)
 
     @classmethod
     def _getNodeText(cls, element, tag, ns=None):
