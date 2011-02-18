@@ -956,124 +956,20 @@ class VimService(object):
         parseDescriptorResult = resp.get_element_returnval()
 
         if hasattr(parseDescriptorResult, '_error'):
-            raise Exception("Error parsing OVF descriptor")
+            errors = []
+            for f in parseDescriptorResult._error:
+                if hasattr(f, '_localizedMessage'):
+                    errors.append(f.LocalizedMessage)
+            raise Exception("Error parsing OVF descriptor: %s" %
+                '; '.join(errors))
         return parseDescriptorResult
-
-    @classmethod
-    def _xmltag(cls, name, namespace):
-        if namespace is None:
-            return name
-        return "{%s}%s" % (namespace, name)
 
     @classmethod
     def sanitizeOvfDescriptor(cls, ovfContents):
         # Get rid of the network specification, it breaks older vSphere 4.0
         # nodes
-        xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
-        rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
-        ovfNs = 'http://www.vmware.com/schema/ovf/1/envelope'
-        doc = etree.fromstring(ovfContents)
-        xmlns = doc.nsmap.get(None, None)
-        contentNode = doc.find(cls._xmltag('Content', xmlns))
-        hardwareSection = cls._getSectionsByType(contentNode,
-            'VirtualHardwareSection_Type', xmlns, xsiNs)
-        if not hardwareSection:
-            return ovfContents
-        hardwareSection = hardwareSection[0]
-
-        networkNames = cls._getNetworkNames(doc, xmlns, xsiNs, ovfNs)
-        # Iterate through all items
-        todelete = []
-        # instanceId is supposed to be unique, so compute the max; we'll add
-        # our new devices starting with this max
-        maxInstanceId = 0
-        itemTag = cls._xmltag('Item', xmlns)
-        for i, node in enumerate(hardwareSection.iterchildren()):
-            if node.tag != itemTag:
-                continue
-
-            resourceTypeText = cls._getNodeText(node, "ResourceType", ns=rasdNs)
-            # We are creating cdroms and networks as part of the deployment,
-            # so remove these sections
-            if resourceTypeText in [ '10', '15' ]: # [ 'cdrom1', 'ethernet0' ]
-                todelete.append(i)
-                continue
-            instanceId = cls._getNodeText(node, "InstanceId", ns=rasdNs)
-            try:
-                instanceId = int(instanceId or 0)
-            except ValueError:
-                # In case the instance id is not a number
-                instanceId = 0
-            maxInstanceId = max(maxInstanceId, instanceId)
-
-        # Remove items to be deleted, in reverse order
-        while todelete:
-            i = todelete.pop()
-            del hardwareSection[i]
-
-        # Add back ethernet0 as E1000
-        item = hardwareSection.makeelement("Item")
-        hardwareSection.append(item)
-        cls._text(item, "Caption", "ethernet0", ns=rasdNs)
-        cls._text(item, "Description", "E1000 ethernet adapter", ns=rasdNs)
-        cls._text(item, "InstanceId", str(maxInstanceId + 1), ns=rasdNs)
-        cls._text(item, "ResourceType", "10", ns=rasdNs)
-        cls._text(item, "ResourceSubType", "E1000", ns=rasdNs)
-        cls._text(item, "AutomaticAllocation", "true", ns=rasdNs)
-        if networkNames:
-            cls._text(item, "Connection", networkNames[0], ns=rasdNs)
-
-        return etree.tostring(doc, encoding = "UTF-8")
-
-    @classmethod
-    def _getNetworkNames(cls, doc, xmlns, xsins, ovfns):
-        sections = cls._getSectionsByType(doc, 'NetworkSection_Type',
-            xmlns, xsins)
-        ret = []
-        for section in sections:
-            for network in cls._getNodeByName(section, 'Network', xmlns):
-                name = cls._getNodeAttribute(network, 'name', ovfns)
-                if name:
-                    ret.append(name)
-        return ret
-
-    @classmethod
-    def _getNodeByName(cls, node, name, xmlns):
-        return node.findall(cls._xmltag(name, xmlns)) or []
-
-    @classmethod
-    def _getSectionsByType(cls, node, xstype, xmlns, xsins):
-        # XXX Technically, if they chose to use a different namespace prefix
-        # than ovf:, this would stop working.
-        xstype = "ovf:" + xstype
-        typeAttrib = cls._xmltag("type", xsins)
-        sections = cls._getNodeByName(node, 'Section', xmlns)
-        return [ x for x in sections if x.get(typeAttrib) == xstype ]
-
-    @classmethod
-    def _getNodeAttribute(cls, element, attribute, ns=None):
-        if ns is not None:
-            attribute = "{%s}%s" % (ns, attribute)
-        return element.attrib.get(attribute)
-
-    @classmethod
-    def _getNodeText(cls, element, tag, ns=None):
-        if ns is not None:
-            tag = "{%s}%s" % (ns, tag)
-        node = element.find(tag)
-        if node is None:
-            return None
-        return node.text
-
-    @classmethod
-    def _text(cls, element, tag, text, ns=None):
-        if ns is not None:
-            tag = "{%s}%s" % (ns, tag)
-        item = element.makeelement(tag)
-        item.text = text
-        element.append(item)
-        return item
-
+        ovf = OVF(ovfContents)
+        return ovf.sanitize()
     def ovfImportStart(self, ovfFilePath, vmName,
             vmFolder, resourcePool, dataStore, network):
         ovfContents = file(ovfFilePath).read()
@@ -1438,3 +1334,200 @@ class VimService(object):
     def __del__(self):
         if self._loggedIn:
             self.logout()
+
+class OVF(object):
+    class _OVFFlavor(object):
+        xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
+        rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
+        ovfNs = None
+        def __init__(self, doc):
+            self.doc = doc
+            self.xmlns = doc.nsmap.get(None, None)
+
+        @classmethod
+        def addNode(cls, item, name, value):
+            OVF._text(item, name, value, ns=cls.rasdNs)
+
+        def tostring(self):
+            return etree.tostring(self.doc, encoding = "UTF-8")
+
+        def getNetworkNames(self):
+            sections = self.getNetworkSections() or []
+            ret = []
+            for section in sections:
+                for network in OVF._getNodeByName(section, 'Network', self.xmlns):
+                    name = OVF._getNodeAttribute(network, 'name', self.ovfNs)
+                    if name:
+                        ret.append(name)
+            return ret
+
+        def getNodeText(self, node, name):
+            return OVF._getNodeText(node, name, ns=self.rasdNs)
+
+        def getInstanceId(self, node):
+            return OVF._getNodeText(node, self.instanceIdTag, self.rasdNs)
+
+        def addHardwareItems(self, hardwareSection, nextInstanceId):
+            networkNames = self.getNetworkNames()
+            # Add back ethernet0 as E1000
+            item = hardwareSection.makeelement("Item")
+            hardwareSection.append(item)
+            if networkNames:
+                networkName = networkNames[0]
+            else:
+                networkName = None
+            self._addNetworkFields(item, nextInstanceId, networkName)
+
+    class _OVF_09(_OVFFlavor):
+        ovfNs = 'http://www.vmware.com/schema/ovf/1/envelope'
+        instanceIdTag = "InstanceId"
+        elementNameTag = "Caption"
+
+        def getNetworkSections(self):
+            return OVF._getSectionsByType(self.doc, 'NetworkSection_Type',
+                self.xmlns, self.xsiNs)
+
+        def getHardwareSections(self):
+            contentNode = self.doc.find(OVF._xmltag('Content', self.xmlns))
+            return OVF._getSectionsByType(contentNode,
+                'VirtualHardwareSection_Type', self.xmlns, self.xsiNs)
+
+        def _addNetworkFields(self, item, nextInstanceId, networkName):
+            self.addNode(item, self.elementNameTag, "ethernet0")
+            self.addNode(item, "Description", "E1000 ethernet adapter")
+            self.addNode(item, self.instanceIdTag, str(nextInstanceId))
+            self.addNode(item, "ResourceType", "10")
+            self.addNode(item, "ResourceSubType", "E1000")
+            self.addNode(item, "AutomaticAllocation", "true")
+            if networkName:
+                self.addNode(item, "Connection", networkName)
+
+    class _OVF_10(_OVFFlavor):
+        ovfNs = 'http://schemas.dmtf.org/ovf/envelope/1'
+        instanceIdTag = "InstanceID"
+        elementNameTag = "ElementName"
+
+        def getNetworkSections(self):
+            return self.doc.findall(OVF._xmltag('NetworkSection', self.xmlns))
+
+        def getHardwareSections(self):
+            vsys = self.doc.find(OVF._xmltag('VirtualSystem', self.xmlns))
+            return vsys.findall(OVF._xmltag('VirtualHardwareSection', self.xmlns))
+
+        def _addNetworkFields(self, item, nextInstanceId, networkName):
+            self.addNode(item, "AddressOnParent", "7")
+            self.addNode(item, "AutomaticAllocation", "true")
+            if networkName:
+                self.addNode(item, "Connection", networkName)
+            self.addNode(item, "Description", "E1000 ethernet adapter")
+            self.addNode(item, self.elementNameTag, "ethernet0")
+            self.addNode(item, self.instanceIdTag, str(nextInstanceId))
+            self.addNode(item, "ResourceSubType", "E1000")
+            self.addNode(item, "ResourceType", "10")
+
+    OvfVersions = [ _OVF_10, _OVF_09 ]
+
+    def __init__(self, string):
+        self._ovfContents = string
+        doc = etree.fromstring(string)
+        for cls in self.OvfVersions:
+            if self._getNsPrefix(doc, cls.ovfNs):
+                self.ovf = cls(doc)
+                break
+        else: # for
+            raise RuntimeError("Unsupported OVF")
+
+        self.maxInstanceId = 0
+
+
+    def sanitize(self):
+        hardwareSection = self.ovf.getHardwareSections()
+        if hardwareSection is None:
+            return self._ovfContents
+
+        hardwareSection = hardwareSection[0]
+
+        # Iterate through all items
+        todelete = []
+        # instanceId is supposed to be unique, so compute the max; we'll add
+        # our new devices starting with this max
+        maxInstanceId = 0
+        itemTag = self._xmltag('Item', self.ovf.xmlns)
+        for i, node in enumerate(hardwareSection.iterchildren()):
+            if node.tag != itemTag:
+                continue
+
+            resourceTypeText = self.ovf.getNodeText(node, "ResourceType")
+            # We are creating cdroms and networks as part of the deployment,
+            # so remove these sections
+            if resourceTypeText in [ '10', '15' ]: # [ 'cdrom', 'ethernet' ]
+                todelete.append(i)
+                continue
+            instanceId = self.ovf.getInstanceId(node)
+            try:
+                instanceId = int(instanceId or 0)
+            except ValueError:
+                # In case the instance id is not a number
+                instanceId = 0
+            maxInstanceId = max(maxInstanceId, instanceId)
+
+        # Remove items to be deleted, in reverse order
+        while todelete:
+            i = todelete.pop()
+            del hardwareSection[i]
+
+        self.ovf.addHardwareItems(hardwareSection, maxInstanceId + 1)
+        return self.ovf.tostring()
+
+
+    @classmethod
+    def _getNsPrefix(cls, node, namespace):
+        ret = [ prefix for (prefix, ns) in node.nsmap.iteritems()
+            if ns == namespace ]
+        ret.sort()
+        ret.reverse()
+        return ret
+
+    @classmethod
+    def _getNodeByName(cls, node, name, xmlns):
+        return node.findall(cls._xmltag(name, xmlns)) or []
+
+    @classmethod
+    def _getSectionsByType(cls, node, xstype, xmlns, xsins):
+        # XXX Technically, if they chose to use a different namespace prefix
+        # than ovf:, this would stop working.
+        xstype = "ovf:" + xstype
+        typeAttrib = cls._xmltag("type", xsins)
+        sections = cls._getNodeByName(node, 'Section', xmlns)
+        return [ x for x in sections if x.get(typeAttrib) == xstype ]
+
+    @classmethod
+    def _getNodeAttribute(cls, element, attribute, ns=None):
+        if ns is not None:
+            attribute = "{%s}%s" % (ns, attribute)
+        return element.attrib.get(attribute)
+
+    @classmethod
+    def _getNodeText(cls, element, tag, ns=None):
+        if ns is not None:
+            tag = "{%s}%s" % (ns, tag)
+        node = element.find(tag)
+        if node is None:
+            return None
+        return node.text
+
+    @classmethod
+    def _text(cls, element, tag, text, ns=None):
+        if ns is not None:
+            tag = "{%s}%s" % (ns, tag)
+        item = element.makeelement(tag)
+        item.text = text
+        element.append(item)
+        return item
+
+    @classmethod
+    def _xmltag(cls, name, namespace):
+        if namespace is None:
+            return name
+        return "{%s}%s" % (namespace, name)
+
