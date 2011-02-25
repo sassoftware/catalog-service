@@ -44,7 +44,9 @@ class CatalogServiceController(base.BaseController):
             + "/preferences/"
         preferences = userInfo.Preferences(href=prefhref) 
         response = userInfo.UserInfo(id = responseId,
+            email = request.mintAuth.email,
             username = request.mintAuth.username,
+            fullName = request.mintAuth.fullName,
             isAdmin = bool(request.mintAuth.admin),
             preferences = preferences,
             displayRepositories = bool(self.hasRepositories()))
