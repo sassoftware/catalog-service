@@ -4,16 +4,9 @@
 
 # vim: set fileencoding=utf-8 :
 
-import os
-import subprocess
-import tempfile
 from boto.s3 import connection as s3connection
 from boto.ec2.regioninfo import RegionInfo
 
-from conary.lib import util
-from mint import ec2
-
-from catalogService import errors
 from catalogService.rest.drivers.eucalyptus import eucaclient
 
 # We're lazy
