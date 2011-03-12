@@ -234,7 +234,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                     operator='eq',
                                     fieldValue=dc.obj)
                                )
-        for cr in crToDc.keys():
+        for cr, dc in crToDc.items():
             cfg = cr.configTarget
             if cfg is None:
                 continue
@@ -290,7 +290,7 @@ class VMwareClient(baseDriver.BaseDriver):
             #    operator='eq',
             #    fieldValue=dc.obj),
 
-        for cr in crToDc.keys():
+        for cr, dc in crToDc.items():
             # sort a list of mor, name tuples based on name
             # and use the first tuple's mor as the default resource pool
             defaultRp = sorted(((x[0], x[1]['name'])
