@@ -939,16 +939,21 @@ class BaseDriver(object):
     @classmethod
     def utctime(cls, timestr, timeFormat = None):
         if timeFormat is None:
-            if isinstance(timestr, basestring):
-                # This is trying to get rid of the milliseconds part
-                timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr.rsplit('.', 1)[-1]
-                # The last 4 chars should normally be milliseconds and Z
-                if not timeFormat.endswith('Z'):
-                    raise ValueError("Invalid time string %s" % (timestr, ))
-            else:
-                timeFormat = "%Y-%m-%dT%H:%M:%S.000Z"
-
+            timeFormat = cls.detectTimeFormat(timestr)
         return timeutils.utctime(timestr, timeFormat)
+
+    @classmethod
+    def detectTimeFormat(cls, timestr):
+        if not isinstance(timestr, basestring):
+            return "%Y-%m-%dT%H:%M:%S.000Z"
+        if len(timestr) == 20:
+            return "%Y-%m-%dT%H:%M:%SZ"
+        # This is trying to get rid of the milliseconds part
+        timeFormat = "%Y-%m-%dT%H:%M:%S." + timestr.rsplit('.', 1)[-1]
+        # The last 4 chars should normally be milliseconds and Z
+        if not timeFormat.endswith('Z'):
+            raise ValueError("Invalid time string %s" % (timestr, ))
+        return timeFormat
 
     @classmethod
     def _uuid(cls, s):
