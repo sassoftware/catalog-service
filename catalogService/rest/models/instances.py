@@ -10,16 +10,19 @@ from catalogService.rest.models import xmlNode
 class BaseInstanceUpdateStatusState(xmlNode.BaseNode):
     tag = 'updateState'
     __slots__ = ['id', 'state']
+    _slotAttributes = set([ 'id' ])
 
 class BaseInstanceUpdateStatusTime(xmlNode.BaseNode):
     tag = 'time'
     __slots__ = ['id', 'time']
+    _slotAttributes = set([ 'id' ])
 
 class BaseInstanceUpdateStatus(xmlNode.BaseNode):
     tag = 'updateStatus'
     __slots__ = [ 'id', 'state', 'time' ]
     _slotTypeMap = dict(state = BaseInstanceUpdateStatusState,
                         time = BaseInstanceUpdateStatusTime)
+    _slotAttributes = set([ 'id' ])
 
 class _ProductCode(xmlNode.BaseNode):
     tag = "productCode"
@@ -152,7 +155,7 @@ class UpdateHref(xmlNode.BaseNode):
 class BaseInstanceJobHref(xmlNode.BaseNode):
     tag = "job"
     __slots__ = ['id', 'href']
-    _slotAttributes = set(['href'])
+    _slotAttributes = set(['id', 'href'])
 
 class BaseInstance(xmlNode.BaseNode):
     tag = 'instance'
@@ -192,6 +195,7 @@ class BaseInstance(xmlNode.BaseNode):
                         stage = StageHref,
                         update = UpdateHref,
                         job = BaseInstanceJobHref)
+    _slotAttributes = set([ 'id' ])
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -202,6 +206,7 @@ class BaseInstances(xmlNode.BaseNodeCollection):
 class InstanceType(xmlNode.BaseNode):
     tag = 'instanceType'
     __slots__ = [ 'id', 'instanceTypeId', 'description' ]
+    _slotAttributes = set([ 'id' ])
 
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
