@@ -11,15 +11,13 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
-SUBDIRS = ec2 eucalyptus openstack xenent vmware
 
+SUBDIRS = 
 python_files =	$(wildcard *.py)
 
 dist_files = Makefile $(python_files)
 
-all: default-all subdirs
-
-subdirs: default-subdirs
+all: default-all
 
 install: all pyfiles-install default-install install-subdirs pyfiles-compile
 
@@ -28,5 +26,5 @@ dist: default-dist
 clean: default-clean
 	rm -f xmllib_constants.py
 
-include ../../../Make.rules
-include ../../../Make.defs
+include ../../../../Make.rules
+include ../../../../Make.defs

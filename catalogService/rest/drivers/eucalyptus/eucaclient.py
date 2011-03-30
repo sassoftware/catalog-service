@@ -407,6 +407,8 @@ class EucalyptusClient(ec2client.EC2Client):
             util.mkdirChain(bundlePath)
             imagePrefix = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
             architecture = image.getArchitecture() or "x86"
+            if architecture == 'x86':
+                architecture = 'i386'
             self._msg(job, "Bundling image")
             self._bundleImage(imageFilePath, accountId,
                 x509CertFile.name, x509KeyFile.name,
