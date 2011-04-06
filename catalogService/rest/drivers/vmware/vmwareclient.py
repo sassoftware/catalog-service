@@ -264,6 +264,9 @@ class VMwareClient(baseDriver.BaseDriver):
             dataStores = []
 
             for ds in cfg.get_element_datastore():
+                if hasattr(ds, '_mode') and ds.get_element_mode() == 'readOnly':
+                    # Read-only datastore. Can't launch on it
+                    continue
                 name = ds.get_element_name()
                 dsInfo = ds.get_element_datastore()
                 free = dsInfo.get_element_freeSpace()
