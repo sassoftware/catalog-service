@@ -134,8 +134,9 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Field must contain between 1 and 12 characters</desc>
+          <desc>Field must contain between 1 and 12 characters and cannot contain hyphens</desc>
         </descriptions>
+        <regexp>^[^-]+$</regexp>
         <length>12</length>
       </constraints>
       <required>true</required>
