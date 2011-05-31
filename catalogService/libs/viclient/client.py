@@ -970,6 +970,57 @@ class VimService(object):
         # nodes
         ovf = OVF(ovfContents)
         return ovf.sanitize()
+
+
+    def ovfExport(self, vmMor, destinationPath):
+        #req = ExportVmRequestMsg()
+        # Step 1: Download
+        httpNfcLease = self.getOvfExportLease(vmMor)
+        self.waitForLeaseReady(httpNfcLease)
+        httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
+        ovfFiles = []
+        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
+            url = deviceUrl.get_element_url()
+            fileName = os.path.basename(url)
+            destFile = os.path.join(destinationPath, fileName)
+
+            print "Getting", destFile
+            #vmutils._getFile(destFile, url)
+            ovfFile = ns0.OvfFile_Def('').pyclass()
+            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
+            ovfFile.set_element_path(fileName)
+            ovfFile.set_element_size(os.stat(destFile).st_size)
+            ovfFiles.append(ovfFile)
+
+        self.leaseComplete(httpNfcLease)
+
+        descr = self.createOvfDescriptor(vmMor, 'vm-name', 'vm-description', ovfFiles)
+        # Write OVF descriptor to disk
+        xmlData = descr.get_element_ovfDescriptor()
+        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
+        file(ovfFilePath, "w").write(xmlData)
+
+    def createOvfDescriptor(self, vmMor, name, description, ovfFiles):
+        req = CreateDescriptorRequestMsg()
+        req.set_element__this(self.getOvfManager())
+        req.set_element_obj(vmMor)
+        req.set_element_cdp(self.createOvfCreateDescriptorParams(
+            name, description, ovfFiles))
+
+        resp = self._service.CreateDescriptor(req)
+        createDescriptorResult = resp.get_element_returnval()
+        return createDescriptorResult
+
+    def createOvfCreateDescriptorParams(self, name, description, ovfFiles,
+            includeImageFiles=False):
+        params = ns0.OvfCreateDescriptorParams_Def('').pyclass()
+        params.set_element_name(name)
+        params.set_element_description(description)
+        params.set_element_ovfFiles(ovfFiles)
+        #params.set_element_includeImageFiles(includeImageFiles)
+
+        return params
+
     def ovfImportStart(self, ovfFilePath, vmName,
             vmFolder, resourcePool, dataStore, network):
         ovfContents = file(ovfFilePath).read()
@@ -992,6 +1043,7 @@ class VimService(object):
         httpNfcLease = self.getOvfImportLease(resourcePool, vmFolder,
             createImportSpecResult.get_element_importSpec())
         return fileItems, httpNfcLease
+
 
     def ovfUpload(self, httpNfcLease, downloadDir, fileItems, progressUpdate):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
@@ -1036,6 +1088,7 @@ class VimService(object):
 
         return vmMor
 
+
     def waitForLeaseReady(self, lease):
         ret = self.waitForValues(lease, ['state'],
             [ 'state' ], [ ['ready', 'error'] ])
@@ -1060,6 +1113,7 @@ class VimService(object):
         createImportSpecResult = resp.get_element_returnval()
         return createImportSpecResult
 
+
     def createOvfImportParams(self, parseDescriptorResult, vmName, network):
         params = ns0.OvfCreateImportSpecParams_Def('').pyclass()
         params.set_element_locale('')
@@ -1077,6 +1131,7 @@ class VimService(object):
             params.set_element_networkMapping([ nm ])
         return params
 
+
     def getOvfImportLease(self, resourcePool, vmFolder, importSpec):
         req = ImportVAppRequestMsg()
         req.set_element__this(resourcePool)
@@ -1084,6 +1139,14 @@ class VimService(object):
         req.set_element_folder(vmFolder)
 
         resp = self._service.ImportVApp(req)
+        httpNfcLease = resp.get_element_returnval()
+        return httpNfcLease
+
+    #Marker: 24thMay2011###########################################################################
+    def getOvfExportLease(self, vmMor):
+        req = ExportVmRequestMsg()
+        req.set_element__this(vmMor)
+        resp = self._service.ExportVm(req)
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 
