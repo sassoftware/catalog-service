@@ -142,7 +142,7 @@ class ProgressUpdate(object):
         return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
 
     def updateSize(self, size):
-        self.prevFilesSize = size
+        self.prevFilesSize += size
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -971,26 +971,65 @@ class VimService(object):
         ovf = OVF(ovfContents)
         return ovf.sanitize()
 
+    def destroyVM(self, vmMor):
+        req = Destroy_TaskRequestMsg()
+        req.set_element__this(vmMor)
+
+        ret = self._service.Destroy_Task(req)
+        task = ret.get_element_returnval()
+        ret = self.waitForTask(task)
+        if ret != 'success':
+            raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
     def ovfExport(self, vmMor, destinationPath):
-        #req = ExportVmRequestMsg()
-        # Step 1: Download
         httpNfcLease = self.getOvfExportLease(vmMor)
         self.waitForLeaseReady(httpNfcLease)
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
+        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
         ovfFiles = []
+
+        class LProgressUpdate(ProgressUpdate):
+            def progress(slf, bytes, rate=0):
+                ProgressUpdate.progress(slf, bytes, rate=rate)
+                pct = slf._percent(bytes)
+                #vmwareclient.VMwareClient._msg(job, "Exporting OVF: %d%% complete" % pct)
+                print "Exporting OVF: %d%% complete" % pct
+
+        progressUpdate = LProgressUpdate(self._service, httpNfcLease)
+        progressUpdate.totalSize = totalSize
+        progressUpdate.progress(0, 0)
+
         for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
             url = deviceUrl.get_element_url()
+
             fileName = os.path.basename(url)
             destFile = os.path.join(destinationPath, fileName)
 
-            print "Getting", destFile
-            #vmutils._getFile(destFile, url)
+            abc=vmutils._getFile(destFile, url, callback = progressUpdate)
+            if hasattr(abc, '_error'):
+                errors = []
+                for f in abc._error:
+                    if hasattr(f, '_localizedMessage'):
+                        errors.append(f.LocalizedMessage)
+                raise Exception("Error Exporting: %s" %
+                    '; '.join(errors))
+                self.leaseComplete(httpNfcLease)
+
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
+
+
+            fileSize = os.stat(destFile).st_size
+
             ovfFile = ns0.OvfFile_Def('').pyclass()
             ovfFile.set_element_deviceId(deviceUrl.get_element_key())
+            ovfFile.set_element_size(fileSize)
             ovfFile.set_element_path(fileName)
-            ovfFile.set_element_size(os.stat(destFile).st_size)
             ovfFiles.append(ovfFile)
+
+            progressUpdate.updateSize(fileSize)
+
+        progressUpdate.progress(100, 0)
 
         self.leaseComplete(httpNfcLease)
 

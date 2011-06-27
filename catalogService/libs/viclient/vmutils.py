@@ -102,38 +102,25 @@ def _getFile(outPath, inUrl, method='GET', session=None, callback=None):
 
     if response and response.status not in (200, 201):
         raise RuntimeError('%s failed: %d - %s' % (
-        method, response.status, response.reason))
+            method, response.status, response.reason))
     elif not response:
         raise RuntimeError('%s failed' % method)
 
-    progress = None
+    progress = lambda x, y: x
     if callback:
-        progress = getattr(callback, 'progress', None)
-    if progress is None:
-        progress = lambda x, y: x
+        # Default to the dummy progress callback
+        progress = getattr(callback, 'progress', progress)
 
     fileObj = file(outPath, "w")
     contentLength = response.msg.get('Content-Length')
     if contentLength is not None:
         contentLength = int(contentLength)
+    # Chunked transfers will not set Content-Length
+    # we let copyfileobj read to the end
     util.copyfileobj(response, fileObj, bufSize=BUFSIZE,
         sizeLimit=contentLength, callback=progress)
 
     response.close()
-
-def downloadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
-    vmx = glob.glob(os.path.join(path, '*.vmx'))
-    if not vmx:
-        raise RuntimeError('no .vmx file found in %s' %path)
-    if len(vmx) != 1:
-        raise RuntimeError('more than one .vmx file found in %s' %path)
-
-    filePaths = [ os.path.join(path, fn) for fn in os.listdir(path) ]
-
-    _downloadVMFiles(v, filePaths, vmName = vmName,
-        dataCenter = dataCenter, dataStore = dataStore)
-    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0]))
-    return vmx
 
 def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
     vmx = glob.glob(os.path.join(path, '*.vmx'))
@@ -148,23 +135,6 @@ def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
         dataCenter = dataCenter, dataStore = dataStore)
     vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0]))
     return vmx
-
-def _downloadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
-    # steal cookies from the binding's cookiejar
-    session = v.getSessionUUID()
-    urlBase = v.getUrlBase()
-    urlPattern = '%sfolder/%s/@FILENAME@?dcPath=%s&dsName=%s' %(
-        urlBase, urllib.quote(vmName), urllib.quote(dataCenter),
-        urllib.quote(dataStore))
-
-    if not dataStore:
-        raise RuntimeError('dataStore currently required')
-    if not dataCenter:
-        raise RuntimeError('dataCenter currently required')
-
-    for filePath in filePaths:
-        fn = urllib.quote(os.path.basename(filePath))
-        _getFile(filePath, urlPattern.replace('@FILENAME@', fn), session=session)
 
 def _uploadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     # steal cookies from the binding's cookiejar
@@ -182,26 +152,3 @@ def _uploadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     for filePath in filePaths:
         fn = urllib.quote(os.path.basename(filePath))
         _putFile(filePath, urlPattern.replace('@FILENAME@', fn), session=session)
-
-def _deleteVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
-    # steal cookies from the binding's cookiejar
-    session = v.getSessionUUID()
-    urlBase = v.getUrlBase()
-    urlPattern = '%sfolder/%s/@FILENAME@?dcPath=%s&dsName=%s' %(
-        urlBase, urllib.quote(vmName), urllib.quote(dataCenter),
-        urllib.quote(dataStore))
-
-    if not dataStore:
-        raise RuntimeError('dataStore currently required')
-    if not dataCenter:
-        raise RuntimeError('dataCenter currently required')
-
-    headers = {}
-    if session:
-        headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
-    for filePath in filePaths:
-        filePath = os.path.basename(filePath)
-        outUrl = urlPattern.replace('@FILENAME@', filePath)
-        response = _makeConnection(outUrl, 'DELETE', headers)
-
-
