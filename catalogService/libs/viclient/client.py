@@ -1347,7 +1347,7 @@ class VimService(object):
         return mor
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
-                dc=None, cr=None, ds=None, rp=None, newuuid=None):
+                dc=None, cr=None, ds=None, rp=None, newuuid=None, template=False):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1370,7 +1370,8 @@ class VimService(object):
         req.set_element_name(name)
 
         cloneSpec = req.new_spec()
-        cloneSpec.set_element_template(False)
+#        cloneSpec.set_element_template(False)
+        cloneSpec.set_element_template(template)
         # We do not want to power on the clone just yet, we need to attach its
         # credentials disk
         cloneSpec.set_element_powerOn(False)
