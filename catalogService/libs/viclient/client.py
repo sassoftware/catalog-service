@@ -1370,7 +1370,6 @@ class VimService(object):
         req.set_element_name(name)
 
         cloneSpec = req.new_spec()
-#        cloneSpec.set_element_template(False)
         cloneSpec.set_element_template(template)
         # We do not want to power on the clone just yet, we need to attach its
         # credentials disk
