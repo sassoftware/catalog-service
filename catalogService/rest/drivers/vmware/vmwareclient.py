@@ -1,4 +1,3 @@
-#!/usr/bin/python2.4
 #
 # Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
 #
@@ -565,18 +564,21 @@ class VMwareClient(baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
-    def _deployOvf(self, job, vmName, uuid, vmFilesPath, dataCenter,
+    def _deployOvf(self, job, vmName, uuid, archive, dataCenter,
                      dataStore, host, resourcePool, network,
                      asTemplate = False):
         dataCenterName = dataCenter.properties['name']
         # Grab ovf file
-        ovfFiles = [ x for x in os.listdir(vmFilesPath) if x.endswith('.ovf') ]
+        ovfFiles = list(archive.iterFileWithExtensions('.ovf'))
         if not ovfFiles:
             raise RuntimeError("No ovf file found")
         if len(ovfFiles) != 1:
             raise RuntimeError("More than one .ovf file found in %s" %
                 vmFilesPath)
-        ovfFilePath = os.path.join(vmFilesPath, ovfFiles[0])
+        ovfFileMember = ovfFiles[0]
+        ovfFileObj = archive.extractfile(ovfFileMember)
+        archive.baseDir = os.path.dirname(ovfFileMember.name)
+
         vmFolder = dataCenter.properties['vmFolder']
         self._msg(job, 'Importing OVF descriptor')
 
@@ -584,7 +586,7 @@ class VMwareClient(baseDriver.BaseDriver):
         msg =  'The object has already been deleted or has not been completely created'
         for i in range(5):
             try:
-                return self._uploadOvf_1(job, ovfFilePath, vmFilesPath, vmName,
+                return self._uploadOvf_1(job, ovfFileObj, archive, vmName,
                     vmFolder, resourcePool, dataStore, network)
             except FaultException, e:
                 if e.fault.string != msg:
@@ -594,9 +596,9 @@ class VMwareClient(baseDriver.BaseDriver):
             # We failed repeatedly. Give up.
             raise
 
-    def _uploadOvf_1(self, job, ovfFilePath, vmFilesPath, vmName, vmFolder,
+    def _uploadOvf_1(self, job, ovfFileObj, archive, vmName, vmFolder,
                      resourcePool, dataStore, network):
-        fileItems, httpNfcLease = self.client.ovfImportStart(ovfFilePath,
+        fileItems, httpNfcLease = self.client.ovfImportStart(ovfFileObj,
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
             dataStore = dataStore, network = network)
         self.client.waitForLeaseReady(httpNfcLease)
@@ -609,17 +611,17 @@ class VMwareClient(baseDriver.BaseDriver):
                 self._msg(job, "Importing OVF: %d%% complete" % pct)
 
         progressUpdate = ProgressUpdate(self.client, httpNfcLease)
-        vmMor = self.client.ovfUpload(httpNfcLease, vmFilesPath, fileItems,
+        vmMor = self.client.ovfUpload(httpNfcLease, archive, fileItems,
             progressUpdate)
         return vmMor
 
-    def _deployByVmx(self, job, vmName, uuid, vmFiles, dataCenter,
+    def _deployByVmx(self, job, vmName, uuid, archive, dataCenter,
                      dataStoreName, host, resourcePool, network,
                      asTemplate = False):
         dataCenterName = dataCenter.properties['name']
         from catalogService.libs import viclient
         vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                             vmFiles,
+                                             archive,
                                              vmName,
                                              dataCenter=dataCenterName,
                                              dataStore=dataStoreName)
@@ -638,6 +640,7 @@ class VMwareClient(baseDriver.BaseDriver):
                      computeResource, resourcePool, vmName, uuid,
                      network, asTemplate=False):
 
+        logger = lambda *x: self._msg(job, *x)
         dc = self.vicfg.getDatacenter(dataCenter)
         dcName = dc.properties['name']
 
@@ -669,22 +672,22 @@ class VMwareClient(baseDriver.BaseDriver):
         # the data store
 
         fileExtensions = [ '.ovf', '.vmx' ]
-        self._msg(job, 'Extracting image')
         try:
-            workdir = self.extractImage(path)
-            self._msg(job, 'Uploading image to VMware')
-            vmFiles, _ = self.findFile(workdir, fileExtensions)
-            if vmFiles is None:
+            archive = self.Archive(path, logger)
+            archive.extract()
+            vmFiles = list(archive.iterFileWithExtensions(fileExtensions))
+            if not vmFiles:
                 raise RuntimeError("No file(s) found: %s" %
                     ', '.join("*%s" % x for x in fileExtensions))
+            self._msg(job, 'Uploading image to VMware')
             if self.client.vmwareVersion >= (4, 0, 0):
                 vmMor = self._deployOvf(job, vmName, uuid,
-                    vmFiles, dc, dataStore=ds,
+                    archive, dc, dataStore=ds,
                     host = host, resourcePool=rp, network = network,
                     asTemplate = asTemplate)
             else:
                 vmMor = self._deployByVmx(job, vmName, uuid,
-                    vmFiles, dc, dataStoreName=dsName,
+                    archive, dc, dataStoreName=dsName,
                     host = host, resourcePool=rp, network = network,
                     asTemplate = asTemplate)
 
@@ -780,7 +783,7 @@ class VMwareClient(baseDriver.BaseDriver):
         from catalogService.libs import viclient
         try:
             self._msg(job, 'Uploading initial configuration')
-            viclient.vmutils._uploadVMFiles(self.client, [ filename ], vmName,
+            viclient.vmutils._uploadVMFiles(self.client, [ file(filename) ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:
             # We use filename below only for the actual name; no need to keep

@@ -76,8 +76,11 @@ def _makeConnection(url, method, headers = None, bodyStream = None,
         return response
 
 def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
-    size = os.stat(inPath).st_size
-    inFile = open(inPath)
+    if hasattr(inPath, 'read'):
+        inFile = inPath
+    else:
+        inFile = open(inPath)
+    size = os.fstat(inFile).st_size
 
     headers = {}
     if session:
@@ -92,21 +95,21 @@ def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
         raise RuntimeError('%s failed' % method)
     response.close()
 
-def uploadVMFiles(v, path, vmName=None, dataCenter=None, dataStore=None):
-    vmx = glob.glob(os.path.join(path, '*.vmx'))
+def uploadVMFiles(v, archive, vmName=None, dataCenter=None, dataStore=None):
+    vmx = list(archive.iterFileWithExtensions(['.vmx']))
     if not vmx:
-        raise RuntimeError('no .vmx file found in %s' %path)
+        raise RuntimeError('no .vmx file found in archive')
     if len(vmx) != 1:
-        raise RuntimeError('more than one .vmx file found in %s' %path)
+        raise RuntimeError('more than one .vmx file found in archive')
 
-    filePaths = [ os.path.join(path, fn) for fn in os.listdir(path) ]
+    fileObjs = [ archive.extractfile(m) for m in archive ]
 
-    _uploadVMFiles(v, filePaths, vmName = vmName,
+    _uploadVMFiles(v, fileObjs, vmName = vmName,
         dataCenter = dataCenter, dataStore = dataStore)
-    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0]))
+    vmx = '[%s]/%s/%s' %(dataStore, vmName, os.path.basename(vmx[0].name))
     return vmx
 
-def _uploadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
+def _uploadVMFiles(v, fileObjs, vmName=None, dataCenter=None, dataStore=None):
     # steal cookies from the binding's cookiejar
     session = v.getSessionUUID()
     urlBase = v.getUrlBase()
@@ -119,9 +122,9 @@ def _uploadVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     if not dataCenter:
         raise RuntimeError('dataCenter currently required')
 
-    for filePath in filePaths:
-        fn = urllib.quote(os.path.basename(filePath))
-        _putFile(filePath, urlPattern.replace('@FILENAME@', fn), session=session)
+    for fileObj in fileObjs:
+        fn = urllib.quote(os.path.basename(fileObj.name))
+        _putFile(fileObj, urlPattern.replace('@FILENAME@', fn), session=session)
 
 def _deleteVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     # steal cookies from the binding's cookiejar

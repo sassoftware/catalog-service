@@ -970,9 +970,10 @@ class VimService(object):
         # nodes
         ovf = OVF(ovfContents)
         return ovf.sanitize()
-    def ovfImportStart(self, ovfFilePath, vmName,
+
+    def ovfImportStart(self, ovfFileObj, vmName,
             vmFolder, resourcePool, dataStore, network):
-        ovfContents = file(ovfFilePath).read()
+        ovfContents = ovfFileObj.read()
         ovfContents = self.sanitizeOvfDescriptor(ovfContents)
         createImportSpecResult = self.createOvfImportSpec(ovfContents, vmName,
             resourcePool, dataStore, network)
@@ -993,21 +994,24 @@ class VimService(object):
             createImportSpecResult.get_element_importSpec())
         return fileItems, httpNfcLease
 
-    def ovfUpload(self, httpNfcLease, downloadDir, fileItems, progressUpdate):
+    def ovfUpload(self, httpNfcLease, archive, fileItems, progressUpdate):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         deviceUrls = httpNfcLeaseInfo.get_element_deviceUrl()
         vmMor = httpNfcLeaseInfo.get_element_entity()
+
+        archiveNameMap = dict((x.name, x) for x in archive)
 
         fileMap = {}
         # Compute total size
         totalSize = 0
         for fileItem in fileItems:
             filePath = fileItem.get_element_path()
-            filePath = os.path.join(downloadDir, filePath)
+            filePathInArchive = os.path.join(archive.baseDir, filePath)
+            member = archiveNameMap[filePathInArchive]
             isCreated = fileItem.get_element_create()
             method = (isCreated and 'PUT') or 'POST'
-            fileSize = os.stat(filePath).st_size
-            fileMap[fileItem.get_element_deviceId()] = (method, filePath, fileSize)
+            fileSize = member.size
+            fileMap[fileItem.get_element_deviceId()] = (method, member, fileSize)
             totalSize += fileSize
 
         progressUpdate.totalSize = totalSize
@@ -1015,11 +1019,12 @@ class VimService(object):
 
         try:
             for deviceUrl in deviceUrls:
-                method, filePath, fileSize = fileMap[deviceUrl.get_element_importKey()]
+                method, member, fileSize = fileMap[deviceUrl.get_element_importKey()]
+                fileObj = archive.extractfile(member)
                 url = deviceUrl.get_element_url()
                 if url.startswith("https://*/"):
                     url = self.baseUrl + url[10:]
-                vmutils._putFile(filePath, url,
+                vmutils._putFile(fileObj, url,
                     session=None, method=method, callback = progressUpdate)
                 progressUpdate.updateSize(fileSize)
             progressUpdate.progress(100, 0)
