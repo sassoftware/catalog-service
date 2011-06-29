@@ -569,7 +569,7 @@ class VMwareClient(baseDriver.BaseDriver):
                      asTemplate = False):
         dataCenterName = dataCenter.properties['name']
         # Grab ovf file
-        ovfFiles = list(archive.iterFileWithExtensions('.ovf'))
+        ovfFiles = list(archive.iterFileWithExtensions(['.ovf']))
         if not ovfFiles:
             raise RuntimeError("No ovf file found")
         if len(ovfFiles) != 1:
