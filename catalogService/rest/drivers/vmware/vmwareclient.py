@@ -573,8 +573,7 @@ class VMwareClient(baseDriver.BaseDriver):
         if not ovfFiles:
             raise RuntimeError("No ovf file found")
         if len(ovfFiles) != 1:
-            raise RuntimeError("More than one .ovf file found in %s" %
-                vmFilesPath)
+            raise RuntimeError("More than one .ovf file found")
         ovfFileMember = ovfFiles[0]
         ovfFileObj = archive.extractfile(ovfFileMember)
         archive.baseDir = os.path.dirname(ovfFileMember.name)

@@ -13,9 +13,6 @@ import urllib
 import urllib2
 import weakref
 
-from conary import conaryclient
-from conary import versions
-from conary.deps import deps
 from conary.lib import magic, util, sha1helper
 
 from catalogService import errors
