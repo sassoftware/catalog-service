@@ -29,7 +29,7 @@ class HTTPSConnection(httplib.HTTPSConnection):
         self.sock.sendall(buf)
 
 def _makeConnection(url, method, headers = None, bodyStream = None,
-        callback = None):
+        bodyLength = None, callback = None):
     protocol, uri = urllib.splittype(url)
     assert(protocol in ('http', 'https'))
     host, selector = urllib.splithost(uri)
@@ -48,10 +48,12 @@ def _makeConnection(url, method, headers = None, bodyStream = None,
 
     hdrs = { 'Content-Type' : 'application/octet-stream'}
     hdrs.update(headers or {})
-    if bodyStream:
+    if bodyStream and bodyLength is None:
         bodyStream.seek(0, 2)
-        hdrs['Content-Length'] = bodyStream.tell()
+        bodyLength = bodyStream.tell()
         bodyStream.seek(0)
+    if bodyLength:
+        hdrs['Content-Length'] = bodyLength
 
     #r.set_debuglevel(1)
     r.connect()
@@ -85,7 +87,7 @@ def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
     headers = {}
     if session:
         headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
-    response = _makeConnection(outUrl, method, headers, inFile,
+    response = _makeConnection(outUrl, method, headers, inFile, bodySize=size,
         callback=callback)
 
     if response and response.status not in (200, 201):
