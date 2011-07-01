@@ -80,7 +80,7 @@ def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
         inFile = inPath
     else:
         inFile = open(inPath)
-    size = os.fstat(inFile).st_size
+    size = os.fstat(inFile.fileno()).st_size
 
     headers = {}
     if session:
