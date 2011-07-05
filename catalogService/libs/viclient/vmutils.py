@@ -87,7 +87,7 @@ def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
     headers = {}
     if session:
         headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
-    response = _makeConnection(outUrl, method, headers, inFile, bodySize=size,
+    response = _makeConnection(outUrl, method, headers, inFile, bodyLength=size,
         callback=callback)
 
     if response and response.status not in (200, 201):
