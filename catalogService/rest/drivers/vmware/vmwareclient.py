@@ -824,16 +824,17 @@ class VMwareClient(baseDriver.BaseDriver):
         progressUpdate.totalSize = totalSize
         progressUpdate.progress(0, 0)
 
+        from catalogService.libs import viclient
         for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
             url = deviceUrl.get_element_url()
 
             fileName = os.path.basename(url)
             destFile = os.path.join(destinationPath, fileName)
 
-            abc = viclient.vmutils._getFile(destFile, url, callback = progressUpdate)
-            if hasattr(abc, '_error'):
+            downloadHandle = viclient.vmutils._getFile(destFile, url, callback = progressUpdate)
+            if hasattr(downloadHandle, '_error'):
                 errors = []
-                for f in abc._error:
+                for f in downloadHandle._error:
                     if hasattr(f, '_localizedMessage'):
                         errors.append(f.LocalizedMessage)
                 raise Exception("Error Exporting: %s" %
