@@ -1083,7 +1083,7 @@ class VimService(object):
             createImportSpecResult.get_element_importSpec())
         return fileItems, httpNfcLease
 
-    def ovfUpload(self, httpNfcLease, downloadDir, fileItems, progressUpdate):
+    def ovfUpload(self, httpNfcLease, archive, fileItems, progressUpdate):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         deviceUrls = httpNfcLeaseInfo.get_element_deviceUrl()
         vmMor = httpNfcLeaseInfo.get_element_entity()
