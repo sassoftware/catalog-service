@@ -137,6 +137,7 @@ class VMwareClient(baseDriver.BaseDriver):
     VimServiceTransport = None
 
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+    OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
@@ -343,22 +344,28 @@ class VMwareClient(baseDriver.BaseDriver):
         if self.client.vmwareVersion < (4, 0, 0):
             # We don't support OVF deployments, so don't even bother
             return mintImages
-        # Prefer ovf 0.9 over plain esx
+        # Prefer ova (ovf 1.0) over ovf 0.9 over plain esx
         mintImagesByBuildId = {}
         for mintImage in mintImages:
-            for fdict in mintImage['files']:
-                # This is a rather lame way to detect ovf builds
-                if fdict.get('fileName', '').endswith('ovf.tar.gz'):
-                    # Keep only the ovf image
-                    mintImage['files'] = [ fdict ]
-                    break
+            files = self._getPreferredOvfImage(mintImage['files'])
+            if files:
+                mintImage['files'] = files
             mintImagesByBuildId[mintImage['buildId']] = mintImage
-        # Finally, prefer OVF 1.0 images
+        # Finally, prefer OVF 1.0 images (unused at the moment)
         imageType = 'VMWARE_OVF_IMAGE'
         for mintImage in self.db.imageMgr.getAllImagesByType(imageType):
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Sort data by build id
         return [ x[1] for x in sorted(mintImagesByBuildId.items()) ]
+
+    @classmethod
+    def _getPreferredOvfImage(cls, files):
+        for suffix in cls.OVF_PREFERRENCE_LIST:
+            for fdict in files:
+                fname = fdict.get('fileName', '')
+                if fname.endswith(suffix):
+                    return [ fdict ]
+        return None
 
     def getCloudAlias(self):
         # FIXME: re-factor this into common code (copied from Xen Ent)
