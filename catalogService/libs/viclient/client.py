@@ -142,7 +142,7 @@ class ProgressUpdate(object):
         return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
 
     def updateSize(self, size):
-        self.prevFilesSize = size
+        self.prevFilesSize += size
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -971,6 +971,95 @@ class VimService(object):
         ovf = OVF(ovfContents)
         return ovf.sanitize()
 
+    def destroyVM(self, vmMor):
+        req = Destroy_TaskRequestMsg()
+        req.set_element__this(vmMor)
+
+        ret = self._service.Destroy_Task(req)
+        task = ret.get_element_returnval()
+        ret = self.waitForTask(task)
+        if ret != 'success':
+            raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
+
+    def ovfExport(self, vmMor, destinationPath):
+        httpNfcLease = self.getOvfExportLease(vmMor)
+        self.waitForLeaseReady(httpNfcLease)
+        httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
+        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
+        ovfFiles = []
+
+        class LProgressUpdate(ProgressUpdate):
+            def progress(slf, bytes, rate=0):
+                ProgressUpdate.progress(slf, bytes, rate=rate)
+                pct = slf._percent(bytes)
+                #vmwareclient.VMwareClient._msg(job, "Exporting OVF: %d%% complete" % pct)
+                print "Exporting OVF: %d%% complete" % pct
+
+        progressUpdate = LProgressUpdate(self._service, httpNfcLease)
+        progressUpdate.totalSize = totalSize
+        progressUpdate.progress(0, 0)
+
+        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
+            url = deviceUrl.get_element_url()
+
+            fileName = os.path.basename(url)
+            destFile = os.path.join(destinationPath, fileName)
+
+            abc=vmutils._getFile(destFile, url, callback = progressUpdate)
+            if hasattr(abc, '_error'):
+                errors = []
+                for f in abc._error:
+                    if hasattr(f, '_localizedMessage'):
+                        errors.append(f.LocalizedMessage)
+                raise Exception("Error Exporting: %s" %
+                    '; '.join(errors))
+                self.leaseComplete(httpNfcLease)
+
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
+
+
+            fileSize = os.stat(destFile).st_size
+
+            ovfFile = ns0.OvfFile_Def('').pyclass()
+            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
+            ovfFile.set_element_size(fileSize)
+            ovfFile.set_element_path(fileName)
+            ovfFiles.append(ovfFile)
+
+            progressUpdate.updateSize(fileSize)
+
+        progressUpdate.progress(100, 0)
+
+        self.leaseComplete(httpNfcLease)
+
+        descr = self.createOvfDescriptor(vmMor, 'vm-name', 'vm-description', ovfFiles)
+        # Write OVF descriptor to disk
+        xmlData = descr.get_element_ovfDescriptor()
+        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
+        file(ovfFilePath, "w").write(xmlData)
+
+    def createOvfDescriptor(self, vmMor, name, description, ovfFiles):
+        req = CreateDescriptorRequestMsg()
+        req.set_element__this(self.getOvfManager())
+        req.set_element_obj(vmMor)
+        req.set_element_cdp(self.createOvfCreateDescriptorParams(
+            name, description, ovfFiles))
+
+        resp = self._service.CreateDescriptor(req)
+        createDescriptorResult = resp.get_element_returnval()
+        return createDescriptorResult
+
+    def createOvfCreateDescriptorParams(self, name, description, ovfFiles,
+            includeImageFiles=False):
+        params = ns0.OvfCreateDescriptorParams_Def('').pyclass()
+        params.set_element_name(name)
+        params.set_element_description(description)
+        params.set_element_ovfFiles(ovfFiles)
+        #params.set_element_includeImageFiles(includeImageFiles)
+
+        return params
+
     def ovfImportStart(self, ovfFileObj, vmName,
             vmFolder, resourcePool, dataStore, network):
         ovfContents = ovfFileObj.read()
@@ -994,7 +1083,7 @@ class VimService(object):
             createImportSpecResult.get_element_importSpec())
         return fileItems, httpNfcLease
 
-    def ovfUpload(self, httpNfcLease, archive, fileItems, progressUpdate):
+    def ovfUpload(self, httpNfcLease, downloadDir, fileItems, progressUpdate):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         deviceUrls = httpNfcLeaseInfo.get_element_deviceUrl()
         vmMor = httpNfcLeaseInfo.get_element_entity()
@@ -1041,6 +1130,7 @@ class VimService(object):
 
         return vmMor
 
+
     def waitForLeaseReady(self, lease):
         ret = self.waitForValues(lease, ['state'],
             [ 'state' ], [ ['ready', 'error'] ])
@@ -1065,6 +1155,7 @@ class VimService(object):
         createImportSpecResult = resp.get_element_returnval()
         return createImportSpecResult
 
+
     def createOvfImportParams(self, parseDescriptorResult, vmName, network):
         params = ns0.OvfCreateImportSpecParams_Def('').pyclass()
         params.set_element_locale('')
@@ -1082,6 +1173,7 @@ class VimService(object):
             params.set_element_networkMapping([ nm ])
         return params
 
+
     def getOvfImportLease(self, resourcePool, vmFolder, importSpec):
         req = ImportVAppRequestMsg()
         req.set_element__this(resourcePool)
@@ -1089,6 +1181,14 @@ class VimService(object):
         req.set_element_folder(vmFolder)
 
         resp = self._service.ImportVApp(req)
+        httpNfcLease = resp.get_element_returnval()
+        return httpNfcLease
+
+    #Marker: 24thMay2011###########################################################################
+    def getOvfExportLease(self, vmMor):
+        req = ExportVmRequestMsg()
+        req.set_element__this(vmMor)
+        resp = self._service.ExportVm(req)
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 
@@ -1250,7 +1350,7 @@ class VimService(object):
         return mor
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
-                dc=None, cr=None, ds=None, rp=None, newuuid=None):
+                dc=None, cr=None, ds=None, rp=None, newuuid=None, template=False):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1273,7 +1373,7 @@ class VimService(object):
         req.set_element_name(name)
 
         cloneSpec = req.new_spec()
-        cloneSpec.set_element_template(False)
+        cloneSpec.set_element_template(template)
         # We do not want to power on the clone just yet, we need to attach its
         # credentials disk
         cloneSpec.set_element_powerOn(False)
