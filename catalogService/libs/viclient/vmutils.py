@@ -80,9 +80,10 @@ def _makeConnection(url, method, headers = None, bodyStream = None,
 def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
     if hasattr(inPath, 'read'):
         inFile = inPath
+       size = inFile.size
     else:
         inFile = open(inPath)
-    size = os.fstat(inFile.fileno()).st_size
+        size = os.fstat(inFile.fileno()).st_size
 
     headers = {}
     if session:
