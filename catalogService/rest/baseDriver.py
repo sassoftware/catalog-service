@@ -1057,10 +1057,15 @@ class Archive(object):
             def size(self):
                 return self.stat.st_size
             @property
+            def _filename(self):
+                return os.path.join(self._topdir, self.name)
+            @property
             def stat(self):
                 if self._stat is None:
-                    self._stat = os.stat(os.path.join(self._topdir, self.name))
+                    self._stat = os.stat(self._filename)
                 return self._stat
+            def read(self, *args, **kwargs):
+                return file(self._filename).read(*args, **kwargs)
 
         def __init__(self, parent, workdir, cmd):
             self.parent = parent
@@ -1078,7 +1083,7 @@ class Archive(object):
                 for fileName in fileNames:
                     yield self.File(os.path.join(reldir, fileName), self.workdir)
         def extractfile(self, member):
-            return file(os.path.join(self.workdir, member.name))
+            return member
 
     class TarArchive(object):
         "A tar file"
