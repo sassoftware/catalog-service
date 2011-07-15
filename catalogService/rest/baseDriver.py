@@ -1034,6 +1034,14 @@ class CatalogJobRunner(rpath_job.BackgroundRunner):
         self.job.status = self.job.STATUS_FAILED
         self.job.commit()
 
+def _wrap_method(methodName):
+    def _method(slf, *args, **kwargs):
+        slf._open()
+        method = getattr(slf._fileobj, methodName)
+        return method(*args, **kwargs)
+    _method.__name__ = methodName
+    return _method
+
 class Archive(object):
     """
     Generic implementation for an archive.
@@ -1041,6 +1049,13 @@ class Archive(object):
     A member has the following properties:
         * name
         * size
+    You can extract a member from the using archive.extractfile(member)
+    The object returned is guaranteed to have:
+        * name
+        * size
+        * read()
+        * seek()
+        * tell()
     """
     class CommandArchive(object):
         """
@@ -1048,11 +1063,12 @@ class Archive(object):
         """
         class File(object):
             "An abstract File object, with name and size"
-            __slots__ = [ 'name', '_stat', '_topdir', ]
+            __slots__ = [ 'name', '_stat', '_topdir', '_fileobj' ]
             def __init__(self, name, topdir):
                 self.name = name
                 self._stat = None
                 self._topdir = topdir
+                self._fileobj = None
             @property
             def size(self):
                 return self.stat.st_size
@@ -1064,18 +1080,30 @@ class Archive(object):
                 if self._stat is None:
                     self._stat = os.stat(self._filename)
                 return self._stat
-            def read(self, *args, **kwargs):
-                return file(self._filename).read(*args, **kwargs)
+            seek = _wrap_method('seek')
+            tell = _wrap_method('tell')
+            read = _wrap_method('read')
+            def close(self):
+                if self._fileobj:
+                    self._fileobj.close()
+                    self._fileobj = None
+            def _open(self):
+                if self._fileobj is None:
+                    self._fileobj = file(self._filename)
+            def _reset(self):
+                self._fileobj = None
 
         def __init__(self, parent, workdir, cmd):
             self.parent = parent
             self.workdir = workdir
             self.cmd = cmd
+
         def run(self):
             self.parent().log("Exploding archive")
             util.mkdirChain(self.workdir)
             p = subprocess.Popen(self.cmd, stderr = file(os.devnull, 'w'))
             p.wait()
+
         def __iter__(self):
             for (dirPath, dirNames, fileNames) in os.walk(self.workdir):
                 # We need to strip out self.workdir from the path
@@ -1083,7 +1111,11 @@ class Archive(object):
                 for fileName in fileNames:
                     yield self.File(os.path.join(reldir, fileName), self.workdir)
         def extractfile(self, member):
-            return member
+            # Instantiate a new member, so we don't mistakenly trip over
+            # ourselves by extracting the same file twice
+            ret = member.__class__(member.name, member._topdir)
+            ret._stat = member._stat
+            return ret
 
     class TarArchive(object):
         "A tar file"
