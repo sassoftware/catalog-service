@@ -1344,14 +1344,17 @@ class OVF(object):
     class _OVFFlavor(object):
         xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
         rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
+        vssdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_VirtualSystemSettingData'
         ovfNs = None
         def __init__(self, doc):
             self.doc = doc
             self.xmlns = doc.nsmap.get(None, None)
 
         @classmethod
-        def addNode(cls, item, name, value):
-            OVF._text(item, name, value, ns=cls.rasdNs)
+        def addNode(cls, item, name, value, ns=None):
+            if ns is None:
+                ns = cls.rasdNs
+            OVF._text(item, name, value, ns=ns)
 
         def tostring(self):
             return etree.tostring(self.doc, encoding = "UTF-8")
@@ -1384,10 +1387,34 @@ class OVF(object):
                 networkName = None
             self._addNetworkFields(item, nextInstanceId, networkName)
 
+        def hasSystemNode(self, hardwareSection):
+            tags = set([OVF._xmltag('System', self.ovfNs)])
+            if self.xmlns is None:
+                # Need to look for an item in the default namespace too
+                tags.add(OVF._xmltag('System', None))
+            for tag in tags:
+                if hardwareSection.find(tag) is not None:
+                    return True
+            return False
+
+        def addSystemNode(self, hardwareSection):
+            name = self.getNameFromOvfId()
+            system = hardwareSection.makeelement(
+                OVF._xmltag("System", self.ovfNs))
+            hardwareSection.insert(1, system)
+            self.addNode(system, "InstanceId", "0", ns=self.vssdNs)
+            self.addNode(system, "VirtualSystemIdentifier", name,
+                ns=self.vssdNs)
+            self.addNode(system, "VirtualSystemType", 'vmx-04', ns=self.vssdNs)
+
     class _OVF_09(_OVFFlavor):
         ovfNs = 'http://www.vmware.com/schema/ovf/1/envelope'
         instanceIdTag = "InstanceId"
         elementNameTag = "Caption"
+
+        def getNameFromOvfId(self):
+            contentNode = self.doc.find(OVF._xmltag('Content', self.xmlns))
+            return OVF._getNodeAttribute(contentNode, 'id', self.ovfNs)
 
         def getNetworkSections(self):
             return OVF._getSectionsByType(self.doc, 'NetworkSection_Type',
@@ -1412,6 +1439,10 @@ class OVF(object):
         ovfNs = 'http://schemas.dmtf.org/ovf/envelope/1'
         instanceIdTag = "InstanceID"
         elementNameTag = "ElementName"
+
+        def getNameFromOvfId(self):
+            vsys = self.doc.find(OVF._xmltag('VirtualSystem', self.ovfNs))
+            return OVF._getNodeAttribute(vsys, 'id', self.ovfNs)
 
         def getNetworkSections(self):
             return self.doc.findall(OVF._xmltag('NetworkSection', self.ovfNs))
@@ -1455,6 +1486,8 @@ class OVF(object):
             return self._ovfContents
 
         hardwareSection = hardwareSection[0]
+        if not self.ovf.hasSystemNode(hardwareSection):
+            self.ovf.addSystemNode(hardwareSection)
 
         # Iterate through all items
         todelete = []
