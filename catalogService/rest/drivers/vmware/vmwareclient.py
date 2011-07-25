@@ -125,11 +125,6 @@ class VMwareClient(baseDriver.BaseDriver):
     cloudType = 'vmware'
     instanceStorageClass = InstanceStorage
 
-    _credNameMap = [
-        ('username', 'username'),
-        ('password', 'password'),
-    ]
-
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
     # transport is mocked out during testing to simulate talking to
@@ -143,10 +138,6 @@ class VMwareClient(baseDriver.BaseDriver):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
         self._virtualMachines = None
-
-    @classmethod
-    def isDriverFunctional(cls):
-        return True
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
@@ -366,11 +357,6 @@ class VMwareClient(baseDriver.BaseDriver):
                 if fname.endswith(suffix):
                     return [ fdict ]
         return None
-
-    def getCloudAlias(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self.getTargetConfiguration()
-        return cloudConfig['alias']
 
     def _buildInstanceList(self, instanceList, instMap):
         instIdSet = set()

@@ -17,19 +17,7 @@ class BaseFields(xmlNode.BaseNodeCollection):
 class BaseCredentials(xmlNode.BaseNode):
     tag = "credentials"
     __slots__ = [ 'fields', 'valid' ]
-
-    def setValid(self, data):
-        self.valid = None
-        if data is None:
-            return self
-        data = xmllib.BooleanNode.toString(data)
-        self.valid = xmllib.GenericNode().setName('valid').characters(data)
-        return self
-
-    def getValid(self):
-        if self.valid is None:
-            return None
-        return xmllib.BooleanNode.fromString(self.valid.getText())
+    _slotTypeMap = dict(valid=bool)
 
 class Handler(xmllib.DataBinder):
     fieldClass = BaseField

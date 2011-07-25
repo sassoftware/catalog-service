@@ -214,11 +214,6 @@ class EucalyptusClient(ec2client.EC2Client):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
-    _credNameMap = [
-        ('publicAccessKeyId', 'publicAccessKeyId'),
-        ('secretAccessKey', 'secretAccessKey'),
-     ]
-
     class Cloud(ec2client.EC2_Cloud):
         _constructorOverrides = {}
     class Image(ec2client.EC2_Image):

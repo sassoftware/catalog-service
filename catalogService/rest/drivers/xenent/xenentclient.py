@@ -228,11 +228,6 @@ class XenEntClient(baseDriver.BaseDriver):
     Image = XenEnt_Image
     cloudType = 'xen-enterprise'
 
-    _credNameMap = [
-        ('username', 'username'),
-        ('password', 'password'),
-    ]
-
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 

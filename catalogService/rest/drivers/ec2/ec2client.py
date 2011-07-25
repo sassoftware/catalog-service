@@ -305,12 +305,6 @@ class EC2Client(baseDriver.BaseDriver):
                 state = 'state',
     )
 
-    _credNameMap = [
-        ('accountId', 'accountId'),
-        ('publicAccessKeyId', 'publicAccessKeyId'),
-        ('secretAccessKey', 'secretAccessKey'),
-     ]
-
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
@@ -549,9 +543,6 @@ class EC2Client(baseDriver.BaseDriver):
     def _getErrorMessage(cls, err):
         fname = hasattr(err, 'error_message') and 'error_message' or 'message'
         return getattr(err, fname)
-
-    def isDriverFunctional(self):
-        return True
 
     def isValidCloudName(self, cloudName):
         if cloudName != 'aws':

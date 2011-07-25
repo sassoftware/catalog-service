@@ -146,6 +146,10 @@ class BaseDriver(object):
         self.cloudName = cloudName
         return bool(self.getTargetConfiguration())
 
+    @classmethod
+    def isDriverFunctional(cls):
+        return True
+
     def __call__(self, request, cloudName=None):
         # This is a bit of a hack - basically, we're turning this class
         # into a factory w/o doing all the work of splitting out
@@ -332,10 +336,13 @@ class BaseDriver(object):
         return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
             self.cloudName, self.userId)
 
-    def drvGetCredentialsFromDescriptor(self, fields):
+    def drvGetCredentialsFromDescriptor(self, descrData):
+        cm = dict(self._credNameMap)
         ret = {}
-        for field, key in self._credNameMap:
-            ret[key] = str(fields.getField(field))
+        for field in descrData.getFields():
+            fieldName = field.getName()
+            key = cm.get(fieldName, fieldName)
+            ret[key] = str(field.getValue())
         return ret
 
     def drvGetCloudClient(self):
@@ -395,7 +402,10 @@ class BaseDriver(object):
         if not cred:
             raise errors.MissingCredentials(status = 404,
                 message = "User credentials not configured")
-        for descrName, localName in self._credNameMap:
+        cm = dict(self._credNameMap)
+        for descrField in descr.getDataFields():
+            descrName = descrField.name
+            localName = cm.get(descrName, descrName)
             descrData.addField(descrName, value = cred[localName])
         descrData.checkConstraints()
         return self._nodeFactory.newCredentialsDescriptorData(descrData)
@@ -1116,6 +1126,105 @@ class Archive(object):
             ret = member.__class__(member.name, member._topdir)
             ret._stat = member._stat
             return ret
+
+    class TarArchive(object):
+        "A tar file"
+        def __init__(self, parent, path):
+            self.parent = parent
+            self.tarfile = tarfile.open(path)
+        def run(self):
+            pass
+        def __iter__(self):
+            return (x for x in self.tarfile if x.isfile())
+        def extractfile(self, member):
+            return self.tarfile.extractfile(member)
+
+    def __init__(self, path, log):
+        self.path = path
+        self.archive = None
+        self.identify()
+        self.log = log
+        # baseDir is a directory to which other paths are relative of
+        self.baseDir = None
+
+    def identify(self):
+        wself = weakref.ref(self)
+        workdir = os.path.join(os.path.dirname(self.path), 'subdir')
+        mg = magic.magic(self.path)
+        cmd = None
+        if isinstance(mg, magic.ZIP):
+            cmd = [ 'unzip', '-d', workdir, self.path ]
+        elif isinstance(mg, magic.tar_gz):
+            cmd = [ 'tar', 'zxSf', self.path, '-C', workdir ]
+        elif isinstance(mg, magic.tar):
+            self.archive = self.TarArchive(wself, self.path)
+        else:
+            raise errors.CatalogError('unsupported rBuilder image archive format')
+        if cmd is not None:
+            self.archive = self.CommandArchive(wself, workdir, cmd)
+
+    def extract(self):
+        return self.archive.run()
+
+    def __iter__(self):
+        return iter(self.archive)
+
+    def extractfile(self, member):
+        return self.archive.extractfile(member)
+
+    def iterFileWithExtensions(self, extensions):
+        for member in self.archive:
+            for extension in extensions:
+                if member.name.endswith(extension):
+                    yield member
+
+BaseDriver.Archive = Archive
+
+class Archive(object):
+    """
+    Generic implementation for an archive.
+    You can iterate over the archive, and you can extract a member of the archive.
+    A member has the following properties:
+        * name
+        * size
+    """
+    class CommandArchive(object):
+        """
+        Archive that needs to be exploded in order to inspect it
+        """
+        class File(object):
+            "An abstract File object, with name and size"
+            __slots__ = [ 'name', '_stat', '_topdir', ]
+            def __init__(self, name, topdir):
+                self.name = name
+                self._stat = None
+                self._topdir = topdir
+            @property
+            def size(self):
+                return self.stat.st_size
+            @property
+            def stat(self):
+                if self._stat is None:
+                    self._stat = os.stat(os.path.join(self._topdir, self.name))
+                return self._stat
+
+        def __init__(self, parent, workdir, cmd):
+            self.parent = parent
+            self.workdir = workdir
+            self.cmd = cmd
+        def run(self):
+            self.parent().log("Exploding archive")
+            util.mkdirChain(self.workdir)
+            p = subprocess.Popen(self.cmd, stderr = file(os.devnull, 'w'))
+            p.wait()
+        def __iter__(self):
+            for (dirPath, dirNames, fileNames) in os.walk(self.workdir):
+                # We need to strip out self.workdir from the path
+                reldir = dirPath[len(self.workdir) + 1:]
+                for fileName in fileNames:
+                    yield self.File(os.path.join(reldir, fileName), self.workdir)
+        def extractfile(self, member):
+            return file(os.path.join(self.workdir, member.name))
 
     class TarArchive(object):
         "A tar file"
