@@ -423,7 +423,7 @@ class VCloudClient(baseDriver.BaseDriver):
             statusCallback=self._statusCallback)
         while 1:
             vapp = cli.refreshVApp(vapp)
-            if vapp.status == Models.Status.Code.POWERED_OFF:
+            if vapp.getStatus() == Models.Status.Code.POWERED_OFF:
                 break
             self._msg(job, "Waiting for powered off status")
             time.sleep(2)
