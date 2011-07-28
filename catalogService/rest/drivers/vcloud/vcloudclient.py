@@ -754,10 +754,10 @@ class RestClient(restclient.Client):
             if e.status != 201:
                 raise
         vapp = Models.handler.parseString(e.contents)
-        self.waitForTask(vapp, [ 'queued' ])
+        self.waitForTask(vapp, [ 'queued' ], callback=callback)
         return vapp
 
-    def waitForTask(self, vapp, inProgressStates):
+    def waitForTask(self, vapp, inProgressStates, callback=None):
         while 1:
             tasks = vapp.getTasks()
             if not tasks or tasks[0].status not in inProgressStates:
