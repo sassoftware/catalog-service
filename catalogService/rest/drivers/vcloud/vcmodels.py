@@ -264,3 +264,44 @@ for k, v in globals().items():
     if v.tag is None:
         continue
     handler.registerType(v, v.tag)
+
+# Statuses don't seem to be defined anywhere in the schema
+class Status(object):
+    """
+    Use like:
+     Status.Code.NOT_CREATED to get the numeric status code
+     Status.Text.NOT_CREATED to get the textual explanation
+    """
+    class __metaclass__(type):
+        def __new__(mcs, name, bases, attrs):
+            class Code(object):
+                pass
+            class Text(object):
+                pass
+            for k, v in attrs.items():
+                if not isinstance(v, tuple):
+                    continue
+                setattr(Code, k, v[0])
+                setattr(Text, k, v[1])
+            obj = type.__new__(mcs, name, bases,
+                dict(Code=Code, Text=Text, __slots__=[]))
+            return obj
+    Code = None
+    Text = None
+    NOT_CREATED = (-1, 'The object could not be created')
+    UNRESOLVED = (0, 'The object is unresolved')
+    RESOLVED = (1, 'The object is resolved')
+    DEPLOYED = (2, 'The object is deployed')
+    SUSPENDED = (3, 'The object is suspended')
+    POWERED_ON = (4, 'The object is powered on')
+    WAITING_FOR_USER_INPUT = (5, 'The object is waiting for user input')
+    UNKNOWN =(6, 'The object is in an unknown state')
+    UNRECOGNIZED = (7, 'The object is in an unrecognized state')
+    POWERED_OFF = (8, 'The object is powered off')
+    INCONSISTENT = (9, 'The object is in an inconsistent state')
+    CHILDREN_INCONSISTENT = (10, 'Children do not all have the same status')
+    UPLOAD_OVF_DESCRIPTOR_PENDING = (11, 'Upload initiated, OVF descriptor pending')
+    UPLOAD_COPYING_CONTENTS = (12, 'Upload initiated, copying contents')
+    UPLOAD_DISK_CONTENTS_PENDING = (13, 'Upload initiated, disk contents pending')
+    UPLOAD_QUARANTIED = (14, 'Upload has been quarantined')
+    UPLOAD_QUARANTINE_EXPIRED = (15, 'Upload quarantine period has expired')

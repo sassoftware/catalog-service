@@ -421,7 +421,12 @@ class VCloudClient(baseDriver.BaseDriver):
         cli.uploadVAppFiles(job, vapp, archive,
             callbackFactory=self._callbackFactory,
             statusCallback=self._statusCallback)
-        vapp = cli.refreshVApp(vapp)
+        while 1:
+            vapp = cli.refreshVApp(vapp)
+            if vapp.status == Models.Status.Code.POWERED_OFF:
+                break
+            self._msg(job, "Waiting for powered off status")
+            time.sleep(2)
         catalogItemsHref = catalog.href + '/catalogItems'
         cli.addVappTemplateToCatalog(name, description, vapp.href,
             catalogItemsHref)
