@@ -273,7 +273,7 @@ class VCloudClient(baseDriver.BaseDriver):
             instanceDescription, dataCenter, vappTemplateRef, network)
 
         try:
-            self._attachCredentials(job, instanceName, vappRef, dataCenter,
+            self._attachCredentials(job, instanceName, vapp, dataCenter,
                 catalog)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
@@ -332,7 +332,7 @@ class VCloudClient(baseDriver.BaseDriver):
         tmpDir = tempfile.mkdtemp(prefix="vcloud-download-")
         try:
             path = self._downloadImage(image, tmpDir, auth = auth)
-        except errors.CatalogError, e:
+        except errors.CatalogError:
             util.rmtree(tmpDir, ignore_errors=True)
             raise
 

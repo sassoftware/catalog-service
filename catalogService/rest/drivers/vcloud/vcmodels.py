@@ -10,21 +10,52 @@ handler = xmlNode.Handler()
 class _BaseNode(xmlNode.BaseNode):
     NS =  "http://www.vmware.com/vcloud/v1"
     StrictOrdering = True
+    __slots__ = []
+    _slotAttributes = set()
+    _slotTypeMap = dict()
     def _getLocalNamespaces(self):
         return { None : self.NS }
     def getId(self):
         return ""
 
-class VAppTemplateParams(_BaseNode):
-    tag = 'UploadVAppTemplateParams'
-    __slots__ = [ 'name', 'Description', 'manifestRequired' ]
-    _slotAttributes = set([ 'name', 'manifestRequired' ])
-    _slotTypeMap = dict(manifestRequired=bool)
+    @classmethod
+    def _inherit(cls, baseClass, attributes=None, elements=None):
+        slots = baseClass.__slots__[:]
+        slotAttributes = set(baseClass._slotAttributes)
+        slotTypeMap = dict(baseClass._slotTypeMap)
+        if attributes is None:
+            attributes = {}
+        elif isinstance(attributes, list):
+            attributes = dict((x, None) for x in attributes)
+        for attName, attType in attributes.items():
+            slots.append(attName)
+            slotAttributes.add(attName)
+            if attType is not None:
+                slotTypeMap[attName] = attType
+        for element in elements or []:
+            if isinstance(element, basestring):
+                elementName = element
+                element = None
+            else:
+                if isinstance(element, tuple):
+                    elementName, element = element
+                else:
+                    elementName = element.tag
+            slots.append(elementName)
+            if element is not None:
+                slotTypeMap[elementName] = element
+        return slots, slotAttributes, slotTypeMap
 
-class Link(_BaseNode):
+class _ReferenceType(_BaseNode):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['type', 'name', 'href', ])
+
+class _LinkType(_ReferenceType):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ReferenceType,
+        attributes=['rel'])
+
+class Link(_LinkType):
     tag = 'Link'
-    __slots__ = ['rel', 'type', 'href', 'name', ]
-    _slotAttributes = set([ 'rel', 'type', 'href', 'name', ])
     multiple = True
 
     def _asTuple(self):
@@ -36,11 +67,27 @@ class Link(_BaseNode):
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self._asTuple() == other._asTuple()
 
-class File(_BaseNode):
+class _ResourceType(_BaseNode):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['href', 'type'], elements=[Link])
+
+class Tasks(xmlNode.BaseNodeCollection):
+    tag = "Tasks"
+
+class _EntityType(_ResourceType):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceType,
+        attributes=['name'], elements=['Description', Tasks])
+
+class VAppTemplateParams(_BaseNode):
+    tag = 'UploadVAppTemplateParams'
+    __slots__ = [ 'name', 'Description', 'manifestRequired' ]
+    _slotAttributes = set([ 'name', 'manifestRequired' ])
+    _slotTypeMap = dict(manifestRequired=bool)
+
+class File(_EntityType):
     tag = 'File'
-    __slots__ = [ 'size', 'bytesTransferred', 'Link', 'name', 'checksum', ]
-    _slotAttributes = set([ 'size', 'bytesTransferred', 'name', 'checksum', ])
-    _slotTypeMap = dict(size=int, bytesTransferred=int, Link=Link)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        attributes=dict(size=int, bytesTransferred=int, checksum=None))
 
 class Files(xmlNode.BaseNodeCollection):
     tag = 'Files'
@@ -50,44 +97,32 @@ class Error(_BaseNode):
     __slots__ = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
     _slotAttributes = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
 
+class Owner(_ReferenceType):
+    tag = 'Owner'
+
 class Task(_BaseNode):
     tag = 'Task'
-    __slots__ = [ 'status', 'operation', 'type', 'href', 'Error',
-        'startTime', 'endTime', 'expiryTime', ]
-    _slotAttributes = [ 'status', 'operation', 'type', 'href', 'startTime',
-        'endTime', 'expiryTime', ]
-    _slotTypeMap = dict(Error=Error)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceType,
+        attributes=['status', 'operation', 'startTime', 'endTime',
+            'expiryTime',],
+        elements = [ Error, Owner, ])
 
-class Tasks(xmlNode.BaseNodeCollection):
-    tag = "Tasks"
-
-class _ResourceEntityType(_BaseNode):
-    __slots__ = [ 'href', 'status', 'name', 'type', 'Description', 'Tasks', ]
-    _slotAttributes = set([ 'href', 'status', 'name', 'type', ])
-    _slotTypeMap = dict(status=int, Tasks=Tasks)
+class _ResourceEntityType(_EntityType):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        attributes=dict(status=int), elements=[Files])
 
 class VAppTemplate(_ResourceEntityType):
     tag = 'VAppTemplate'
-    __slots__ = _ResourceEntityType.__slots__ + [ 'Files', 'ovfDescriptorUploaded', ]
-    _slotAttributes = _ResourceEntityType._slotAttributes.union([
-        'ovfDescriptorUploaded', ])
-    _slotTypeMap = dict(_ResourceEntityType._slotTypeMap)
-    _slotTypeMap.update(ovfDescriptorUploaded=bool, Files=Files)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceEntityType,
+        attributes=dict(ovfDescriptorUploaded=bool), elements=['Children'])
 
 class Media(_ResourceEntityType):
     tag = 'Media'
-    __slots__ = _ResourceEntityType.__slots__ + [ 'imageType', 'size', ]
-    _slotAttributes = _ResourceEntityType._slotAttributes.union([
-        'imageType', 'size', ])
-    _slotTypeMap = dict(_ResourceEntityType._slotTypeMap)
-    _slotTypeMap.update(size=int)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceEntityType,
+        attributes=dict(size=int, imageType=None))
 
 class ResourceEntity(_ResourceEntityType):
     tag = 'ResourceEntity'
-
-class ReferenceType(_BaseNode):
-    __slots__ = [ 'type', 'name', 'href', ]
-    _slotAttributes = set([ 'type', 'name', 'href', ])
 
 class ResourceEntities(xmlNode.BaseNodeCollection):
     tag = "ResourceEntities"
@@ -95,43 +130,44 @@ class ResourceEntities(xmlNode.BaseNodeCollection):
 class AvailableNetworks(xmlNode.BaseNodeCollection):
     tag = 'AvailableNetworks'
 
-class AvailableNetwork(ReferenceType):
+class AvailableNetwork(_ReferenceType):
     tag = 'Network'
 
-class VDC(_BaseNode):
+class VDC(_EntityType):
     tag = "Vdc"
-    __slots__ = ['name', 'type', 'href', 'status', 'ResourceEntities',
-        'AvailableNetworks', 'VmQuota', 'Link', 'IsEnabled', ]
-    _slotAttributes = set([ 'name', 'type', 'href', 'status', ])
-    _slotTypeMap = dict(VmQuota=int, ResourceEntities=ResourceEntities,
-        Link=Link, AvailableNetworks=AvailableNetworks, IsEnabled=bool)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        attributes=dict(status=int),
+        elements=[ResourceEntities, AvailableNetworks,
+            ('NicQuota', int), ('NetworkQuota', int), ('VmQuota', int),
+            ('IsEnabled', bool), ])
 
-class Org(_BaseNode):
+class Org(_EntityType):
     tag = 'Org'
-    __slots__ = [ 'name', 'type', 'href', 'Description', 'FullName', 'Link', ]
-    _slotAttributes = set([ 'name', 'type', 'href', ])
-    _slotTypeMap = dict(Link=Link, )
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        elements = ['FullName'])
 
-class Entity(_BaseNode):
+class Entity(_ReferenceType):
     tag = 'Entity'
-    __slots__ = [ 'href' ]
-    _slotAttributes = set([ 'href' ])
 
-class CatalogItem(_BaseNode):
+class _PropertyType(_BaseNode):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['name'])
+
+class Property(_PropertyType):
+    tag = 'Property'
+
+class CatalogItem(_EntityType):
     tag = 'CatalogItem'
-    __slots__ = [ 'name', 'type', 'href', 'Link', 'Entity', 'Description', ]
-    _slotAttributes = set([ 'name', 'type', 'href', ])
-    _slotTypeMap = dict(Link=Link, Entity=Entity)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        elements=[Entity, Property])
 
 class CatalogItems(xmlNode.BaseNodeCollection):
     tag = 'CatalogItems'
 
-class Catalog(_BaseNode):
+class Catalog(_EntityType):
     tag = 'Catalog'
-    __slots__ = [ 'name', 'type', 'href', 'Description', 'IsPublished',
-        'CatalogItems', ]
-    _slotAttributes = set([ 'name', 'type', 'href', ])
-    _slotTypeMap = dict(IsPublished=bool, Link=Link, CatalogItems=CatalogItems)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_EntityType,
+        elements=[CatalogItems, ('IsPublished', bool)])
 
 class IpScope(_BaseNode):
     tag = 'IpScope'
@@ -143,7 +179,7 @@ class NetworkFeatures(_BaseNode):
     tag = 'NetworkFeatures'
     __slots__ = ['DhcpService', 'FirewallService', 'NatService', ]
 
-class ParentNetwork(ReferenceType):
+class ParentNetwork(_ReferenceType):
     tag = 'ParentNetwork'
 
 class OVFInfo(_BaseNode):
@@ -182,8 +218,11 @@ class InstantiationParams(_BaseNode):
     __slots__ = ['NetworkConfigSection', ]
     _slotTypeMap = dict(NetworkConfigSection=NetworkConfigSection)
 
-class Source(ReferenceType):
+class Source(_ReferenceType):
     tag = 'Source'
+
+class VAppParent(_ReferenceType):
+    tag = 'VAppParent'
 
 class InstantiateVAppTemplateParams(_BaseNode):
     tag = 'InstantiateVAppTemplateParams'
@@ -191,7 +230,7 @@ class InstantiateVAppTemplateParams(_BaseNode):
         'VAppParent', 'InstantiationParams', 'Source', 'IsSourceDelete',
         'linkedClone', ]
     _slotAttributes = set(['name', 'deploy', 'powerOn',])
-    _slotTypeMap = dict(deploy=bool, powerOn=bool, VAppParent=ReferenceType,
+    _slotTypeMap = dict(deploy=bool, powerOn=bool, VAppParent=VAppParent,
         InstantiationParams=InstantiationParams,
         linkedClone=bool, IsSourceDelete=bool, Source=Source)
 
@@ -200,21 +239,21 @@ class Children(_BaseNode):
     __slots__ = ['VApp']
     _slotTypeMap = dict()
 
+# Resolve circular reference
+VAppTemplate._slotTypeMap.update(Children=Children)
+
 class AbstractVApp(_ResourceEntityType):
-    __slots__ = _ResourceEntityType.__slots__ + [
-        'VAppParent', 'NetworkSection', 'deployed', ]
-    _slotAttributes = _ResourceEntityType._slotAttributes.union(['deployed'])
-    _slotTypeMap = _ResourceEntityType._slotTypeMap.copy()
-    _slotTypeMap.update(deployed=bool)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceEntityType,
+        elements=['VAppParent', 'NetworkSection', ('deployed', bool)])
 
 class VApp(AbstractVApp):
     tag = 'VApp'
     multiple = True
-    __slots__ = AbstractVApp.__slots__ + [ 'Children', 'ovfDescriptorUploaded', ]
-    _slotAttributes = AbstractVApp._slotAttributes.union(['ovfDescriptorUploaded'])
-    _slotTypeMap = AbstractVApp._slotTypeMap.copy()
-    _slotTypeMap.update(Children=Children)
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(AbstractVApp,
+        attributes=dict(ovfDescriptorUploaded=bool),
+        elements=[Children])
 
+# Resolve circular reference
 Children._slotTypeMap.update(VApp=VApp)
 
 for k, v in globals().items():
