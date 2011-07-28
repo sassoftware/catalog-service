@@ -155,24 +155,24 @@ class VCloudClient(baseDriver.BaseDriver):
         self.drvLaunchDescriptorCommonFields(descr)
 
         client = self.client
-        dataCenters = [
-            descr.ValueWithDescription(item[1], descriptions=item[0])
-                for item in sorted((x.name, self._id(x.href, 'vdc'))
-                    for x in client.iterVdcs()) ]
+        vdcs = list(client.iterVdcs())
+        dataCenters = []
+        networksMap = {}
+        # self._id makes the resulting reference a bit more explicit,
+        # but we need to map networks based on it too
+        for vdc in vdcs:
+            vdcKey = self._id(vdc.href, 'vdc')
+            dataCenters.append(
+                descr.ValueWithDescription(vdcKey, descriptions=vdc.name))
+            nm = networksMap[vdcKey] = []
+            for network in client.iterNetworksForVdc(vdc):
+                nwKey = self._id(network.href, 'network')
+                nm.append(descr.ValueWithDescription(nwKey,
+                    descriptions=network.name))
         catalogs = [
             descr.ValueWithDescription(item[1], descriptions=item[0])
                 for item in sorted((x.name, self._id(x.href, 'catalog'))
                     for x in client.iterCatalogs()) ]
-        descr.addDataField('dataCenter',
-                           descriptions = 'Data Center',
-                           required = True,
-                           help = [
-                               ('launch/dataCenter.html', None)
-                           ],
-                           type = descr.EnumeratedType(dataCenters),
-                           default=dataCenters[0].key,
-                           readonly=True,
-                           )
         descr.addDataField('catalog',
                            descriptions = 'Catalog',
                            required = True,
@@ -183,6 +183,32 @@ class VCloudClient(baseDriver.BaseDriver):
                            default=catalogs[0].key,
                            readonly=True,
                            )
+        descr.addDataField('dataCenter',
+                           descriptions = 'Data Center',
+                           required = True,
+                           help = [
+                               ('launch/dataCenter.html', None)
+                           ],
+                           type = descr.EnumeratedType(dataCenters),
+                           default=dataCenters[0].key,
+                           readonly=True,
+                           )
+        for vdcKey, networks in networksMap.items():
+            networkKey = 'network-' + vdcKey
+            descr.addDataField(networkKey,
+                               descriptions = 'Network',
+                               required = True,
+                               help = [
+                                   ('launch/network.html', None)
+                               ],
+                               type = descr.EnumeratedType(networks),
+                               default=networks[0].key,
+                               readonly=True,
+                               conditional = descr.Conditional(
+                                    fieldName='dataCenter',
+                                    operator='eq',
+                                    fieldValue=vdcKey)
+                               )
         return descr
 
     def getImagesFromTarget(self, imageIds):
@@ -226,12 +252,14 @@ class VCloudClient(baseDriver.BaseDriver):
         instanceDescription = ppop('instanceDescription')
         dataCenterRef = ppop('dataCenter')
         catalogRef = ppop('catalog')
+        networkRef = ppop('network-%s' % dataCenterRef)
 
         vappTemplateName = 'vapp-template-' + image.getBaseFileName()
         vappTemplateDescription = vappTemplateName
 
         dataCenter = self._getVdc(dataCenterRef)
         catalog = self._getCatalog(catalogRef)
+        network = self._getNetworkFromVdc(dataCenter, networkRef)
 
         if not image.getIsDeployed():
             vappTemplateRef = self._deployImage(job, image, auth,
@@ -241,8 +269,8 @@ class VCloudClient(baseDriver.BaseDriver):
             # images should be marked as deployed for ESX targets
             vappTemplateRef = getattr(image, 'opaqueId')
 
-        vappRef = self._deployVApp(job, vappTemplateRef,
-            instanceName, instanceDescription)
+        vapp = self._instantiateVAppTemplate(job, instanceName,
+            instanceDescription, dataCenter, vappTemplateRef, network)
 
         try:
             self._attachCredentials(job, instanceName, vappRef, dataCenter,
@@ -250,9 +278,9 @@ class VCloudClient(baseDriver.BaseDriver):
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
         self._msg(job, 'Launching')
-        self._startVApp(vappRef)
+        self._startVApp(vapp)
         self._msg(job, 'Instance launched')
-        return vappRef
+        return self._idFromHref(vapp.href)
 
     def _getMintImagesByType(self, imageType):
         # start with the most general build type
@@ -276,11 +304,15 @@ class VCloudClient(baseDriver.BaseDriver):
                     return [ fdict ]
         return None
 
-    def _getVdc(self, dataCenterRef):
-        return self._getResourceRef(dataCenterRef, self.client._vdcs)
+    def _getVdc(self, ref):
+        return self._getResourceRef(ref, self.client._vdcs)
 
-    def _getCatalog(self, catalogRef):
-        return self._getResourceRef(catalogRef, self.client._catalogs)
+    def _getCatalog(self, ref):
+        return self._getResourceRef(ref, self.client._catalogs)
+
+    def _getNetworkFromVdc(self, vdc, ref):
+        networks = self.client.iterNetworksForVdc(vdc)
+        return self._getResourceRef(ref, networks)
 
     def _getResourceRef(self, longRef, resourceIter):
         # Take out the leading vdc- or catalog- part
@@ -325,8 +357,14 @@ class VCloudClient(baseDriver.BaseDriver):
     def _findUniqueName(self, catalog, vappTemplateName):
         return vappTemplateName
 
-    def _deployVApp(self, job, vappTemplateRef, vappName, vappDescription):
-        pass
+    def _instantiateVAppTemplate(self, job, vappName, vappDescription,
+            vdc, vappTemplateRef, network, callback=None):
+        if callback is None:
+            callback = lambda: self._msg(job, "Waiting for task to finish")
+        cli = self.client
+        vappRef = cli.instantiateVAppTemplate(vappName, vappDescription,
+            vdc.href, vappTemplateRef, network.href, callback=callback)
+        return vappRef
 
     def _startVApp(self, vappRef):
         pass
@@ -377,13 +415,13 @@ class VCloudClient(baseDriver.BaseDriver):
         cli.waitForOvfDescriptorUpload(job, vapp, self._msg)
 
         # Refresh vapp, to notice that the ovf file was already uploaded
-        vapp = cli.refreshVapp(vapp)
+        vapp = cli.refreshVApp(vapp)
         # Upload the rest of files
         self._refreshLastCalled = 0
         cli.uploadVAppFiles(job, vapp, archive,
             callbackFactory=self._callbackFactory,
             statusCallback=self._statusCallback)
-        vapp = cli.refreshVapp(vapp)
+        vapp = cli.refreshVApp(vapp)
         catalogItemsHref = catalog.href + '/catalogItems'
         cli.addVappTemplateToCatalog(name, description, vapp.href,
             catalogItemsHref)
@@ -412,7 +450,7 @@ class VCloudClient(baseDriver.BaseDriver):
         return vcTransferred, vcTot
 
     def _getUpstreamUploadStatus(self, vapp, url):
-        vapp = self.client.refreshVapp(vapp)
+        vapp = self.client.refreshVApp(vapp)
         if not vapp.Files:
             return None, None
         for fobj in vapp.Files:
@@ -431,6 +469,8 @@ class RestClient(restclient.Client):
         vAppTemplate = "application/vnd.vmware.vcloud.vAppTemplate+xml"
         catalogItem = "application/vnd.vmware.vcloud.catalogItem+xml"
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
+        instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
+        network = "application/vnd.vmware.vcloud.network+xml"
 
     def connect(self):
         try:
@@ -476,8 +516,16 @@ class RestClient(restclient.Client):
         org = Models.handler.parseString(data)
         self._catalogs = set(x for x in org.Link
             if x.getType() == self.TYPES.catalog)
-        self._vdcs = set(x for x in org.Link
-            if x.getType() == self.TYPES.vdc)
+        # Some of the VDCs may be disabled, so we ignore those
+        self._vdcs = []
+        vdcLinks = [ x for x in org.Link if x.getType() == self.TYPES.vdc ]
+        self._networkMap = {}
+        for vdcLink in vdcLinks:
+            vdc = self.browseVdc(vdcLink)
+            if not vdc.getIsEnabled():
+                continue
+            self._vdcs.append(vdcLink)
+            self._networkMap[vdcLink] = [ x for x in vdc.AvailableNetworks ]
 
     @classmethod
     def _buildXpath(cls, tree, path, attribute, **conditions):
@@ -525,6 +573,28 @@ class RestClient(restclient.Client):
     def iterVdcs(self):
         return iter(self._vdcs)
 
+    def iterNetworksForVdc(self, vdc):
+        return iter(self._networkMap[vdc])
+
+    def getNetworkByName(self, name):
+        for vdc, networks in self._networkMap.items():
+            for network in networks:
+                if network.name == name:
+                    return network
+        return None
+
+    def getVdcByName(self, name):
+        for vdc in self._vdcs:
+            if vdc.name == name:
+                return vdc
+        return None
+
+    def getCatalogByName(self, name):
+        for catalog in self._catalogs:
+            if catalog.name == name:
+                return catalog
+        return None
+
     def browseCatalog(self, link):
         self.path = self._pathFromUrl(link.href)
         self.connect()
@@ -564,7 +634,7 @@ class RestClient(restclient.Client):
 
     def waitForOvfDescriptorUpload(self, job, vapp, _msg):
         for i in range(10):
-            vapp = self.refreshVapp(vapp)
+            vapp = self.refreshVApp(vapp)
             if vapp.Tasks and vapp.Tasks[0].status == "error":
                 _msg(job, "Error uploading vApp template: %s" %
                     vapp.Tasks[0].Error.message)
@@ -577,7 +647,7 @@ class RestClient(restclient.Client):
         else:
             raise RuntimeError("Timeout waiting for OVF descriptor to be processed")
 
-    def refreshVapp(self, vapp):
+    def refreshVApp(self, vapp):
         self.path = self._pathFromUrl(vapp.href)
         self.connect()
         resp = self.request("GET")
@@ -643,6 +713,59 @@ class RestClient(restclient.Client):
                 raise
         catalogItem = Models.handler.parseString(e.contents)
         return catalogItem
+
+    def instantiateVAppTemplate(self, name, description,
+            vdcRef, vappTemplateRef, networkRef, callback=None):
+        m = Models.InstantiateVAppTemplateParams(Description=description)
+        m.name = name
+        m.setDeploy(True)
+        m.setPowerOn(False)
+
+        source = Models.Source(href=vappTemplateRef)
+        m.setSource(source)
+
+        iparams = Models.InstantiationParams()
+        m.setInstantiationParams(iparams)
+
+        nwsect = Models.NetworkConfigSection()
+        iparams.setNetworkConfigSection(nwsect)
+
+        info = Models.OVFInfo("Configuration parameters for logical networks")
+        nwsect.setInfo(info)
+
+        nwconf = Models.NetworkConfig(networkName='Network Name')
+        nwsect.setNetworkConfig(nwconf)
+
+        nwc = Models.NetworkConfiguration()
+        nwconf.setConfiguration(nwc)
+
+        pnet = Models.ParentNetwork(href=networkRef)
+        nwc.setParentNetwork(pnet)
+        nwc.setFenceMode('bridged')
+
+        body = Models.handler.toXml(m)
+        self.path = "%s/action/instantiateVAppTemplate" % self._pathFromUrl(vdcRef)
+        self.connect()
+        headers = { 'Content-Type' : self.TYPES.instantiateVAppTemplateParams}
+
+        try:
+            self.request("POST", body=body, headers=headers)
+        except restclient.ResponseError, e:
+            if e.status != 201:
+                raise
+        vapp = Models.handler.parseString(e.contents)
+        self.waitForTask(vapp, [ 'queued' ])
+        return vapp
+
+    def waitForTask(self, vapp, inProgressStates):
+        while 1:
+            tasks = vapp.getTasks()
+            if not tasks or tasks[0].status not in inProgressStates:
+                return vapp
+            if callback:
+                callback()
+            time.sleep(2)
+            vapp = self.refreshVApp(vapp)
 
     def deleteEntity(self, entity):
         self.path = self._pathFromUrl(entity.href)

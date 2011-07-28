@@ -53,7 +53,14 @@ class BaseNode(xmllib.BaseNode):
 
     def _iterChildren(self):
         sublementsFound = False
-        for fName in sorted(set(self.__slots__)):
+        # Sometimes it's important to preserve the order in the slots
+        strictOrdering = getattr(self.__class__, 'StrictOrdering', False)
+        if strictOrdering:
+            iterator = iter(self.__slots__)
+        else:
+            iterator = sorted(set(self.__slots__))
+
+        for fName in iterator:
             if fName.startswith('_'):
                 continue
             if fName in self._slotAttributes:
@@ -127,11 +134,17 @@ class BaseNode(xmllib.BaseNode):
             # Attributes are strings
             setattr(self, key, str(value))
             return self
-        if hasattr(value, 'getElementTree') and value._getName() == key:
-            # This catches the case where we have a list defined as one of the
-            # sub-nodes for this object
-            setattr(self, key, value)
-            return self
+        if hasattr(value, 'getElementTree'):
+            # The way we're storing data as children of a node breaks if we
+            # use the same tag from different namespaces. We're not there
+            tagName = value._getName()
+            if tagName.startswith('{'):
+                tagName = tagName.split('}', 1)[1]
+            if tagName == key:
+                # This catches the case where we have a list defined as one of
+                # the sub-nodes for this object
+                setattr(self, key, value)
+                return self
         if slotType == bool or isinstance(slotType, xmllib.BooleanNode):
             cls = xmllib.BooleanNode
             value = cls.toString(value)
