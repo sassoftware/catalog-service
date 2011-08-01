@@ -238,12 +238,16 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
-        uqInstList = sorted(set(self._iterVms()))
+        if instanceIds is None:
+            idFilter = None
+        else:
+            idFilter = set(instanceIds)
+        uqInstList = sorted(set(self._iterVms(idFilter=idFilter)))
         instanceList = instances.BaseInstances()
         for instanceId, (vapp, vm) in uqInstList:
             inst = self._newInstance(instanceId, vm, cloudAlias)
             instanceList.append(inst)
-        return self.filterInstances(instanceIds, instanceList)
+        return instanceList
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
