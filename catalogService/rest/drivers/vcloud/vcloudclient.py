@@ -368,7 +368,7 @@ class VCloudClient(baseDriver.BaseDriver):
         return vappRef
 
     def _startVApp(self, vappRef):
-        vapp = self.client.refreshVApp(vappRef)
+        vapp = self.client.refreshResource(vappRef)
         return vapp
 
     def _iterResourceEntities(self, resourceEntityType):
@@ -384,7 +384,7 @@ class VCloudClient(baseDriver.BaseDriver):
     def _iterVms(self, idFilter=None):
         cli = self.client
         for _, vapp in self._iterResourceEntities(RestClient.TYPES.vApp):
-            vapp = cli.refreshVApp(vapp)
+            vapp = cli.refreshResource(vapp)
             for id_, vm in self._iterVmsInVapp(vapp, idFilter=idFilter):
                 yield id_, (vapp, vm)
 
@@ -434,14 +434,14 @@ class VCloudClient(baseDriver.BaseDriver):
         cli.waitForOvfDescriptorUpload(job, vapp, self._msg)
 
         # Refresh vapp, to notice that the ovf file was already uploaded
-        vapp = cli.refreshVApp(vapp)
+        vapp = cli.refreshResource(vapp)
         # Upload the rest of files
         self._refreshLastCalled = 0
         cli.uploadVAppFiles(job, vapp, archive,
             callbackFactory=self._callbackFactory,
             statusCallback=self._statusCallback)
         while 1:
-            vapp = cli.refreshVApp(vapp)
+            vapp = cli.refreshResource(vapp)
             if vapp.getStatus() == Models.Status.Code.POWERED_OFF:
                 break
             self._msg(job, "Waiting for powered off status")
@@ -474,7 +474,7 @@ class VCloudClient(baseDriver.BaseDriver):
         return vcTransferred, vcTot
 
     def _getUpstreamUploadStatus(self, vapp, url):
-        vapp = self.client.refreshVApp(vapp)
+        vapp = self.client.refreshResource(vapp)
         if not vapp.Files:
             return None, None
         for fobj in vapp.Files:
@@ -662,7 +662,7 @@ class RestClient(restclient.Client):
 
     def waitForOvfDescriptorUpload(self, job, vapp, _msg):
         for i in range(10):
-            vapp = self.refreshVApp(vapp)
+            vapp = self.refreshResource(vapp)
             if vapp.Tasks and vapp.Tasks[0].status == "error":
                 _msg(job, "Error uploading vApp template: %s" %
                     vapp.Tasks[0].Error.message)
@@ -675,7 +675,7 @@ class RestClient(restclient.Client):
         else:
             raise RuntimeError("Timeout waiting for OVF descriptor to be processed")
 
-    def refreshVApp(self, vapp):
+    def refreshResource(self, vapp):
         self.path = self._pathFromUrl(vapp.href)
         self.connect()
         resp = self.request("GET")
@@ -793,7 +793,7 @@ class RestClient(restclient.Client):
             if callback:
                 callback()
             time.sleep(2)
-            vapp = self.refreshVApp(vapp)
+            vapp = self.refreshResource(vapp)
 
     def deleteEntity(self, entity):
         self.path = self._pathFromUrl(entity.href)
