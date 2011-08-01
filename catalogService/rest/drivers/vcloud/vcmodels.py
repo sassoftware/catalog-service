@@ -236,7 +236,7 @@ class InstantiateVAppTemplateParams(_BaseNode):
 
 class Children(_BaseNode):
     tag = 'Children'
-    __slots__ = ['VApp']
+    __slots__ = ['VApp', 'Vm', ]
     _slotTypeMap = dict()
 
 # Resolve circular reference
@@ -253,8 +253,14 @@ class VApp(AbstractVApp):
         attributes=dict(ovfDescriptorUploaded=bool),
         elements=[Children])
 
+class Vm(AbstractVApp):
+    tag = 'Vm'
+    multiple = True
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(AbstractVApp,
+        elements=['VAppScopedLocalId', ])
+
 # Resolve circular reference
-Children._slotTypeMap.update(VApp=VApp)
+Children._slotTypeMap.update(VApp=VApp, Vm=Vm)
 
 for k, v in globals().items():
     if k.startswith('_') or not inspect.isclass(v):
@@ -270,38 +276,47 @@ class Status(object):
     """
     Use like:
      Status.Code.NOT_CREATED to get the numeric status code
-     Status.Text.NOT_CREATED to get the textual explanation
+     Status.Text.state[Status.Code.NOT_CREATED] to get the state name for this status
+     Status.Text.description[Status.Code.NOT_CREATED] to get the textual explanation
     """
     class __metaclass__(type):
         def __new__(mcs, name, bases, attrs):
             class Code(object):
-                pass
+                map = {}
             class Text(object):
-                pass
+                id = {}
+                state = {}
+                description = {}
             for k, v in attrs.items():
                 if not isinstance(v, tuple):
                     continue
                 setattr(Code, k, v[0])
-                setattr(Text, k, v[1])
+                Text.id[v[0]] = k
+                Text.description[v[0]] = v[1]
+                Text.state[v[0]] = v[2]
+                # Map the integer to a constant
+                Code.map[v[0]] = k
             obj = type.__new__(mcs, name, bases,
                 dict(Code=Code, Text=Text, __slots__=[]))
             return obj
     Code = None
     Text = None
-    NOT_CREATED = (-1, 'The object could not be created')
-    UNRESOLVED = (0, 'The object is unresolved')
-    RESOLVED = (1, 'The object is resolved')
-    DEPLOYED = (2, 'The object is deployed')
-    SUSPENDED = (3, 'The object is suspended')
-    POWERED_ON = (4, 'The object is powered on')
-    WAITING_FOR_USER_INPUT = (5, 'The object is waiting for user input')
-    UNKNOWN =(6, 'The object is in an unknown state')
-    UNRECOGNIZED = (7, 'The object is in an unrecognized state')
-    POWERED_OFF = (8, 'The object is powered off')
-    INCONSISTENT = (9, 'The object is in an inconsistent state')
-    CHILDREN_INCONSISTENT = (10, 'Children do not all have the same status')
-    UPLOAD_OVF_DESCRIPTOR_PENDING = (11, 'Upload initiated, OVF descriptor pending')
-    UPLOAD_COPYING_CONTENTS = (12, 'Upload initiated, copying contents')
-    UPLOAD_DISK_CONTENTS_PENDING = (13, 'Upload initiated, disk contents pending')
-    UPLOAD_QUARANTIED = (14, 'Upload has been quarantined')
-    UPLOAD_QUARANTINE_EXPIRED = (15, 'Upload quarantine period has expired')
+    # The third element in the tuple should be a mapping to the states
+    # catalog-service knows about.
+    NOT_CREATED = (-1, 'The object could not be created', 'pending')
+    UNRESOLVED = (0, 'The object is unresolved', 'pending')
+    RESOLVED = (1, 'The object is resolved', 'resolved')
+    DEPLOYED = (2, 'The object is deployed', 'deployed')
+    SUSPENDED = (3, 'The object is suspended', 'suspended')
+    POWERED_ON = (4, 'The object is powered on', 'running')
+    WAITING_FOR_USER_INPUT = (5, 'The object is waiting for user input', 'user_input_needed')
+    UNKNOWN =(6, 'The object is in an unknown state', 'unknown')
+    UNRECOGNIZED = (7, 'The object is in an unrecognized state', 'unrecognized')
+    POWERED_OFF = (8, 'The object is powered off', 'powered_off')
+    INCONSISTENT = (9, 'The object is in an inconsistent state', 'inconsistent')
+    CHILDREN_INCONSISTENT = (10, 'Children do not all have the same status', 'inconsistent')
+    UPLOAD_OVF_DESCRIPTOR_PENDING = (11, 'Upload initiated, OVF descriptor pending', 'pending')
+    UPLOAD_COPYING_CONTENTS = (12, 'Upload initiated, copying contents', 'copying_contents')
+    UPLOAD_DISK_CONTENTS_PENDING = (13, 'Upload initiated, disk contents pending', 'upload_initiated')
+    UPLOAD_QUARANTIED = (14, 'Upload has been quarantined', 'upload_quarantined')
+    UPLOAD_QUARANTINE_EXPIRED = (15, 'Upload quarantine period has expired', 'upload_quarantine_expired')

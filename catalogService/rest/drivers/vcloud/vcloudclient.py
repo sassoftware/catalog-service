@@ -238,11 +238,11 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
-        instMap = dict(
-            self._iterResourceEntities(RestClient.TYPES.vApp))
+        uqInstList = sorted(set(self._iterVms()))
         instanceList = instances.BaseInstances()
-        instanceList.extend(self._newInstance(k, v, cloudAlias)
-            for k, v in instMap.items())
+        for instanceId, (vapp, vm) in uqInstList:
+            inst = self._newInstance(instanceId, vm, cloudAlias)
+            instanceList.append(inst)
         return self.filterInstances(instanceIds, instanceList)
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
@@ -278,9 +278,10 @@ class VCloudClient(baseDriver.BaseDriver):
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
         self._msg(job, 'Launching')
-        self._startVApp(vapp)
+        vapp = self._startVApp(vapp)
         self._msg(job, 'Instance launched')
-        return self._idFromHref(vapp.href)
+        vmList = [ x[0] for x in self._iterVmsInVapp(vapp) ]
+        return vmList
 
     def _getMintImagesByType(self, imageType):
         # start with the most general build type
@@ -367,7 +368,8 @@ class VCloudClient(baseDriver.BaseDriver):
         return vappRef
 
     def _startVApp(self, vappRef):
-        pass
+        vapp = self.client.refreshVApp(vappRef)
+        return vapp
 
     def _iterResourceEntities(self, resourceEntityType):
         cli = self.client
@@ -379,15 +381,32 @@ class VCloudClient(baseDriver.BaseDriver):
                 id_ = self._idFromHref(entity.href)
                 yield id_, entity
 
+    def _iterVms(self, idFilter=None):
+        cli = self.client
+        for _, vapp in self._iterResourceEntities(RestClient.TYPES.vApp):
+            vapp = cli.refreshVApp(vapp)
+            for id_, vm in self._iterVmsInVapp(vapp, idFilter=idFilter):
+                yield id_, (vapp, vm)
+
+    def _iterVmsInVapp(self, vapp, idFilter=None):
+        for vm in vapp.Children.Vm:
+            id_ = self._idFromHref(vm.href)
+            if idFilter is None or id_ in idFilter:
+                yield id_, vm
+
     def _newInstance(self, instanceId, instance, cloudAlias):
+        instanceName = instance.name
+        instanceDescription = instance.getDescription()
+        state = Models.Status.Text.state[instance.getStatus()]
         return self._nodeFactory.newInstance(
                 id = instanceId,
-                instanceName = instance.name,
-                instanceDescription = instance.name,
+                instanceName = instanceName,
+                instanceDescription = instanceDescription,
                 instanceId = instanceId,
                 reservationId = instanceId,
                 cloudName = self.cloudName,
-                cloudAlias = cloudAlias)
+                cloudAlias = cloudAlias,
+                state = state,)
 
     @classmethod
     def _idFromHref(cls, href):
@@ -426,7 +445,7 @@ class VCloudClient(baseDriver.BaseDriver):
             if vapp.getStatus() == Models.Status.Code.POWERED_OFF:
                 break
             self._msg(job, "Waiting for powered off status")
-            time.sleep(2)
+            time.sleep(cli.TIMEOUT_VAPP_INSTANTIATED)
         catalogItemsHref = catalog.href + '/catalogItems'
         cli.addVappTemplateToCatalog(name, description, vapp.href,
             catalogItemsHref)
@@ -476,6 +495,10 @@ class RestClient(restclient.Client):
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
         instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
         network = "application/vnd.vmware.vcloud.network+xml"
+
+    TIMEOUT_VAPP_INSTANTIATED = 2
+    TIMEOUT_OVF_DESCRIPTOR_PROCESSED = 2
+
 
     def connect(self):
         try:
@@ -648,7 +671,7 @@ class RestClient(restclient.Client):
                 _msg(job, 'OVF descriptor uploaded')
                 break
             _msg(job, 'Waiting for OVF descriptor to be processed')
-            time.sleep(2)
+            time.sleep(self.TIMEOUT_OVF_DESCRIPTOR_PROCESSED)
         else:
             raise RuntimeError("Timeout waiting for OVF descriptor to be processed")
 
@@ -759,7 +782,7 @@ class RestClient(restclient.Client):
             if e.status != 201:
                 raise
         vapp = Models.handler.parseString(e.contents)
-        self.waitForTask(vapp, [ 'queued' ], callback=callback)
+        vapp = self.waitForTask(vapp, [ 'queued' ], callback=callback)
         return vapp
 
     def waitForTask(self, vapp, inProgressStates, callback=None):
