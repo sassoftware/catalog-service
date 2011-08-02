@@ -397,7 +397,11 @@ class VCloudClient(baseDriver.BaseDriver):
                 yield id_, (vapp, vm)
 
     def _iterVmsInVapp(self, vapp, idFilter=None):
-        for vm in vapp.Children.Vm:
+        if vapp.Children is None:
+            vmList = []
+        else:
+            vmList = vapp.Children.Vm
+        for vm in vmList:
             id_ = self._idFromHref(vm.href)
             if idFilter is None or id_ in idFilter:
                 yield id_, vm
