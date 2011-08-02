@@ -735,6 +735,28 @@ class RestClient(restclient.Client):
 
     def addVappTemplateToCatalog(self, name, description,
             vappTemplateHref, catalogItemsHref):
+        suffix = None
+        # Look for a unique name
+        while 1:
+            if suffix is None:
+                vappTemplateName = name
+                suffix = 0
+            else:
+                vappTemplateName = "%s-%s" % (name, suffix)
+                suffix += 1
+            try:
+                return self._addVappTemplateToCatalog(
+                    vappTemplateName, description,
+                    vappTemplateHref, catalogItemsHref)
+            except restclient.ResponseError, e:
+                if e.status == 400:
+                    error = Models.handler.parseString(e.contents)
+                    if error.minorErrorCode == 'DUPLICATE_NAME':
+                        # Naming conflict. Try again with a different name
+                        continue
+
+    def _addVappTemplateToCatalog(self, name, description,
+            vappTemplateHref, catalogItemsHref):
         ent = Models.Entity()
         ent.href = vappTemplateHref
         m = Models.CatalogItem()
