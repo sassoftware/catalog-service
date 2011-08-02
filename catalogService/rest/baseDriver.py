@@ -823,6 +823,28 @@ class BaseDriver(object):
             return None
         return files[0]['sha1']
 
+    def _getImageIdFromMintImage_local(self, imageData, targetImageIds):
+        """
+        A variant of getImageIdFromMintImage that records the image IDs
+        in the local database, as opposed to annotating the image on the
+        target with the mint image id.
+        """
+        files = imageData.get('files', [])
+        if not files:
+            return None
+        # Look for image ids that match this target
+        fdata = files[0]
+        targetImageIdsFromMint = set(x[2] for x in fdata['targetImages']
+            if x[0] == self.cloudType and x[1] == self.cloudName)
+        # Some of them may have been removed, so only look for the overlapping
+        # ones
+        inters = targetImageIdsFromMint.intersection(targetImageIds)
+        mintImageId = imageData['_mintImageId'] = fdata['sha1']
+        if inters:
+            imageId = imageData['_targetImageId'] = inters.pop()
+            return imageId
+        return mintImageId
+
     @classmethod
     def setImageNamesFromMintData(cls, image, mintImageData):
         buildId = mintImageData.get('buildId')
@@ -833,6 +855,16 @@ class BaseDriver(object):
             image.setShortName(shortName)
             image.setLongName(longName)
             image.setBaseFileName(baseFileName)
+        imageId = image.getImageId()
+        targetImageId = mintImageData.get('_targetImageId')
+        image._targetImageId = targetImageId
+        if targetImageId:
+            # The image ID gets replaced, we want to keep the ID from mint
+            # in the list
+            mintImageId = mintImageData.get('_mintImageId')
+            image.setImageId(mintImageId)
+            oldImageId = image.getId()
+            image.setId("%s%s" % (oldImageId[:-len(imageId)], mintImageId))
 
     @classmethod
     def addImageDataFromMintData(cls, image, mintImageData, methodMap):

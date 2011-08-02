@@ -287,6 +287,8 @@ class VCloudClient(baseDriver.BaseDriver):
         vmList = [ x[0] for x in self._iterVmsInVapp(vapp) ]
         return vmList
 
+    getImageIdFromMintImage = baseDriver.BaseDriver._getImageIdFromMintImage_local
+
     def _getMintImagesByType(self, imageType):
         # start with the most general build type
         mintImages = self.db.imageMgr.getAllImagesByType(self.RBUILDER_BUILD_TYPE)
@@ -352,6 +354,8 @@ class VCloudClient(baseDriver.BaseDriver):
             vapp = self.uploadVAppTemplate(job, vappTemplateName,
                 vappTemplateDescription, archive, dataCenter, catalog)
 
+            self.db.targetMgr.linkTargetImageToImage(self.cloudType,
+                self.cloudName, image._fileId, self._idFromHref(vapp.href))
             return vapp.href
         finally:
             # clean up our mess

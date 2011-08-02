@@ -289,39 +289,16 @@ class EucalyptusClient(ec2client.EC2Client):
         return (self.cloudName, port, '/services/Walrus', False,
             self.CallingFormat)
 
-    def getImageIdFromMintImage(self, imageData, targetImageIds):
-        files = imageData.get('files', [])
-        if not files:
-            return None
-        # Look for image ids that match this target
-        fdata = files[0]
-        targetImageIdsFromMint = set(x[2] for x in fdata['targetImages']
-            if x[0] == self.cloudType and x[1] == self.cloudName)
-        # Some of them may have been removed, so only look for the overlapping
-        # ones
-        inters = targetImageIdsFromMint.intersection(targetImageIds)
-        mintImageId = imageData['_mintImageId'] = fdata['sha1']
-        if inters:
-            imageId = imageData['_targetImageId'] = inters.pop()
-            return imageId
-        return mintImageId
+    getImageIdFromMintImage = ec2client.baseDriver.BaseDriver._getImageIdFromMintImage_local
 
     @classmethod
     def setImageNamesFromMintData(cls, image, mintImageData):
         ec2client.baseDriver.BaseDriver.setImageNamesFromMintData(image,
             mintImageData)
-        imageId = image.getImageId()
-        targetImageId = mintImageData.get('_targetImageId')
+        targetImageId = image._targetImageId
         if targetImageId:
             image.setShortName("%s (%s)" % (image.getShortName(), targetImageId))
             image.setLongName("%s (%s)" % (image.getLongName(), targetImageId))
-            # The image ID gets replaced, we want to keep the ID from mint in
-            # the list
-            mintImageId = mintImageData.get('_mintImageId')
-            image.setImageId(mintImageId)
-            oldImageId = image.getId()
-            image.setId("%s%s" % (oldImageId[:-len(imageId)], mintImageId))
-            image._targetImageId = targetImageId
 
     def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
         # We do want to expose mint images in the list
