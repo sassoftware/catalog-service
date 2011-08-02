@@ -379,6 +379,9 @@ class VCloudClient(baseDriver.BaseDriver):
         vapp = self.client.refreshResource(vappRef)
         return vapp
 
+    def _attachCredentials(self, job, instanceName, vapp, dataCenter, catalog):
+        return vapp
+
     def _iterResourceEntities(self, resourceEntityType):
         cli = self.client
         for link in cli.iterVdcs():
