@@ -218,7 +218,7 @@ class VCloudClient(baseDriver.BaseDriver):
         ret = []
         for imageId, image in imagesMap.iteritems():
             imageName = image.name
-            ret.append(self._nodeFactory.newImage(
+            image = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
                 isDeployed = True,
@@ -227,7 +227,9 @@ class VCloudClient(baseDriver.BaseDriver):
                 productName = imageName,
                 longName = imageName,
                 cloudName = self.cloudName,
-                cloudAlias = cloudAlias))
+                cloudAlias = cloudAlias)
+            image.opaqueId = self._decodeId(imageId)
+            ret.append(image)
         return ret
 
     def drvGetInstance(self, instanceId):
@@ -429,6 +431,12 @@ class VCloudClient(baseDriver.BaseDriver):
         # general where IDs look like http://.../api/v1.0/vApp/vapp-1836764865
         id_ = os.path.basename(href)
         return 'base64-' + base64.b64encode(id_)
+
+    @classmethod
+    def _decodeId(cls, id_):
+        if not id_.startswith('base64-'):
+            return id_
+        return base64.b64decode(id_.split('-', 1)[1])
 
     def uploadVAppTemplate(self, job, name, description, archive, vdc, catalog):
         cli = self.client
