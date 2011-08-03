@@ -278,6 +278,8 @@ class VCloudClient(baseDriver.BaseDriver):
         vapp = self._instantiateVAppTemplate(job, instanceName,
             instanceDescription, dataCenter, vappTemplateRef, network)
 
+        vapp = self._renameVms(job, vapp, instanceName, instanceDescription)
+
         try:
             self._attachCredentials(job, instanceName, vapp, dataCenter,
                 catalog)
@@ -290,6 +292,21 @@ class VCloudClient(baseDriver.BaseDriver):
         return vmList
 
     getImageIdFromMintImage = baseDriver.BaseDriver._getImageIdFromMintImage_local
+
+    def _renameVms(self, job, vapp, instanceName, instanceDescription):
+        """
+        If the vapp has only one vm, we want to change its nmae to match the
+        name of the vapp, as specified by the user
+        """
+        if not vapp.Children or not vapp.Children.Vm:
+            return vapp
+        vmList = vapp.Children.Vm
+        if len(vmList) != 1:
+            return vapp
+        vm = vmList[0]
+        self._msg(job, 'Renaming vm: %s -> %s' % (vm.name, instanceName))
+        self.client.renameVm(vm, instanceName, instanceDescription)
+        return vapp
 
     def _getMintImagesByType(self, imageType):
         # start with the most general build type
@@ -725,6 +742,25 @@ class RestClient(restclient.Client):
             self.uploadVAppFile(vapp, job, url, fileObj,
                 callback=callbackFactory(vapp, job, url, fobj.getSize()),
                 statusCallback=statusCallback)
+
+    def renameVm(self, vm, vmName, vmDescription):
+        # Find upload link
+        links = [ x for x in vm.Link if x.rel == 'edit' ]
+        if not links:
+            return
+        url = links[0].href
+        self.path = url
+        self.connect()
+        resource = Models.Vm(description=vmDescription)
+        resource.name = vmName
+
+        body = Models.handler.toXml(resource)
+        headers = { 'Content-Type' : links[0].type}
+        try:
+            self.request("PUT", body=body, headers=headers)
+        except restclient.ResponseError, e:
+            if e.status != 202:
+                raise
 
     def uploadVAppFile(self, vapp, job, url, fobj, callback, statusCallback):
         while 1:
