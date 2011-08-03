@@ -775,7 +775,9 @@ class VMwareClient(baseDriver.BaseDriver):
         from catalogService.libs import viclient
         try:
             self._msg(job, 'Uploading initial configuration')
-            viclient.vmutils._uploadVMFiles(self.client, [ file(filename) ], vmName,
+            fileobj = baseDriver.Archive.CommandArchive.File(
+                os.path.basename(filename), os.path.dirname(filename))
+            viclient.vmutils._uploadVMFiles(self.client, [ fileobj ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:
             # We use filename below only for the actual name; no need to keep
