@@ -218,7 +218,7 @@ class VCloudClient(baseDriver.BaseDriver):
         ret = []
         for imageId, image in imagesMap.iteritems():
             imageName = image.name
-            image = self._nodeFactory.newImage(
+            img = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
                 isDeployed = True,
@@ -228,8 +228,8 @@ class VCloudClient(baseDriver.BaseDriver):
                 longName = imageName,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
-            image.opaqueId = self._decodeId(imageId)
-            ret.append(image)
+            img.opaqueId = image.href
+            ret.append(img)
         return ret
 
     def drvGetInstance(self, instanceId):
