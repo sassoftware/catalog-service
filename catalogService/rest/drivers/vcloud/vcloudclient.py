@@ -2,7 +2,6 @@
 # Copyright (c) 2011 rPath, Inc.  All Rights Reserved.
 #
 
-import base64
 import os
 import socket
 import tempfile
@@ -448,13 +447,7 @@ class VCloudClient(baseDriver.BaseDriver):
         # We take the last part of the URL only. This works well in
         # general where IDs look like http://.../api/v1.0/vApp/vapp-1836764865
         id_ = os.path.basename(href)
-        return 'base64-' + base64.b64encode(id_)
-
-    @classmethod
-    def _decodeId(cls, id_):
-        if not id_.startswith('base64-'):
-            return id_
-        return base64.b64decode(id_.split('-', 1)[1])
+        return id_
 
     def uploadVAppTemplate(self, job, name, description, archive, vdc, catalog):
         cli = self.client
@@ -749,7 +742,7 @@ class RestClient(restclient.Client):
         if not links:
             return
         url = links[0].href
-        self.path = url
+        self.path = self._pathFromUrl(url)
         self.connect()
         resource = Models.Vm(description=vmDescription)
         resource.name = vmName
