@@ -240,10 +240,10 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def drvGetInstances(self, instanceIds):
         cloudAlias = self.getCloudAlias()
-        if instanceIds is None:
-            idFilter = None
-        else:
+        if instanceIds:
             idFilter = set(instanceIds)
+        else:
+            idFilter = None
         uqInstList = sorted(set(self._iterVms(idFilter=idFilter)))
         instanceList = instances.BaseInstances()
         for instanceId, (vapp, vm) in uqInstList:
@@ -373,7 +373,8 @@ class VCloudClient(baseDriver.BaseDriver):
         if callback is None:
             callback = lambda: self._msg(job, "Waiting for task to finish")
         cli = self.client
-        vappRef = cli.instantiateVAppTemplate(vappName, vappDescription,
+        vappRef = cli.instantiateVAppTemplate(self._loggerFactory(job),
+            vappName, vappDescription,
             vdc.href, vappTemplateRef, network.href, callback=callback)
         return vappRef
 
@@ -470,9 +471,12 @@ class VCloudClient(baseDriver.BaseDriver):
             self._msg(job, "Waiting for powered off status")
             time.sleep(cli.TIMEOUT_VAPP_INSTANTIATED)
         catalogItemsHref = catalog.href + '/catalogItems'
-        cli.addVappTemplateToCatalog(name, description, vapp.href,
-            catalogItemsHref)
+        cli.addVappTemplateToCatalog(self._loggerFactory(job),
+            name, description, vapp.href, catalogItemsHref)
         return vapp
+
+    def _loggerFactory(self, job):
+        return lambda *args: self._msg(job, *args)
 
     def _callbackFactory(self, vapp, job, url, fileSize):
         fileName = os.path.basename(url)
@@ -744,27 +748,40 @@ class RestClient(restclient.Client):
         self.connect()
         self.request("PUT", body=fobj, callback=callback)
 
-    def addVappTemplateToCatalog(self, name, description,
-            vappTemplateHref, catalogItemsHref):
+    def _retryForUniqueness(self, logger, suggestedName, function, *args, **kwargs):
+        """
+        To avoid race conditions, we need to sometimes retry if someone else
+        used the same name.
+        We're running 'function' with resourceName as the first argument until
+        we no longer get a duplicate.
+        """
         suffix = None
         # Look for a unique name
         while 1:
             if suffix is None:
-                vappTemplateName = name
+                resourceName = suggestedName
                 suffix = 0
             else:
-                vappTemplateName = "%s-%s" % (name, suffix)
+                resourceName = "%s-%s" % (suggestedName, suffix)
                 suffix += 1
             try:
-                return self._addVappTemplateToCatalog(
-                    vappTemplateName, description,
-                    vappTemplateHref, catalogItemsHref)
+                ret = function(resourceName, *args, **kwargs)
+                logger("Resource name: %s" % resourceName)
+                return ret
             except restclient.ResponseError, e:
                 if e.status == 400:
                     error = Models.handler.parseString(e.contents)
                     if error.minorErrorCode == 'DUPLICATE_NAME':
                         # Naming conflict. Try again with a different name
+                        logger("Duplicate name %s" % resourceName)
                         continue
+                raise
+
+    def addVappTemplateToCatalog(self, logger, name, description,
+            vappTemplateHref, catalogItemsHref):
+        return self._retryForUniqueness(logger, name,
+            self._addVappTemplateToCatalog, description,
+            vappTemplateHref, catalogItemsHref)
 
     def _addVappTemplateToCatalog(self, name, description,
             vappTemplateHref, catalogItemsHref):
@@ -787,7 +804,13 @@ class RestClient(restclient.Client):
         catalogItem = Models.handler.parseString(e.contents)
         return catalogItem
 
-    def instantiateVAppTemplate(self, name, description,
+    def instantiateVAppTemplate(self, logger, name, description,
+            vdcRef, vappTemplateRef, networkRef, callback=None):
+        return self._retryForUniqueness(logger, name,
+            self._instantiateVAppTemplate, description,
+            vdcRef, vappTemplateRef, networkRef, callback=callback)
+
+    def _instantiateVAppTemplate(self, name, description,
             vdcRef, vappTemplateRef, networkRef, callback=None):
         m = Models.InstantiateVAppTemplateParams(Description=description)
         m.name = name
