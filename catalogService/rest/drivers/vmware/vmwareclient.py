@@ -132,7 +132,10 @@ class VMwareClient(baseDriver.BaseDriver):
     VimServiceTransport = None
 
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
-    OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
+    # We should prefer OVA over OVF, but vcenter gets upset with
+    # gzip-compressed vmdk images inside ova
+    #OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
+    OVF_PREFERRENCE_LIST = [ 'ovf.tar.gz', 'ova', ]
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
