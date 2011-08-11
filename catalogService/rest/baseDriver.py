@@ -146,6 +146,10 @@ class BaseDriver(object):
         self.cloudName = cloudName
         return bool(self.getTargetConfiguration())
 
+    @classmethod
+    def isDriverFunctional(cls):
+        return True
+
     def __call__(self, request, cloudName=None):
         # This is a bit of a hack - basically, we're turning this class
         # into a factory w/o doing all the work of splitting out
@@ -332,10 +336,13 @@ class BaseDriver(object):
         return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
             self.cloudName, self.userId)
 
-    def drvGetCredentialsFromDescriptor(self, fields):
+    def drvGetCredentialsFromDescriptor(self, descrData):
+        cm = dict(self._credNameMap)
         ret = {}
-        for field, key in self._credNameMap:
-            ret[key] = str(fields.getField(field))
+        for field in descrData.getFields():
+            fieldName = field.getName()
+            key = cm.get(fieldName, fieldName)
+            ret[key] = str(field.getValue())
         return ret
 
     def drvGetCloudClient(self):
@@ -395,7 +402,10 @@ class BaseDriver(object):
         if not cred:
             raise errors.MissingCredentials(status = 404,
                 message = "User credentials not configured")
-        for descrName, localName in self._credNameMap:
+        cm = dict(self._credNameMap)
+        for descrField in descr.getDataFields():
+            descrName = descrField.name
+            localName = cm.get(descrName, descrName)
             descrData.addField(descrName, value = cred[localName])
         descrData.checkConstraints()
         return self._nodeFactory.newCredentialsDescriptorData(descrData)
@@ -813,6 +823,28 @@ class BaseDriver(object):
             return None
         return files[0]['sha1']
 
+    def _getImageIdFromMintImage_local(self, imageData, targetImageIds):
+        """
+        A variant of getImageIdFromMintImage that records the image IDs
+        in the local database, as opposed to annotating the image on the
+        target with the mint image id.
+        """
+        files = imageData.get('files', [])
+        if not files:
+            return None
+        # Look for image ids that match this target
+        fdata = files[0]
+        targetImageIdsFromMint = set(x[2] for x in fdata['targetImages']
+            if x[0] == self.cloudType and x[1] == self.cloudName)
+        # Some of them may have been removed, so only look for the overlapping
+        # ones
+        inters = targetImageIdsFromMint.intersection(targetImageIds)
+        mintImageId = imageData['_mintImageId'] = fdata['sha1']
+        if inters:
+            imageId = imageData['_targetImageId'] = inters.pop()
+            return imageId
+        return mintImageId
+
     @classmethod
     def setImageNamesFromMintData(cls, image, mintImageData):
         buildId = mintImageData.get('buildId')
@@ -823,6 +855,16 @@ class BaseDriver(object):
             image.setShortName(shortName)
             image.setLongName(longName)
             image.setBaseFileName(baseFileName)
+        imageId = image.getImageId()
+        targetImageId = mintImageData.get('_targetImageId')
+        image._targetImageId = targetImageId
+        if targetImageId:
+            # The image ID gets replaced, we want to keep the ID from mint
+            # in the list
+            mintImageId = mintImageData.get('_mintImageId')
+            image.setImageId(mintImageId)
+            oldImageId = image.getId()
+            image.setId("%s%s" % (oldImageId[:-len(imageId)], mintImageId))
 
     @classmethod
     def addImageDataFromMintData(cls, image, mintImageData, methodMap):

@@ -125,11 +125,6 @@ class VMwareClient(baseDriver.BaseDriver):
     cloudType = 'vmware'
     instanceStorageClass = InstanceStorage
 
-    _credNameMap = [
-        ('username', 'username'),
-        ('password', 'password'),
-    ]
-
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
     # transport is mocked out during testing to simulate talking to
@@ -137,16 +132,15 @@ class VMwareClient(baseDriver.BaseDriver):
     VimServiceTransport = None
 
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
-    OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
+    # We should prefer OVA over OVF, but vcenter gets upset with
+    # gzip-compressed vmdk images inside ova
+    #OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
+    OVF_PREFERRENCE_LIST = [ 'ovf.tar.gz', 'ova', ]
 
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
         self._virtualMachines = None
-
-    @classmethod
-    def isDriverFunctional(cls):
-        return True
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
@@ -366,11 +360,6 @@ class VMwareClient(baseDriver.BaseDriver):
                 if fname.endswith(suffix):
                     return [ fdict ]
         return None
-
-    def getCloudAlias(self):
-        # FIXME: re-factor this into common code (copied from Xen Ent)
-        cloudConfig = self.getTargetConfiguration()
-        return cloudConfig['alias']
 
     def _buildInstanceList(self, instanceList, instMap):
         instIdSet = set()
@@ -789,7 +778,9 @@ class VMwareClient(baseDriver.BaseDriver):
         from catalogService.libs import viclient
         try:
             self._msg(job, 'Uploading initial configuration')
-            viclient.vmutils._uploadVMFiles(self.client, [ file(filename) ], vmName,
+            fileobj = baseDriver.Archive.CommandArchive.File(
+                os.path.basename(filename), os.path.dirname(filename))
+            viclient.vmutils._uploadVMFiles(self.client, [ fileobj ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:
             # We use filename below only for the actual name; no need to keep

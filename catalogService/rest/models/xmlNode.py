@@ -33,13 +33,12 @@ class BaseNode(xmllib.BaseNode):
             if k.startswith('_'):
                 # Private variable, do not set
                 continue
-            method = getattr(self, "set%s%s" % (k[0].upper(), k[1:]))
             val = kwargs.get(k)
             # If the slot is an attribute, look it up in the attribute list
             # too
             if k in self._slotAttributes and attrs is not None:
                 val = attrs.get(k, val)
-            method(val)
+            self._set(k, val)
 
     def setName(self, name):
         pass
@@ -54,7 +53,14 @@ class BaseNode(xmllib.BaseNode):
 
     def _iterChildren(self):
         sublementsFound = False
-        for fName in sorted(set(self.__slots__)):
+        # Sometimes it's important to preserve the order in the slots
+        strictOrdering = getattr(self.__class__, 'StrictOrdering', False)
+        if strictOrdering:
+            iterator = iter(self.__slots__)
+        else:
+            iterator = sorted(set(self.__slots__))
+
+        for fName in iterator:
             if fName.startswith('_'):
                 continue
             if fName in self._slotAttributes:
@@ -109,7 +115,9 @@ class BaseNode(xmllib.BaseNode):
             raise AttributeError(name)
         slot = "%s%s" % (name[3].lower(), name[4:])
         if slot not in self.__slots__:
-            raise AttributeError(name)
+            slot = name[3:]
+            if slot not in self.__slots__:
+                raise AttributeError(name)
         if name[:3] == 'get':
             return lambda: self._get(slot)
         return lambda x: self._set(slot, x)
@@ -118,16 +126,25 @@ class BaseNode(xmllib.BaseNode):
         setattr(self, key, None)
         if value is None:
             return self
+        slotType = self._slotTypeMap.get(key)
         if key in self._slotAttributes:
+            if slotType == bool:
+                if not isinstance(value, basestring):
+                    value = xmllib.BooleanNode.toString(value)
             # Attributes are strings
             setattr(self, key, str(value))
             return self
-        if hasattr(value, 'getElementTree') and value._getName() == key:
-            # This catches the case where we have a list defined as one of the
-            # sub-nodes for this object
-            setattr(self, key, value)
-            return self
-        slotType = self._slotTypeMap.get(key)
+        if hasattr(value, 'getElementTree'):
+            # The way we're storing data as children of a node breaks if we
+            # use the same tag from different namespaces. We're not there
+            tagName = value._getName()
+            if tagName.startswith('{'):
+                tagName = tagName.split('}', 1)[1]
+            if tagName == key:
+                # This catches the case where we have a list defined as one of
+                # the sub-nodes for this object
+                setattr(self, key, value)
+                return self
         if slotType == bool or isinstance(slotType, xmllib.BooleanNode):
             cls = xmllib.BooleanNode
             value = cls.toString(value)
@@ -175,11 +192,15 @@ class BaseNode(xmllib.BaseNode):
             return None
         slotType = self._slotTypeMap.get(key)
         if slotType == bool:
-            return xmllib.BooleanNode.fromString(val.getText())
+            if hasattr(val, 'getText'):
+                val = val.getText()
+            return xmllib.BooleanNode.fromString(val)
         if slotType == list:
             return [ x.getText() for x in val.iterChildren()]
         if slotType == int:
-            return int(val.getText())
+            if hasattr(val, 'getText'):
+                val = val.getText()
+            return int(val)
         if isinstance(val, xmllib.IntegerNode):
             return val.finalize()
         if isinstance(val, BaseNode) and val.__slots__:
