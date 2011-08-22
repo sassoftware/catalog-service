@@ -16,14 +16,14 @@ except ImportError:
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
 
-# This is return by the api
-class OpenStack_InstanceTypes(instances.InstanceTypes):
-    "OpenStack Instance Types"
-
-    idMap = [
-        ('xenent.small', "Small"),
-        ('xenent.medium', "Medium"),
-    ]
+# This is provided by the nova api
+#class OpenStack_InstanceTypes(instances.InstanceTypes):
+#    "OpenStack Instance Types"
+#
+#    idMap = [
+#        ('xenent.small', "Small"),
+#        ('xenent.medium', "Medium"),
+#    ]
 
 # Nova address
 # Nova port
@@ -138,6 +138,8 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
+# http://glance.openstack.org/client.html
+# http://pypi.python.org/pypi/python-novaclient
 class ConsolidatedClients(object):
     def __inst__(self, nova_client, glance_client):
         self.nova = nova_client
