@@ -30,7 +30,7 @@ class VCloudClient(baseDriver.BaseDriver):
   </metadata>
   <dataFields>
     <field>
-      <name>name</name>
+      <name>serverName</name>
       <descriptions>
         <desc>Server Address</desc>
       </descriptions>
@@ -122,12 +122,19 @@ class VCloudClient(baseDriver.BaseDriver):
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
     OVF_PREFERRENCE_LIST = [ '.ova', ]
 
+    @classmethod
+    def getCloudNameFromDescriptorData(cls, descriptorData):
+        serverName = descriptorData.getField('serverName')
+        organization = descriptorData.getField('organization')
+        return "%s-%s" % (serverName, organization)
+
     def _getVCloudClient(self, cloudConfig):
         port = cloudConfig.get('port', 443)
+        serverName = cloudConfig['serverName']
         if port == 443:
-            url = "https://%s/api/v1.0/login" % cloudConfig['name']
+            url = "https://%s/api/v1.0/login" % serverName
         else:
-            url = "https://%s:%s/api/1.0/login" % (cloudConfig['name'], port)
+            url = "https://%s:%s/api/1.0/login" % (serverName, port)
         rcli = RestClient(url)
         return rcli
 
