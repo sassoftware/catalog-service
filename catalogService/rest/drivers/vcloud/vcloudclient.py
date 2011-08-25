@@ -321,8 +321,10 @@ class VCloudClient(baseDriver.BaseDriver):
         mintImagesByBuildId = {}
         for mintImage in mintImages:
             files = self._getPreferredOvfImage(mintImage['files'])
-            if files:
-                mintImage['files'] = files
+            if not files:
+                # Could not find an ova file. Ignore this image
+                continue
+            mintImage['files'] = files
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Sort data by build id
         return [ x[1] for x in sorted(mintImagesByBuildId.items()) ]
