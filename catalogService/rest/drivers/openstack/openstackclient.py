@@ -1,5 +1,3 @@
-import os
-
 from catalogService import errors
 from catalogService.rest import baseDriver
 from catalogService.rest.models import images
