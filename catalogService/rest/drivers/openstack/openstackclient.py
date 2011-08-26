@@ -288,7 +288,6 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
-        srUuid = ppop('srUuid')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
 
@@ -296,8 +295,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
-        if not image.getIsDeployed():
-            self._deployImage(job, image, auth, srUuid)
+        self._deployImage(job, image, auth)
 
         imageId = image.getInternalTargetId()
 
@@ -306,7 +304,7 @@ class OpenStackClient(baseDriver.BaseDriver):
             instanceDescription)
         job.addHistoryEntry('Attaching credentials')
         try:
-            self._attachCredentials(realId, srUuid)
+            self._attachCredentials(realId)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
         job.addHistoryEntry('Launching')
@@ -325,27 +323,8 @@ class OpenStackClient(baseDriver.BaseDriver):
             #EG, machine/raw type?  it appears that glance isn't storing
             # type anyway; so perhaps don't bother.
             pass
-            imgChecksum = vm['other_config'].get('cloud-catalog-checksum')
-            if imgChecksum:
-                is_rBuilderImage = True
-                imageId = imgChecksum
-            else:
-                is_rBuilderImage = False
-                imageId = vm['uuid']
-
-            if imageIdsFilter is not None and imageId not in imageIdsFilter:
-                continue
-
-            image = self._nodeFactory.newImage(id = imageId,
-                    imageId = imageId, isDeployed = True,
-                    is_rBuilderImage = is_rBuilderImage,
-                    longName = vm['name_label'],
-                    buildDescription = vm['name_description'],
-                    cloudName = self.cloudName,
-                    internalTargetId = vm['uuid'],
-                    cloudAlias = cloudAlias)
-            imageList.append(image)
         return imageList
 
-    def startVm(self, vmRef):
-        client.nova.create("name", imageRef, flavorRef) # ipGroup, etc
+    def startVm(self, name, imageRef, flavorRef):
+        client = self.client.nova
+        server = client.create(name, imageRef, flavorRef) # ipGroup, etc
