@@ -7,7 +7,7 @@ try:
     from novaclient.v1_1.client import Client as NovaClient
 #    from glance.client import Client
 except ImportError:
-    NovaClient = None
+    NovaClient = None #pyflakes=ignore
 
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
@@ -164,8 +164,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        glance_server = cloudConfig['glance_server']
-        glance_port = cloudConfig['glance_port']
+        #glance_server = cloudConfig['glance_server']
+        #glance_port = cloudConfig['glance_port']
         api_version = self._openstack_api_version()
         authUrl = "http://%s:%s/%s/" % (server, port, api_version)
         try:
