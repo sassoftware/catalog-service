@@ -4,10 +4,10 @@ from catalogService.rest.models import images
 from catalogService.rest.models import instances
 
 try:
-    import novaclient
-    from glance.client import Client
+    from novaclient.v1_1.client import Client as NovaClient
+#    from glance.client import Client
 except ImportError:
-    pass
+    NovaClient = None
 
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
@@ -35,7 +35,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
   </metadata>
   <dataFields>
     <field>
-      <name>nova_server</name>
+      <name>name</name>
       <descriptions>
         <desc>Nova Server</desc>
       </descriptions>
@@ -130,10 +130,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </constraints>
       <required>true</required>
       <password>true</password>
-    </field>    @classmethod
-    def getCloudNameFromDescriptorData(cls, descriptorData):
-        return descriptorData.getField('name')
-
+    </field>
   </dataFields>
 </descriptor>
 """
@@ -141,7 +138,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 # http://glance.openstack.org/client.html
 # http://pypi.python.org/pypi/python-novaclient
 class ConsolidatedClient(object):
-    def __inst__(self, nova_client, glance_client):
+    def __init__(self, nova_client, glance_client):
         self.nova = nova_client
         self.glance = glance_client
 
@@ -156,15 +153,8 @@ class OpenStackClient(baseDriver.BaseDriver):
     # This should probably be the KVM Raw....
 
     @classmethod
-    def getCloudNameFromDescriptorData(cls, descriptorData):
-        return descriptorData.getField('alias')
-
-
-    @classmethod
     def isDriverFunctional(cls):
-        if not novaclient or not Client: #nova and glance clients
-            return False
-        return True
+        return (NovaClient is not None)
 
     # Right now 1.1 is the only version that is supported
     def _openstack_api_version(self):
@@ -172,23 +162,24 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
-        server = cloudConfig['nova_server']
+        server = cloudConfig['name']
         port = cloudConfig['nova_port']
         glance_server = cloudConfig['glance_server']
         glance_port = cloudConfig['glance_port']
         api_version = self._openstack_api_version()
+        authUrl = "http://%s:%s/%s/" % (server, port, api_version)
         try:
             # password is a ProtectedString, we have to convert to string
-            nova_client = novaclient.OpenStack( credentials['username'],
-                                            credentials['auth_token'],
-                                            "http://%s:%s/%s/" %
-                                            (server, port, api_version) )
-            glance_client = Client(glance_server, glance_port)
-            clients = ConsolidatedClient(nova_client, glance_client)
-        # TODO: determine more specific list of exceptions to catch
-        except:
-            raise errors.PermissionDenied(message = \
-                    "There was an error initializing Nova and Glance clients")
+            novaClient = NovaClient(credentials['username'],
+                                    credentials['auth_token'],
+                                    project_id=None,
+                                    auth_url=authUrl)
+#            glance_client = Client(glance_server, glance_port)
+            glanceClient = None
+            clients = ConsolidatedClient(novaClient, glanceClient)
+        except Exception, e:
+            raise errors.PermissionDenied(message =
+                    "Error initializing client: %s" % (e, ))
         return clients
 
     def drvVerifyCloudConfiguration(self, config):
@@ -314,9 +305,9 @@ class OpenStackClient(baseDriver.BaseDriver):
 
         imageList = images.BaseImages()
         
-        client = self.client.glance
+        client = self.client.nova
 
-        for image in client.get_images_detailed():
+        for image in client.images.list(detailed=True):
             #if image. - do we want to restrict this to only bootable image?
             #EG, machine/raw type?  it appears that glance isn't storing
             # type anyway; so perhaps don't bother.
