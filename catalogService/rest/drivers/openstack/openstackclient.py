@@ -152,9 +152,12 @@ class OpenStackClient(baseDriver.BaseDriver):
     RBUILDER_BUILD_TYPE = 'XEN_OVA'  # TODO: Determine appropriate rBuilder image type
     # This should probably be the KVM Raw....
 
+    NovaClientClass = NovaClient
+    GlanceClientClass = None
+
     @classmethod
     def isDriverFunctional(cls):
-        return (NovaClient is not None)
+        return (cls.NovaClientClass is not None)
 
     # Right now 1.1 is the only version that is supported
     def _openstack_api_version(self):
@@ -170,7 +173,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         authUrl = "http://%s:%s/%s/" % (server, port, api_version)
         try:
             # password is a ProtectedString, we have to convert to string
-            novaClient = NovaClient(credentials['username'],
+            novaClient = self.NovaClientClass(credentials['username'],
                                     credentials['auth_token'],
                                     project_id=None,
                                     auth_url=authUrl)
@@ -303,16 +306,32 @@ class OpenStackClient(baseDriver.BaseDriver):
     def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
 
-        imageList = images.BaseImages()
-        
         client = self.client.nova
-
+        ret = []
         for image in client.images.list(detailed=True):
-            #if image. - do we want to restrict this to only bootable image?
-            #EG, machine/raw type?  it appears that glance isn't storing
-            # type anyway; so perhaps don't bother.
-            pass
-        return imageList
+            # image.id is numeric
+            imageId = str(image.id)
+            imageName = image.name
+            img = self._nodeFactory.newImage(
+                id = imageId,
+                imageId = imageId,
+                isDeployed = True,
+                is_rBuilderImage = False,
+                shortName = imageName,
+                productName = imageName,
+                longName = imageName,
+                cloudName = self.cloudName,
+                cloudAlias = cloudAlias)
+            img.opaqueId = self._getLinkRel(image, 'self')
+            ret.append(img)
+        return ret
+
+    @classmethod
+    def _getLinkRel(cls, obj, rel):
+        for link in obj.links:
+            if link['rel'] == rel:
+                return link['href']
+        return False
 
     def startVm(self, name, imageRef, flavorRef):
         client = self.client.nova
