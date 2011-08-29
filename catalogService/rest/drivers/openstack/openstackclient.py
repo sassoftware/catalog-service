@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2011 rPath, Inc.  All Rights Reserved.
+#
+
+import os
+
 from catalogService import errors
 from catalogService.rest import baseDriver
 from catalogService.rest.models import images
@@ -242,26 +248,43 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _get_id_from_ref(self, resource_ref):
         return resource_ref.split('/')[-1]
 
+    @classmethod
+    def _idFromRef(cls, ref):
+        if ref is None:
+            return ref
+        if isinstance(ref, int):
+            return str(ref)
+        # Grab the last part of the URL and return it
+        return os.path.basename(ref)
+
     def drvGetInstances(self, instanceIds):
         client = self.client.nova
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
+        images = self.getAllImages()
+        # Hash images so we can quickly return a ref
+        imagesMap = dict((self._idFromRef(image.opaqueId), image)
+            for image in images if hasattr(image, 'opaqueId'))
         for server in client.servers.list():
-
-            instanceId = server.id
-            image_id = self._get_id_from_ref(server.imageRef)
-
+            instanceId = str(server.id)
+            imageRef = self._idFromRef(server.imageRef)
+            image = imagesMap.get(imageRef)
+            if image:
+                imageId = image.id
+            else:
+                imageId = None
+            publicDnsName = None # XXX FIXME
+            privateDnsName = None # XXX FIXME
             inst = self._nodeFactory.newInstance(id = instanceId,
-                imageId = image_id or 'UNKNOWN',
+                imageId = imageId,
                 instanceId = instanceId,
                 instanceName = server.name,
-                instanceDescription = 'UNDEFINED',
-                reservationId = server.id, # Does this have an openstack equivalent
+                instanceDescription = server.name,
                 dnsName = 'UNKNOWN',
-                publicDnsName = ",".join(server.addresses['public']), # valid?
-                privateDnsName = ",".join(server.addresses['private']), # valid?
+                publicDnsName = publicDnsName,
+                privateDnsName = privateDnsName,
                 state = server.status,
-                launchTime = server.created if hasattr(server, 'created') else 'UNKNOWN',
+                launchTime = server.created if hasattr(server, 'created') else None,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
@@ -331,7 +354,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         for link in obj.links:
             if link['rel'] == rel:
                 return link['href']
-        return False
+        return None
 
     def startVm(self, name, imageRef, flavorRef):
         client = self.client.nova
