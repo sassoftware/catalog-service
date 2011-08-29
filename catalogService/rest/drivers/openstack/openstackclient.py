@@ -3,6 +3,7 @@
 #
 
 import os
+from operator import attrgetter
 
 from catalogService import errors
 from catalogService.rest import baseDriver
@@ -11,9 +12,10 @@ from catalogService.rest.models import instances
 
 try:
     from novaclient.v1_1.client import Client as NovaClient
-#    from glance.client import Client
+    from glance.client import Client as GlanceClient
 except ImportError:
     NovaClient = None #pyflakes=ignore
+    GlanceClient = None #pyflakes=ignore
 
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
@@ -159,11 +161,11 @@ class OpenStackClient(baseDriver.BaseDriver):
     # This should probably be the KVM Raw....
 
     NovaClientClass = NovaClient
-    GlanceClientClass = None
+    GlanceClientClass = GlanceClient
 
     @classmethod
     def isDriverFunctional(cls):
-        return (cls.NovaClientClass is not None)
+        return (cls.NovaClientClass is not None) and (cls.GlanceClientClass is not None)
 
     # Right now 1.1 is the only version that is supported
     def _openstack_api_version(self):
@@ -173,7 +175,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        #glance_server = cloudConfig['glance_server']
+        glance_server = cloudConfig['glance_server']
         #glance_port = cloudConfig['glance_port']
         api_version = self._openstack_api_version()
         authUrl = "http://%s:%s/%s/" % (server, port, api_version)
@@ -183,8 +185,7 @@ class OpenStackClient(baseDriver.BaseDriver):
                                     credentials['auth_token'],
                                     project_id=None,
                                     auth_url=authUrl)
-#            glance_client = Client(glance_server, glance_port)
-            glanceClient = None
+            glanceClient = self.GlanceClientClass(glance_server)
             clients = ConsolidatedClient(novaClient, glanceClient)
         except Exception, e:
             raise errors.PermissionDenied(message =
@@ -216,7 +217,7 @@ class OpenStackClient(baseDriver.BaseDriver):
     # TODO: figure this out.  It is an option launch param.
     def _get_ipgroups(self):
         client = self.client.nova
-        return client.ipgroup.list()
+        return sorted( client.ipgroup.list(), key=attrgetter('id') )
 
     # This also takes optional "ipgroup", "meta", and "files", 
     # see novaclient/servers.py, ignoring for now.  TODO: really ignore?
@@ -224,23 +225,21 @@ class OpenStackClient(baseDriver.BaseDriver):
         descr.setDisplayName("OpenStack Launch Parameters")
         descr.addDescription("OpenStack Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)
-        flavors = self._get_flavors()
-        if not flavors:
-            raise errors.CatalogError("No instance flavors defined")
-        flavor_id_name_map = dict( (f.id, f.name) for f in flavors)
-        flavor_id_name_map.keys().sort()
-        descr.addDataField("flavor",
-            descriptions = "Flavor",
-            required = True,
-            help = [
-                ("launch/flavors.html", None)
-            ],
-            type = descr.EnumeratedType(
-                descr.ValueWithDescription(id, descriptions = flavor_id_name_map[id])
-                for x in flavor_id_name_map.keys()),
-            default = flavor_id_name_map.keys()[0],
-            )
 
+        target_flavors = self._get_flavors()
+        if not target_flavors:
+            raise errors.CatalogError("No instance flavors defined")
+        flavors = [ descr.ValueWithDescription(str(f.id), descriptions = f.name) for f in target_flavors ]
+        descr.addDataField('flavor',
+                            descriptions = 'Flavor',
+                            required = True,
+                            help = [
+                                ('launch/flavor.html', None)
+                            ],
+                            type = descr.EnumeratedType(flavors),
+                            default=target_flavors[0].id,
+                            readonly=True,
+                            )
         return descr
 
     # TODO: remove when novaclient has caught up to v1.1.
