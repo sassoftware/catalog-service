@@ -3,12 +3,13 @@
 #
 
 import os
-from operator import attrgetter
+import tempfile
 
 from catalogService import errors
 from catalogService.rest import baseDriver
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
+from conary.lib import util
 
 try:
     from novaclient.v1_1.client import Client as NovaClient
@@ -222,7 +223,7 @@ class OpenStackClient(baseDriver.BaseDriver):
     # TODO: figure this out.  It is an option launch param.
     def _get_ipgroups(self):
         client = self.client.nova
-        return sorted( client.ipgroup.list(), key=attrgetter('id') )
+        return sorted( client.ipgroup.list(), key=self.sortKey )
 
     # This also takes optional "ipgroup", "meta", and "files", 
     # see novaclient/servers.py, ignoring for now.  TODO: really ignore?
@@ -365,6 +366,32 @@ class OpenStackClient(baseDriver.BaseDriver):
             if link['rel'] == rel:
                 return link['href']
         return None
+
+    def _getImageType(self):
+        cloudConfig = self.getTargetConfiguration()
+        hypervisorType = cloudConfig['hypervisorType'].upper()
+        if hypervisorType == 'KVM':
+            return 'raw'
+        else:
+            return None # TODO: add case for Xen Backend, raise error if it matches nothing?
+
+    def _getImagePublic(self):
+        return True
+
+    def _deployImage(self, job, image, auth):
+        tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
+        try:
+            job.addHistoryEntry('Downloading image')
+            path = self._downloadImage(image, tmpDir, auth = auth)
+            job.addHistoryEntry('Importing image')
+            f = open(path, 'wb')
+            imageType = self._getImageType()
+            imagePublic = self._getImagePublic()
+            imageMetadata = {'name':'TBD', 'type':imageType, 'is_public':imagePublic}
+            self.client.glance.add_image(imageMetadata, f)
+            f.close()
+        finally:
+            util.rmtree(tmpDir, ignore_errors = True)
 
     def startVm(self, name, imageRef, flavorRef):
         client = self.client.nova
