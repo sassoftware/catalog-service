@@ -12,7 +12,7 @@ from catalogService.rest.models import instances
 
 try:
     from novaclient.v1_1.client import Client as NovaClient
-    from glance.client import Client as GlanceClient
+    from glance.client import V1Client as GlanceClient
 except ImportError:
     NovaClient = None #pyflakes=ignore
     GlanceClient = None #pyflakes=ignore
@@ -175,8 +175,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        glance_server = cloudConfig['glance_server']
-        #glance_port = cloudConfig['glance_port']
+        glanceServer = cloudConfig['glance_server']
+        glancePort = cloudConfig['glance_port']
         api_version = self._openstack_api_version()
         authUrl = "http://%s:%s/%s/" % (server, port, api_version)
         try:
@@ -185,7 +185,7 @@ class OpenStackClient(baseDriver.BaseDriver):
                                     credentials['auth_token'],
                                     project_id=None,
                                     auth_url=authUrl)
-            glanceClient = self.GlanceClientClass(glance_server)
+            glanceClient = self.GlanceClientClass(glanceServer, port=glancePort)
             clients = ConsolidatedClient(novaClient, glanceClient)
         except Exception, e:
             raise errors.PermissionDenied(message =
