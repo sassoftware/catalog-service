@@ -1380,7 +1380,12 @@ class OVF(object):
             networkNames = self.getNetworkNames()
             # Add back ethernet0 as E1000
             item = hardwareSection.makeelement("{%s}Item" % self.ovfNs)
-            hardwareSection.append(item)
+            # We need to add the item at the end of the section
+            allItems = list(hardwareSection.iterfind(item.tag))
+            if not allItems:
+                hardwareSection.insert(0, item)
+            else:
+                allItems[-1].addnext(item)
             if networkNames:
                 networkName = networkNames[0]
             else:
