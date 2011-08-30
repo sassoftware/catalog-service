@@ -1376,9 +1376,7 @@ class OVF(object):
         def getInstanceId(self, node):
             return OVF._getNodeText(node, self.instanceIdTag, self.rasdNs)
 
-        def addHardwareItems(self, hardwareSection, nextInstanceId):
-            networkNames = self.getNetworkNames()
-            # Add back ethernet0 as E1000
+        def addNewHardwareItem(self, hardwareSection):
             item = hardwareSection.makeelement("{%s}Item" % self.ovfNs)
             # We need to add the item at the end of the section
             allItems = list(hardwareSection.iterfind(item.tag))
@@ -1386,6 +1384,12 @@ class OVF(object):
                 hardwareSection.insert(0, item)
             else:
                 allItems[-1].addnext(item)
+            return item
+
+        def addHardwareItems(self, hardwareSection, nextInstanceId):
+            networkNames = self.getNetworkNames()
+            # Add back ethernet0 as E1000
+            item = self.addNewHardwareItem(hardwareSection)
             if networkNames:
                 networkName = networkNames[0]
             else:
@@ -1429,6 +1433,11 @@ class OVF(object):
             contentNode = self.doc.find(OVF._xmltag('Content', self.xmlns))
             return OVF._getSectionsByType(contentNode,
                 'VirtualHardwareSection_Type', self.ovfNs, self.xsiNs)
+
+        def addNewHardwareItem(self, hardwareSection):
+            item = hardwareSection.makeelement("{%s}Item" % self.ovfNs)
+            hardwareSection.append(item)
+            return item
 
         def _addNetworkFields(self, item, nextInstanceId, networkName):
             self.addNode(item, self.elementNameTag, "ethernet0")
