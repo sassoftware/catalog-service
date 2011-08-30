@@ -89,8 +89,6 @@ class BaseDriver(object):
         self._nodeFactory = nodeFactory
         self._nodeFactory.userId = userId
         self._logger = None
-        self._instanceStore = None
-        self._jobsStore = jobs.ApplianceVersionUpdateJobSqlStore(self.db)
         self._instanceLaunchJobStore = jobs.LaunchJobSqlStore(self.db)
         self._instanceUpdateJobStore = jobs.ApplianceUpdateJobSqlStore(self.db)
         self._x509Cert = None
@@ -354,7 +352,6 @@ class BaseDriver(object):
             if not cred:
                 return None
             self._cloudClient = self.drvCreateCloudClient(cred)
-            self._instanceStore = self._getInstanceStore()
         return self._cloudClient
 
     client = property(drvGetCloudClient)

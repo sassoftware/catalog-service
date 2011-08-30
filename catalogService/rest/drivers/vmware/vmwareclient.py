@@ -388,15 +388,6 @@ class VMwareClient(baseDriver.BaseDriver):
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
-            # Check instance store for updating status, and if it's present,
-            # set the data on the instance object.
-            updateStatusState = self._instanceStore.getUpdateStatusState(inst.getId(), None)
-            updateStatusTime = self._instanceStore.getUpdateStatusTime(inst.getId(), None)
-            if updateStatusState:
-                inst.getUpdateStatus().setState(updateStatusState)
-            if updateStatusTime:
-                inst.getUpdateStatus().setTime(updateStatusTime)
-
             instIdSet.add(instanceId)
             newInstanceList.append(inst)
         # Add back the original instances, unless we have them already
