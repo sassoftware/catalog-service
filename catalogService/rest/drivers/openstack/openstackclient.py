@@ -368,15 +368,20 @@ class OpenStackClient(baseDriver.BaseDriver):
         return None
 
     def _getImageType(self):
-        cloudConfig = self.getTargetConfiguration()
-        hypervisorType = cloudConfig['hypervisorType'].upper()
-        if hypervisorType == 'KVM':
-            return 'raw'
-        else:
-            return None # TODO: add case for Xen Backend, raise error if it matches nothing?
+        return 'raw'
 
     def _getImagePublic(self):
         return True
+
+    def _importImage(self, imageMetadata, path):
+        f = None
+        glanceImage = None
+        try:
+            f = open(path, 'wb')
+            glanceImage = self.client.glance.add_image(imageMetadata, f)
+        finally:
+            if f: f.close()
+        return glanceImage
 
     def _deployImage(self, job, image, auth):
         tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
@@ -384,12 +389,10 @@ class OpenStackClient(baseDriver.BaseDriver):
             job.addHistoryEntry('Downloading image')
             path = self._downloadImage(image, tmpDir, auth = auth)
             job.addHistoryEntry('Importing image')
-            f = open(path, 'wb')
             imageType = self._getImageType()
             imagePublic = self._getImagePublic()
             imageMetadata = {'name':'TBD', 'type':imageType, 'is_public':imagePublic}
-            self.client.glance.add_image(imageMetadata, f)
-            f.close()
+            self._importImage(imageMetadata, path)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
 
