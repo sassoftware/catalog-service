@@ -20,6 +20,9 @@ except ImportError:
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
 
+NOVA_PORT = 8774
+GLANCE_PORT = 9292
+
 # This is provided by the nova api
 #class OpenStack_InstanceTypes(instances.InstanceTypes):
 #    "OpenStack Instance Types"
@@ -58,6 +61,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <default>%(nova_port)s</default>
       <help href='configuration/novaPortNumber.html'/>
     </field>
     <field>
@@ -76,6 +80,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
+      <default>%(glance_port)s</default>
       <help href='configuration/glancePortNumber.html'/>
     </field>
     <field>
@@ -97,7 +102,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <help href='configuration/description.html'/>
     </field>
   </dataFields>
-</descriptor>"""
+</descriptor>""" % dict(nova_port=NOVA_PORT, glance_port=GLANCE_PORT)
 
 # User Name
 # Auth Token
@@ -175,8 +180,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        glanceServer = cloudConfig['glance_server']
-        glancePort = cloudConfig['glance_port']
+        glanceServer = cloudConfig.get('glance_server', server)
+        glancePort = int(cloudConfig.get('glance_port', GLANCE_PORT))
         api_version = self._openstack_api_version()
         authUrl = "http://%s:%s/%s/" % (server, port, api_version)
         try:
@@ -212,7 +217,7 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     def _get_flavors(self):
         client = self.client.nova
-        return client.flavors.list()
+        return sorted(client.flavors.list(), key=self.sortKey)
 
     # TODO: figure this out.  It is an option launch param.
     def _get_ipgroups(self):
@@ -226,10 +231,10 @@ class OpenStackClient(baseDriver.BaseDriver):
         descr.addDescription("OpenStack Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)
 
-        target_flavors = self._get_flavors()
-        if not target_flavors:
+        targetFlavors = self._get_flavors()
+        if not targetFlavors:
             raise errors.CatalogError("No instance flavors defined")
-        flavors = [ descr.ValueWithDescription(str(f.id), descriptions = f.name) for f in target_flavors ]
+        flavors = [ descr.ValueWithDescription(str(f.id), descriptions = f.name) for f in targetFlavors ]
         descr.addDataField('flavor',
                             descriptions = 'Flavor',
                             required = True,
@@ -237,7 +242,7 @@ class OpenStackClient(baseDriver.BaseDriver):
                                 ('launch/flavor.html', None)
                             ],
                             type = descr.EnumeratedType(flavors),
-                            default=target_flavors[0].id,
+                            default=flavors[0].key,
                             readonly=True,
                             )
         return descr
@@ -264,7 +269,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         # Hash images so we can quickly return a ref
         imagesMap = dict((self._idFromRef(image.opaqueId), image)
             for image in images if hasattr(image, 'opaqueId'))
-        for server in client.servers.list():
+        servers = sorted(client.servers.list(), key=self.sortKey)
+        for server in servers:
             instanceId = str(server.id)
             imageRef = self._idFromRef(server.imageRef)
             image = imagesMap.get(imageRef)
@@ -325,12 +331,17 @@ class OpenStackClient(baseDriver.BaseDriver):
         self.startVm(realId)
         return self.client.xenapi.VM.get_uuid(realId)
 
+    @classmethod
+    def sortKey(cls, x):
+        return x.id
+
     def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
 
         client = self.client.nova
         ret = []
-        for image in client.images.list(detailed=True):
+        images = sorted(client.images.list(detailed=True), key=self.sortKey)
+        for image in images:
             # image.id is numeric
             imageId = str(image.id)
             imageName = image.name
