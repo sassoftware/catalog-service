@@ -671,6 +671,14 @@ class BaseDriver(object):
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
+    def _getStoredTargetConfiguration(self):
+        try:
+            targetData = self.db.targetMgr.getTargetData(self.cloudType,
+                                                         self.cloudName)
+        except TargetMissing:
+            targetData = {}
+        return targetData
+
     def getTargetConfiguration(self, isAdmin = False, forceAdmin = False):
         # We can't set both isAdmin and forceAdmin at the same time
         assert int(bool(isAdmin)) + int(bool(forceAdmin)) != 2
@@ -680,11 +688,7 @@ class BaseDriver(object):
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
         if not forceAdmin and bool(self._targetConfig):
             return self._targetConfig
-        try:
-            targetData = self.db.targetMgr.getTargetData(self.cloudType,
-                                                         self.cloudName)
-        except TargetMissing:
-            targetData = {}
+        targetData = self._getStoredTargetConfiguration()
 
         # If we force admin, don't pollute _targetConfig
         ret = self.drvGetTargetConfiguration(targetData,
