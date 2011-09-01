@@ -652,13 +652,8 @@ class VMwareClient(baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        self._msg(job, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
-        try:
-            path = self._downloadImage(image, tmpDir, auth = auth)
-        except errors.CatalogError, e:
-            util.rmtree(tmpDir, ignore_errors=True)
-            raise
+        path = self.downloadImage(job, image, tmpDir, auth=auth)
 
         vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
         inventoryPrefix = '/%s/%s/' %(dcName, vmFolder)

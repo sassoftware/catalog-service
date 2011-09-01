@@ -362,13 +362,8 @@ class VCloudClient(baseDriver.BaseDriver):
 
         logger = lambda *x: self._msg(job, *x)
 
-        self._msg(job, 'Downloading image')
         tmpDir = tempfile.mkdtemp(prefix="vcloud-download-")
-        try:
-            path = self._downloadImage(image, tmpDir, auth = auth)
-        except errors.CatalogError:
-            util.rmtree(tmpDir, ignore_errors=True)
-            raise
+        path = self.downloadImage(job, image, tmpDir, auth=auth)
 
         vappTemplateName = self._findUniqueName(catalog, vappTemplateName)
         # FIXME: make sure that there isn't something in the way on

@@ -749,7 +749,18 @@ class BaseDriver(object):
             raise errors.DownloadError("Unable to download file")
         util.copyfileobj(resp, file(destFile, 'w'))
 
-    def _downloadImage(self, image, tmpDir, auth = None, extension = '.tgz'):
+
+    def downloadImage(self, job, image, tmpDir, auth=None, extension='.tgz'):
+        self._msg(job, 'Downloading image')
+        try:
+            path = self._downloadImage(image, tmpDir, auth=auth,
+                extension=extension)
+        except errors.CatalogError, e:
+            util.rmtree(tmpDir, ignore_errors=True)
+            raise
+        return path
+
+    def _downloadImage(self, image, tmpDir, auth=None, extension=None):
         imageId = image.getImageId()
 
         downloadUrl = image.getDownloadUrl()

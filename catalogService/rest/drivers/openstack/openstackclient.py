@@ -376,18 +376,14 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _importImage(self, imageMetadata, path):
         f = None
         glanceImage = None
-        try:
-            f = open(path, 'wb')
+        with open(path) as f:
             glanceImage = self.client.glance.add_image(imageMetadata, f)
-        finally:
-            if f: f.close()
         return glanceImage
 
     def _deployImage(self, job, image, auth):
         tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
+        path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
-            job.addHistoryEntry('Downloading image')
-            path = self._downloadImage(image, tmpDir, auth = auth)
             job.addHistoryEntry('Importing image')
             imageType = self._getImageType()
             imagePublic = self._getImagePublic()

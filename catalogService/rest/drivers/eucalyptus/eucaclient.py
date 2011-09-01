@@ -358,12 +358,7 @@ class EucalyptusClient(ec2client.EC2Client):
         accountId = '0' * 12
         bucketName = tconf['s3Bucket']
 
-        try:
-            self._msg(job, "Downloading image")
-            dlpath = self._downloadImage(image, tmpDir, auth = auth)
-        except errors.CatalogError, e:
-            util.rmtree(tmpDir, ignore_errors=True)
-            raise
+        dlpath = self.downloadImage(job, image, tmpDir, auth=auth)
 
         fileExtensions = [ '.ext3' ]
         try:
