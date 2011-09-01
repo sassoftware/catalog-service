@@ -163,8 +163,7 @@ class OpenStackClient(baseDriver.BaseDriver):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
-    RBUILDER_BUILD_TYPE = 'XEN_OVA'  # TODO: Determine appropriate rBuilder image type
-    # This should probably be the KVM Raw....
+    RBUILDER_BUILD_TYPE = 'RAW_FS_IMAGE'
 
     NovaClientClass = NovaClient
     GlanceClientClass = GlanceClient
@@ -176,6 +175,8 @@ class OpenStackClient(baseDriver.BaseDriver):
     # Right now 1.1 is the only version that is supported
     def _openstack_api_version(self):
         return 'v1.1'
+
+    getImageIdFromMintImage = baseDriver.BaseDriver._getImageIdFromMintImage_local
 
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()

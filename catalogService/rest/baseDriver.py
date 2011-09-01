@@ -249,6 +249,8 @@ class BaseDriver(object):
     class _ImageMap(object):
         def __init__(self, imageList):
             self._ids = dict((x.getImageId(), x) for x in imageList)
+            self._ids.update((x._targetImageId, x) for x in imageList
+                if getattr(x, '_targetImageId', None))
 
         def get(self, imageId):
             return self._ids.get(imageId)
