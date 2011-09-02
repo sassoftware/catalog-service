@@ -280,8 +280,8 @@ class OpenStackClient(baseDriver.BaseDriver):
                 imageId = image.id
             else:
                 imageId = None
-            publicDnsName = None # XXX FIXME
-            privateDnsName = None # XXX FIXME
+            publicDnsName = self._getServerAddressByType(server, 'public')
+            privateDnsName = self._getServerAddressByType(server, 'private')
             inst = self._nodeFactory.newInstance(id = instanceId,
                 imageId = imageId,
                 instanceId = instanceId,
@@ -298,6 +298,15 @@ class OpenStackClient(baseDriver.BaseDriver):
             instanceList.append(inst)
         instanceList.sort(key = lambda x: (x.getState(), x.getInstanceId()))
         return self.filterInstances(instanceIds, instanceList)
+
+    @classmethod
+    def _getServerAddressByType(cls, server, addressType):
+        if not server.addresses:
+            return None
+        addrlist = server.addresses.get(addressType)
+        if not addrlist:
+            return None
+        return addrlist[0]['addr']
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
