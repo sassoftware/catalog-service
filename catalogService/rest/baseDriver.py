@@ -599,6 +599,10 @@ class BaseDriver(object):
             status = job.status,
         )
 
+    def linkTargetImageToImage(self, image, targetImageId):
+        self.db.targetMgr.linkTargetImageToImage(self.cloudType,
+            self.cloudName, image._fileId, targetImageId)
+
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
         descr = self.getCloudConfigurationDescriptor()

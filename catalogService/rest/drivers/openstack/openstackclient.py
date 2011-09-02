@@ -312,26 +312,18 @@ class OpenStackClient(baseDriver.BaseDriver):
         ppop = launchParams.pop
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
+        flavorRef = ppop('flavor')
 
         cloudConfig = self.getTargetConfiguration()
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
         self._deployImage(job, image, auth)
-
         imageId = image.getInternalTargetId()
 
-        job.addHistoryEntry('Cloning template')
-        realId = self.cloneTemplate(job, imageId, instanceName,
-            instanceDescription)
-        job.addHistoryEntry('Attaching credentials')
-        try:
-            self._attachCredentials(realId)
-        except Exception, e:
-            self.log_exception("Exception attaching credentials: %s" % e)
         job.addHistoryEntry('Launching')
-        self.startVm(realId)
-        return self.client.xenapi.VM.get_uuid(realId)
+        instId = self._launchInstanceOnTarget(instanceName, imageId, flavorRef)
+        return [ instId ]
 
     @classmethod
     def sortKey(cls, x):
@@ -379,9 +371,12 @@ class OpenStackClient(baseDriver.BaseDriver):
         glanceImage = None
         with open(path) as f:
             glanceImage = self.client.glance.add_image(imageMetadata, f)
-        return glanceImage
+        return str(glanceImage['id'])
 
     def _deployImage(self, job, image, auth):
+        if image.getIsDeployed():
+            return image.getImageId()
+
         tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
         path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
@@ -389,10 +384,13 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageType = self._getImageType()
             imagePublic = self._getImagePublic()
             imageMetadata = {'name':'TBD', 'type':imageType, 'is_public':imagePublic}
-            self._importImage(imageMetadata, path)
+            imageId = self._importImage(imageMetadata, path)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
+        self.linkTargetImageToImage(image, imageId)
+        return imageId
 
-    def startVm(self, name, imageRef, flavorRef):
+    def _launchInstanceOnTarget(self, name, imageRef, flavorRef):
         client = self.client.nova
-        server = client.create(name, imageRef, flavorRef) # ipGroup, etc
+        server = client.servers.create(name, imageRef, flavorRef) # ipGroup, etc
+        return str(server.id)
