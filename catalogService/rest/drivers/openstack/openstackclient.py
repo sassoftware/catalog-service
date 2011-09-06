@@ -163,7 +163,7 @@ class OpenStackClient(baseDriver.BaseDriver):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
-    RBUILDER_BUILD_TYPE = 'RAW_FS_IMAGE'
+    RBUILDER_BUILD_TYPE = 'RAW_HD_IMAGE'
 
     NovaClientClass = NovaClient
     GlanceClientClass = GlanceClient
@@ -370,8 +370,11 @@ class OpenStackClient(baseDriver.BaseDriver):
                 return link['href']
         return None
 
-    def _getImageType(self):
+    def _getImageDiskFormat(self):
         return 'raw'
+
+    def _getImageContainerFormat(self):
+        return 'bare'
 
     def _getImagePublic(self):
         return True
@@ -391,10 +394,12 @@ class OpenStackClient(baseDriver.BaseDriver):
         path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
             job.addHistoryEntry('Importing image')
-            imageType = self._getImageType()
+            imageDiskFormat = self._getImageDiskFormat()
+            imageContainerFormat = self._getImageContainerFormat()
             imagePublic = self._getImagePublic()
             imageName = image.getShortName()
-            imageMetadata = {'name':imageName, 'type':imageType, 'is_public':imagePublic}
+            imageMetadata = {'name':imageName, 'disk_format':imageDiskFormat, 
+                    'container_format':imageContainerFormat, 'is_public':imagePublic}
             imageId = self._importImage(imageMetadata, path)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
