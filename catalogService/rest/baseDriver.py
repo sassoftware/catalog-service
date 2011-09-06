@@ -12,6 +12,7 @@ import traceback
 import urllib
 import urllib2
 import weakref
+import gzip
 
 from conary.lib import magic, util, sha1helper
 
@@ -1188,6 +1189,29 @@ class Archive(object):
         def extractfile(self, member):
             return self.tarfile.extractfile(member)
 
+    class GzipArchive(object):
+        "A gzip file"
+        def __init__(self, parent, path):
+            self.parent = parent
+            self.path = path
+            self.workdir = os.path.join(os.path.dirname(path), 'subdir')
+            util.mkdirChain(self.workdir)
+            fname = os.path.basename(self.path)
+            if fname.lower().endswith('.gz'):
+                fname = fname[:-3]
+            self._fname = os.path.join(self.workdir, fname)
+            self._fobj = file(self._fname, "w")
+        def run(self):
+            fsrc = gzip.open(self.path, "r")
+            util.copyfileobj(fsrc, self._fobj)
+            self._fobj.close()
+        def __iter__(self):
+            return iter([ Archive.CommandArchive.File(
+                os.path.basename(self._fname),
+                self.workdir) ])
+        def extractfile(self, member):
+            return member
+
     def __init__(self, path, log):
         self.path = path
         self.archive = None
@@ -1207,6 +1231,8 @@ class Archive(object):
             cmd = [ 'tar', 'zxSf', self.path, '-C', workdir ]
         elif isinstance(mg, magic.tar):
             self.archive = self.TarArchive(wself, self.path)
+        elif isinstance(mg, magic.gzip):
+            self.archive = self.GzipArchive(wself, self.path)
         else:
             raise errors.CatalogError('unsupported rBuilder image archive format')
         if cmd is not None:
