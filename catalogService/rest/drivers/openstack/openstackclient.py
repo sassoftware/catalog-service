@@ -393,11 +393,13 @@ class OpenStackClient(baseDriver.BaseDriver):
             job.addHistoryEntry('Importing image')
             imageType = self._getImageType()
             imagePublic = self._getImagePublic()
-            imageMetadata = {'name':'TBD', 'type':imageType, 'is_public':imagePublic}
+            imageName = image.getShortName()
+            imageMetadata = {'name':imageName, 'type':imageType, 'is_public':imagePublic}
             imageId = self._importImage(imageMetadata, path)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
         self.linkTargetImageToImage(image, imageId)
+        self.setInternalTargetId(imageId)
         return imageId
 
     def _launchInstanceOnTarget(self, name, imageRef, flavorRef):
