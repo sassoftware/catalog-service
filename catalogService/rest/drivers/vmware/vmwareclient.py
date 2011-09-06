@@ -205,13 +205,20 @@ class VMwareClient(baseDriver.BaseDriver):
                            readonly = True
                            )
         crToDc = {}
-        networkToDc = {}
+        validDatacenters = []
         for dc in dataCenters:
             crs = dc.getComputeResources()
+            validCrs = {}
             for cr in crs:
-                crToDc[cr] = dc
-            for network in dc.properties['network']:
-                networkToDc.setdefault(network, []).append(dc)
+                cfg = cr.configTarget
+                if cfg is None:
+                    continue
+                validCrs[cr] = dc
+            if not validCrs:
+                continue
+            crToDc.update(validCrs)
+            validDatacenters.append(dc)
+
             descr.addDataField('cr-%s' %dc.obj,
                                descriptions = 'Compute Resource',
                                required = True,
@@ -228,10 +235,8 @@ class VMwareClient(baseDriver.BaseDriver):
                                     operator='eq',
                                     fieldValue=dc.obj)
                                )
-        for cr, dc in crToDc.items():
-            cfg = cr.configTarget
-            if cfg is None:
-                continue
+
+        for dc in validDatacenters:
             # We may have references to invalid networks, skip those
             networks = dc.properties['network']
             networks = [ vicfg.getNetwork(x) for x in networks ]
@@ -253,8 +258,6 @@ class VMwareClient(baseDriver.BaseDriver):
 
         for cr, dc in crToDc.items():
             cfg = cr.configTarget
-            if cfg is None:
-                continue
             dataStores = []
 
             for ds in cfg.get_element_datastore():
