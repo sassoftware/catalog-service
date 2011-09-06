@@ -351,6 +351,7 @@ class OpenStackClient(baseDriver.BaseDriver):
             img = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
+                internalTargetId = imageId,
                 isDeployed = True,
                 is_rBuilderImage = False,
                 shortName = imageName,
