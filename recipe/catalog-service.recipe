@@ -11,12 +11,14 @@ class CatalogService(PackageRecipe):
     buildRequires = [
         'boto:python',
         'ec2-ami-tools:runtime',
+        'glance-client:python',
         'lxml:python',
         'make:runtime',
         'm2crypto:python',
         'pywbem:python',
         'python:devel',
         'python:lib',
+        'python-novaclient:python',
         # Should we decide to no longer use rmake's gencert.py, we should
         # remove this
         'rmake:python',
