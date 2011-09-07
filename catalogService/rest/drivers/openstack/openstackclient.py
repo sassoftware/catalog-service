@@ -379,11 +379,8 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _getImagePublic(self):
         return True
 
-    def _importImage(self, imageMetadata, path):
-        f = None
-        glanceImage = None
-        with open(path) as f:
-            glanceImage = self.client.glance.add_image(imageMetadata, f)
+    def _importImage(self, imageMetadata, fileObj):
+        glanceImage = self.client.glance.add_image(imageMetadata, fileObj)
         return str(glanceImage['id'])
 
     def _deployImage(self, job, image, auth):
@@ -392,7 +389,16 @@ class OpenStackClient(baseDriver.BaseDriver):
 
         tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
         path = self.downloadImage(job, image, tmpDir, auth=auth)
+        # Expect the image to be gzip
         try:
+            job.addHistoryEntry('Uncompressing image')
+            logger = lambda *x: self._msg(job, *x)
+            archive = baseDriver.Archive(path, logger)
+            archive.extract()
+            archiveMembers = list(archive)
+            assert len(archiveMembers) == 1
+            member = archiveMembers[0]
+            fobj = archive.extractfile(member)
             job.addHistoryEntry('Importing image')
             imageDiskFormat = self._getImageDiskFormat()
             imageContainerFormat = self._getImageContainerFormat()
@@ -400,7 +406,7 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageName = image.getShortName()
             imageMetadata = {'name':imageName, 'disk_format':imageDiskFormat, 
                     'container_format':imageContainerFormat, 'is_public':imagePublic}
-            imageId = self._importImage(imageMetadata, path)
+            imageId = self._importImage(imageMetadata, fobj)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
         # Mark the image as deployed
