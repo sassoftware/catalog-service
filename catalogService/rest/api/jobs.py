@@ -46,6 +46,8 @@ class JobTypeController(base.BaseController):
             jobs.ApplianceVersionUpdateJobSqlStore),
         'instance-launch' : ('Instance Launch',
             jobs.LaunchJobSqlStore),
+        'image-deployment' : ('ImageDeployment',
+            jobs.DeployImageJobSqlStore),
         'instance-update' : ('Instance Update',
             jobs.ApplianceUpdateJobSqlStore),
     }

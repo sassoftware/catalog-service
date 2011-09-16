@@ -25,6 +25,20 @@ class ImagesController(BaseCloudController):
         images = self.driver(request, cloudName).getImages([imageId])
         return XmlResponse(images)
 
+    def create(self, request, cloudName):
+        "deploy an image"
+        request.logger.info("User %s: launching instance in %s/%s" % (
+            request.auth[0], self.driver.cloudType, cloudName))
+        # We need to pass in authentication information, downloading private
+        # images requires that.
+        job = self.driver(request, cloudName).deployImage(request.read(),
+                request.auth)
+        request.logger.info("User %s: %s/%s: launched job %s with image %s"
+            % ( request.auth[0], self.driver.cloudType, cloudName,
+            job.get_id(), os.path.basename(job.get_imageId())))
+        return XmlResponse(job)
+
+
 class SecurityGroupsController(BaseCloudController):
     modelName = 'securityGroup'
 
@@ -126,8 +140,14 @@ class LaunchDescriptorController(BaseCloudController):
         descr = self.driver(request, cloudName).getLaunchDescriptor()
         return XmlSerializableObjectResponse(descr)
 
+class ImageDeploymentDescriptorController(BaseCloudController):
+    def index(self, request, cloudName):
+        descr = self.driver(request, cloudName).getImageDeploymentDescriptor()
+        return XmlSerializableObjectResponse(descr)
+
 class DescriptorController(BaseCloudController):
-    urls = dict(launch = LaunchDescriptorController)
+    urls = dict(launch = LaunchDescriptorController,
+        deployImage = ImageDeploymentDescriptorController)
 
 class UsersController(BaseCloudController):
     modelName = 'userName'

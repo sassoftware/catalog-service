@@ -12,6 +12,9 @@ class InstanceLaunchJob(rpath_job.HistoryBaseJob):
     _fieldTypes['cloudName'] = rpath_job.FieldString
     _fieldTypes['system'] = rpath_job.FieldInteger
 
+class DeployImageJob(InstanceLaunchJob):
+    pass
+
 class VersionUpdateLaunchJob(rpath_job.HistoryBaseJob):
     _fieldTypes = rpath_job.HistoryBaseJob._fieldTypes.copy()
     _fieldTypes['instanceId'] = rpath_job.FieldString
@@ -32,6 +35,11 @@ class LaunchJobStore(CatalogJobStore):
     jobFactory = InstanceLaunchJob
     resultClass = ResultResource
 
+class DeployImageJobStore(CatalogJobStore):
+    jobType = "image-deployment"
+    jobFactory = DeployImageJob
+    resultClass = ResultResource
+
 class ApplianceVersionUpdateJobStore(CatalogJobStore):
     jobType = "software-version-refresh"
     jobFactory = VersionUpdateLaunchJob
@@ -50,6 +58,10 @@ class LaunchJobSqlStore(CatalogSqlJobStore):
     jobFactory = InstanceLaunchJob
     resultClass = ResultResource
     BackingStore = rpath_job.TargetSqlBacking
+
+class DeployImageJobSqlStore(LaunchJobSqlStore):
+    jobType = DeployImageJobStore.jobType
+    jobFactory = LaunchJobSqlStore.jobFactory
 
 class ApplianceVersionUpdateJobSqlStore(CatalogSqlJobStore):
     jobType = ApplianceVersionUpdateJobStore.jobType

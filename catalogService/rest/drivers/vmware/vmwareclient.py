@@ -166,9 +166,19 @@ class VMwareClient(baseDriver.BaseDriver):
         return self._vicfg
     vicfg = property(_getVIConfig)
 
+    def getDeployImageParameters(self, image, descriptorData):
+        params = baseDriver.BaseDriver.getDeployImageParameters(self,
+            image, descriptorData)
+        self._paramsFromDescriptorData(params, descriptorData)
+        return params
+
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
             image, descriptorData)
+        self._paramsFromDescriptorData(params, descriptorData)
+        return params
+
+    def _paramsFromDescriptorData(self, params, descriptorData):
         getField = descriptorData.getField
         dataCenter = getField('dataCenter')
         cr = getField('cr-%s' % dataCenter)
@@ -183,11 +193,19 @@ class VMwareClient(baseDriver.BaseDriver):
         ))
         return params
 
+    def drvPopulateImageDeploymentDescriptor(self, descr):
+        descr.setDisplayName('VMware Image Deployment Parameters')
+        descr.addDescription('VMware Image Deployment Parameters')
+        self.drvImageDeploymentDescriptorCommonFields(descr)
+        return self._drvPopulateDescriptorFromTarget(descr)
+
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName('VMware Launch Parameters')
         descr.addDescription('VMware Launch Parameters')
         self.drvLaunchDescriptorCommonFields(descr)
+        return self._drvPopulateDescriptorFromTarget(descr)
 
+    def _drvPopulateDescriptorFromTarget(self, descr):
         vicfg = self.vicfg
         dataCenters = [ x for x in vicfg.getDatacenters()
             if x.getComputeResources() ]
@@ -708,6 +726,45 @@ class VMwareClient(baseDriver.BaseDriver):
         finally:
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
+
+    def deployImageProcess(self, job, image, auth, **params):
+        if image.getIsDeployed():
+            self._msg(job, "Image is already deployed")
+            return image.getImageId()
+
+        ppop = params.pop
+        dataCenter = ppop('dataCenter')
+        computeResource = ppop('computeResource')
+        dataStore = ppop('dataStore')
+        resourcePool= ppop('resourcePool')
+        imageName = ppop('imageName')
+        network = ppop('network')
+
+        newImageId = self.instanceStorageClass._generateString(32)
+        useTemplate = not self.client.isESX()
+
+        if useTemplate:
+            # if we can use a template, deploy the image
+            # as a template with the imageId as the uuid
+            vmName = 'template-' + image.getBaseFileName()
+            uuid = image.getImageId()
+        else:
+            # otherwise, we'll use the instance name and
+            # a random instance uuid for deployment
+            vmName = imageName
+            uuid = newImageId
+
+        vm = self._deployImage(job, image, auth, dataCenter,
+                               dataStore, computeResource,
+                               resourcePool, vmName, uuid,
+                               network, asTemplate = useTemplate)
+
+        # Grab the real uuid
+        instMap = self.client.getVirtualMachines(['config.uuid' ], root = vm)
+
+        uuid = instMap[vm]['config.uuid']
+        self._msg(job, 'Image deployed')
+        return uuid
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop

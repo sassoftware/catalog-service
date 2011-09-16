@@ -155,11 +155,19 @@ class VCloudClient(baseDriver.BaseDriver):
     def _id(cls, href, prefix):
         return "%s-%s" % (prefix, os.path.basename(href))
 
+    def drvPopulateImageDeploymentDescriptor(self, descr):
+        descr.setDisplayName('VMware vCloud Image Deployment Parameters')
+        descr.addDescription('VMware vCloud Image Deployment Parameters')
+        self.drvImageDeploymentDescriptorCommonFields(descr)
+        return self._drvPopulateDescriptorFromTarget(descr)
+
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("VMware vCloud Launch Parameters")
         descr.addDescription("VMware vCloud Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)
+        return self._drvPopulateDescriptorFromTarget(descr)
 
+    def _drvPopulateDescriptorFromTarget(self, descr):
         client = self.client
         vdcs = list(client.iterVdcs())
         dataCenters = []
@@ -256,6 +264,28 @@ class VCloudClient(baseDriver.BaseDriver):
             inst = self._newInstance(instanceId, vm, cloudAlias)
             instanceList.append(inst)
         return instanceList
+
+    def deployImageProcess(self, job, image, auth, **launchParams):
+        if image.getIsDeployed():
+            self._msg(job, "Image is already deployed")
+            return image.getImageId()
+
+        ppop = launchParams.pop
+        imageId = ppop('imageId')
+        imageName = ppop('imageName')
+        imageDescription = ppop('imageDescription', imageName)
+        dataCenterRef = ppop('dataCenter')
+        catalogRef = ppop('catalog')
+        networkRef = ppop('network-%s' % dataCenterRef)
+
+        dataCenter = self._getVdc(dataCenterRef)
+        catalog = self._getCatalog(catalogRef)
+        network = self._getNetworkFromVdc(dataCenter, networkRef)
+
+        vappTemplateRef = self._deployImage(job, image, auth,
+            imageName, imageDescription, dataCenter, catalog)
+
+        return [ self._idFromHref(vappTemplateRef) ]
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
@@ -371,7 +401,7 @@ class VCloudClient(baseDriver.BaseDriver):
 
         archive = self.Archive(path, logger)
         archive.extract()
-        self._msg(job, 'Uploading image to VMware')
+        self._msg(job, 'Uploading image to VMware vCloud')
         try:
             vapp = self.uploadVAppTemplate(job, vappTemplateName,
                 vappTemplateDescription, archive, dataCenter, catalog)

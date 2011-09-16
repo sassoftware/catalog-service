@@ -93,6 +93,7 @@ class BaseDriver(object):
         self._instanceStore = None
         self._jobsStore = jobs.ApplianceVersionUpdateJobSqlStore(self.db)
         self._instanceLaunchJobStore = jobs.LaunchJobSqlStore(self.db)
+        self._imageDeploymentJobStore = jobs.DeployImageJobSqlStore(self.db)
         self._instanceUpdateJobStore = jobs.ApplianceUpdateJobSqlStore(self.db)
         self._x509Cert = None
         self._x509Key = None
@@ -450,6 +451,26 @@ class BaseDriver(object):
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
+    def getImageDeploymentDescriptor(self):
+        cred = self.credentials
+        if not cred:
+            raise errors.HttpNotFound(message = "User has no credentials set")
+        descr = descriptor.LaunchDescriptor()
+        # We require an image ID
+        descr.addDataField("imageId",
+            descriptions = "Image ID",
+            hidden = True, required = True, type = "str",
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 32))
+
+        self.drvPopulateImageDeploymentDescriptor(descr)
+        descr = self._nodeFactory.newLaunchDescriptor(descr)
+        return descr
+
+    def drvPopulateImageDeploymentDescriptor(self, descr):
+        # By default, image deployment does not work
+        raise errors.HttpNotFound()
+
     def drvLaunchDescriptorCommonFields(self, descr):
         descr.addDataField('instanceName',
                            descriptions = 'Instance Name',
@@ -470,6 +491,36 @@ class BaseDriver(object):
                            constraints = dict(constraintName = 'length',
                                               value = 128))
         return descr
+
+    def drvImageDeploymentDescriptorCommonFields(self, descr):
+        descr.addDataField('imageName',
+                           descriptions = 'Image Name',
+                           type = 'str',
+                           required = True,
+                           help = [
+                               ('launch/imageName.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 32))
+
+        descr.addDataField('imageDescription',
+                           descriptions = 'Image Description',
+                           type = 'str',
+                           help = [
+                               ('launch/imageDescription.html', None)
+                           ],
+                           constraints = dict(constraintName = 'length',
+                                              value = 128))
+        return descr
+
+    def deployImage(self, xmlString, auth):
+        # Grab descriptor
+        descr = self.getImageDeploymentDescriptor()
+        descr.setRootElement('newImage')
+        # Parse the XML string into descriptor data
+        descrData = descriptor.DescriptorData(fromStream = xmlString,
+            descriptor = descr)
+        return self.deployImageFromDescriptorData(descrData, auth, xmlString)
 
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
@@ -523,6 +574,36 @@ class BaseDriver(object):
             job.commit()
             self.launchInstanceInBackgroundCleanup(image, **params)
 
+    def deployImageInBackground(self, jobId, image, auth, **params):
+        job = self._imageDeploymentJobStore.get(jobId, commitAfterChange = True)
+        job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
+        job.addHistoryEntry('Running')
+        try:
+            try:
+                realImageId = self.deployImageProcess(job, image, auth, **params)
+                if not realImageId:
+                    job.addHistoryEntry('Image deployment failed, no image was uploaded')
+                    job.status = job.STATUS_FAILED
+                    return
+                job.addResults(realImageId)
+                job.addHistoryEntry('Done')
+                job.status = job.STATUS_COMPLETED
+            except errors.CatalogError, e:
+                err = errors.CatalogErrorResponse(e.status,
+                    message = e.msg, tracebackData = e.tracebackData,
+                    productCodeData = e.productCodeData)
+                job.addHistoryEntry(e.msg)
+                job.setFields([('errorResponse', err.response[0]),
+                    ('status', job.STATUS_FAILED)])
+            except Exception, e:
+                job.addHistoryEntry(str(e))
+                job.status = job.STATUS_FAILED
+                raise
+        finally:
+            job.pid = None
+            job.commit()
+            self.deployImageInBackgroundCleanup(image, **params)
+
     def waitForRunningState(self, job, instanceIds):
         # Wait until all instances get out of the PENDING state
         expired = time.time() + self.LAUNCH_TIMEOUT
@@ -547,6 +628,40 @@ class BaseDriver(object):
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         self.cleanUpX509()
+
+    def deployImageInBackgroundCleanup(self, image, **params):
+        pass
+
+    def deployImageFromDescriptorData(self, descriptorData, auth, descrXml):
+        client = self.client
+        cloudConfig = self.getTargetConfiguration()
+
+        imageId = os.path.basename(descriptorData.getField('imageId'))
+
+        images = self.getImages([imageId])
+        if not images:
+            raise errors.HttpNotFound()
+        image = images[0]
+
+        params = self.getDeployImageParameters(image, descriptorData)
+
+        job = self._imageDeploymentJobStore.create(cloudName = self.cloudName,
+            cloudType = self.cloudType, restArgs = descrXml,
+            jobUuid = self.getBootUuid())
+        job.commit()
+        jobId = job.id
+        launchJobRunner = CatalogJobRunner(
+                                self.deployImageInBackground,
+                                self._logger,
+                                postFork=self.postFork)
+        launchJobRunner.job = job
+        launchJobRunner(jobId, image, auth, **params)
+
+        newImageParams = self.getNewImageParameters(job, image,
+            descriptorData, params)
+        newImageParams['createdBy'] = self.userId
+        job = jobmodels.Job(**newImageParams)
+        return self._nodeFactory.newImageDeploymentJob(job)
 
     def launchInstanceFromDescriptorData(self, descriptorData, auth, descrXml):
         client = self.client
@@ -590,6 +705,13 @@ class BaseDriver(object):
         params.update(imageId = image.getImageId())
         return params
 
+    def getDeployImageParameters(self, image, descriptorData):
+        params = dict((x.getName(), x.getValue())
+            for x in descriptorData.getFields())
+        # Make sure we use the right image id
+        params.update(imageId = image.getImageId())
+        return params
+
     def getNewInstanceParameters(self, job, image, descriptorData, launchParams):
         imageId = launchParams['imageId']
         return dict(
@@ -599,6 +721,11 @@ class BaseDriver(object):
             type_ = 'instance-launch',
             status = job.status,
         )
+
+    def getNewImageParameters(self, job, image, descriptorData, launchParams):
+        ret = self.getNewInstanceParameters(job, image, descriptorData, launchParams)
+        ret.update(type_='image-deployment')
+        return ret
 
     def linkTargetImageToImage(self, image, targetImageId):
         self.db.targetMgr.linkTargetImageToImage(self.cloudType,

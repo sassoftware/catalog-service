@@ -151,6 +151,17 @@ class NodeFactory(object):
                 result.set_href(self._getInstanceUrl(node, href))
         return node
 
+    def newImageDeploymentJob(self, node):
+        node.set_id(self.getJobIdUrl(node.get_id(), node.get_type()))
+        imageId = node.get_imageId()
+        if imageId:
+            node.set_imageId(self._getImageUrl(node, imageId))
+        for result in (node.get_resultResource() or []):
+            href = result.get_href()
+            if href:
+                result.set_href(self._getImageUrl(node, href))
+        return node
+
     def newLaunchDescriptor(self, descriptor):
         cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
 
