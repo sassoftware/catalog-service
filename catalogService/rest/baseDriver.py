@@ -440,6 +440,7 @@ class BaseDriver(object):
         if not cred:
             raise errors.HttpNotFound(message = "User has no credentials set")
         descr = descriptor.LaunchDescriptor()
+        descr.setRootElement('newInstance')
         # We require an image ID
         descr.addDataField("imageId",
             descriptions = "Image ID",
@@ -456,6 +457,7 @@ class BaseDriver(object):
         if not cred:
             raise errors.HttpNotFound(message = "User has no credentials set")
         descr = descriptor.LaunchDescriptor()
+        descr.setRootElement('newImage')
         # We require an image ID
         descr.addDataField("imageId",
             descriptions = "Image ID",
@@ -516,7 +518,6 @@ class BaseDriver(object):
     def deployImage(self, xmlString, auth):
         # Grab descriptor
         descr = self.getImageDeploymentDescriptor()
-        descr.setRootElement('newImage')
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
@@ -525,7 +526,6 @@ class BaseDriver(object):
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
-        descr.setRootElement('newInstance')
         # Parse the XML string into descriptor data
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
