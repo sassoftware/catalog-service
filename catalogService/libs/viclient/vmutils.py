@@ -98,6 +98,36 @@ def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
         raise RuntimeError('%s failed' % method)
     response.close()
 
+def _getFile(outPath, inUrl, method='GET', session=None, callback=None):
+    headers = {}
+    if session:
+        headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
+
+    response = _makeConnection(inUrl, method, headers,
+        callback=callback)
+
+    if response and response.status not in (200, 201):
+        raise RuntimeError('%s failed: %d - %s' % (
+            method, response.status, response.reason))
+    elif not response:
+        raise RuntimeError('%s failed' % method)
+
+    progress = lambda x, y: x
+    if callback:
+        # Default to the dummy progress callback
+        progress = getattr(callback, 'progress', progress)
+
+    fileObj = file(outPath, "w")
+    contentLength = response.msg.get('Content-Length')
+    if contentLength is not None:
+        contentLength = int(contentLength)
+    # Chunked transfers will not set Content-Length
+    # we let copyfileobj read to the end
+    util.copyfileobj(response, fileObj, bufSize=BUFSIZE,
+        sizeLimit=contentLength, callback=progress)
+
+    response.close()
+
 def uploadVMFiles(v, archive, vmName=None, dataCenter=None, dataStore=None):
     vmx = list(archive.iterFileWithExtensions(['.vmx']))
     if not vmx:
@@ -146,8 +176,6 @@ def _deleteVMFiles(v, filePaths, vmName=None, dataCenter=None, dataStore=None):
     if session:
         headers['Cookie'] =  'vmware_soap_session=%s; $Path=/' % session
     for filePath in filePaths:
-        filePath = os.path.basename(filePath)
+        filePath = urllib.quote(os.path.basename(filePath))
         outUrl = urlPattern.replace('@FILENAME@', filePath)
         response = _makeConnection(outUrl, 'DELETE', headers)
-
-

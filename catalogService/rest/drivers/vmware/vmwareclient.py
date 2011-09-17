@@ -17,7 +17,7 @@ from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-
+from catalogService.libs.viclient.VimService_client import *  # pyflakes=ignore
 
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
@@ -408,15 +408,6 @@ class VMwareClient(baseDriver.BaseDriver):
                 launchTime = launchTime,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
-
-            # Check instance store for updating status, and if it's present,
-            # set the data on the instance object.
-            updateStatusState = self._instanceStore.getUpdateStatusState(inst.getId(), None)
-            updateStatusTime = self._instanceStore.getUpdateStatusTime(inst.getId(), None)
-            if updateStatusState:
-                inst.getUpdateStatus().setState(updateStatusState)
-            if updateStatusTime:
-                inst.getUpdateStatus().setTime(updateStatusTime)
 
             instIdSet.add(instanceId)
             newInstanceList.append(inst)
@@ -860,3 +851,83 @@ class VMwareClient(baseDriver.BaseDriver):
             # We will not fail the request if we could not attach credentials
             # to the instance
             self.log_exception("Exception trying to attach credentials: %s", e)
+
+    def drvExportInstance(self, vmMor, destinationPath):
+        httpNfcLease = self.client.getOvfExportLease(vmMor)
+        self.client.waitForLeaseReady(httpNfcLease)
+        httpNfcLeaseInfo = self.client.getMoRefProp(httpNfcLease, 'info')
+        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
+        ovfFiles = []
+
+        class LProgressUpdate(ProgressUpdate):
+            def progress(slf, bytes, rate=0):
+                ProgressUpdate.progress(slf, bytes, rate=rate)
+                pct = slf._percent(bytes)
+                #vmwareclient.VMwareClient._msg(job, "Exporting OVF: %d%% complete" % pct)
+                print "Exporting OVF: %d%% complete" % pct
+
+        progressUpdate = LProgressUpdate(self.client._service, httpNfcLease)
+        progressUpdate.totalSize = totalSize
+        progressUpdate.progress(0, 0)
+
+        from catalogService.libs import viclient
+        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
+            url = deviceUrl.get_element_url()
+
+            fileName = os.path.basename(url)
+            destFile = os.path.join(destinationPath, fileName)
+
+            downloadHandle = viclient.vmutils._getFile(destFile, url, callback = progressUpdate)
+            if hasattr(downloadHandle, '_error'):
+                errors = []
+                for f in downloadHandle._error:
+                    if hasattr(f, '_localizedMessage'):
+                        errors.append(f.LocalizedMessage)
+                raise Exception("Error Exporting: %s" %
+                    '; '.join(errors))
+                self.client.leaseComplete(httpNfcLease)
+
+            if url.startswith("https://*/"):
+                url = self.client.baseUrl + url[10:]
+
+
+            fileSize = os.stat(destFile).st_size
+
+            ovfFile = ns0.OvfFile_Def('').pyclass()
+            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
+            ovfFile.set_element_size(fileSize)
+            ovfFile.set_element_path(fileName)
+            ovfFiles.append(ovfFile)
+
+            progressUpdate.updateSize(fileSize)
+
+        progressUpdate.progress(100, 0)
+
+        self.client.leaseComplete(httpNfcLease)
+
+        descr = self.client.createOvfDescriptor(vmMor, 'vm-name', 'vm-description', ovfFiles)
+        # Write OVF descriptor to disk
+        xmlData = descr.get_element_ovfDescriptor()
+        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
+        file(ovfFilePath, "w").write(xmlData)
+
+class ProgressUpdate(object):
+    def __init__(self, vmclient, httpNfcLease):
+        self.vmclient = vmclient
+        self.httpNfcLease = httpNfcLease
+        self.totalSize = 0
+        self.prevFilesSize = 0
+
+    def progress(self, bytes, rate=0):
+        pct = self._percent(bytes)
+        req = HttpNfcLeaseProgressRequestMsg()
+        req.set_element__this(self.httpNfcLease)
+        req.set_element_percent(pct)
+
+        self.vmclient._service.HttpNfcLeaseProgress(req)
+
+    def _percent(self, bytes):
+        return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
+
+    def updateSize(self, size):
+        self.prevFilesSize += size

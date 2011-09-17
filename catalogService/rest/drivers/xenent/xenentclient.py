@@ -279,16 +279,12 @@ class XenEntClient(baseDriver.BaseDriver):
         instIdSet = set(os.path.basename(x) for x in instanceIds)
         runningInsts = self.getInstances(instanceIds)
 
-        synthesizedInstIds = [ x.getInstanceId() for x in runningInsts
-            if len(x.getInstanceId()) != 36 ]
         realInstIds =  [ x.getInstanceId() for x in runningInsts
             if len(x.getInstanceId()) == 36 ]
 
         for instId in realInstIds:
             instRef = self._cachedGet(instId, client.xenapi.VM.get_by_uuid)
             client.xenapi.VM.clean_shutdown(instRef)
-
-        self._killRunningProcessesForInstances(synthesizedInstIds)
 
         insts = instances.BaseInstances()
         insts.extend(runningInsts)
@@ -605,21 +601,6 @@ class XenEntClient(baseDriver.BaseDriver):
                     cloudAlias = cloudAlias)
             imageList.append(image)
         return imageList
-
-    def _killRunningProcessesForInstances(self, synthesizedInstIds):
-        # For synthesized instances, try to kill the pid
-        for instId in synthesizedInstIds:
-            pid = self._instanceStore.getPid(instId)
-            if pid is not None:
-                # try to kill the child process
-                pid = int(pid)
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except OSError, e:
-                    if e.errno != 3: # no such process
-                        raise
-            # At this point the instance doesn't exist anymore
-            self._instanceStore.delete(instId)
 
     def cloneTemplate(self, job, imageId, instanceName, instanceDescription):
         client = self.client
