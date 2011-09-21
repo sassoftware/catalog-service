@@ -1206,6 +1206,11 @@ class VimService(object):
             # grab the previously retreived properties for this
             # compute resource
             crProps = props[cr]
+            dc = hostFolderToDataCenter.get(crProps['parent'], None)
+            if dc is None:
+                # Probably a compute resource not attached to a host
+                # folder? Or lack of visibility to the parent folder?
+                continue
             # get the top level resource pool for the compute resource
             crRp = crProps['resourcePool']
 
@@ -1221,7 +1226,6 @@ class VimService(object):
             crRps = dict(x for x in props.iteritems() if x[0] in crRpMors)
             # nowe we can create some objects that are easier to deal with
             cr = ComputeResource(cr, crProps, configTarget, crRps)
-            dc = hostFolderToDataCenter[crProps['parent']]
             dc.addComputeResource(cr)
 
         for dc in hostFolderToDataCenter.values():
