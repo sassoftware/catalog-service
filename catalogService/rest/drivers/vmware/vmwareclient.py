@@ -515,6 +515,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 is_rBuilderImage = False,
                 shortName = vminfo['name'],
                 productName = vminfo['name'],
+                internalTargetId = vminfo['config.uuid'],
                 longName = longName,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)

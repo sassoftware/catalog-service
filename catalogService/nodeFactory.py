@@ -97,6 +97,8 @@ class NodeFactory(object):
         node = self.imageFactory(*args, **kwargs)
         node.setId(self.getImageUrl(node))
         node.setCloudType(self.cloudType)
+        if node.getInternalTargetId() is None:
+            node.setInternalTargetId(node.getImageId())
         return node
 
     def newInstance(self, *args, **kwargs):
