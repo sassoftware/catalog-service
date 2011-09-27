@@ -34,6 +34,7 @@ from catalogService.rest.models import securityGroups
 from catalogService.utils import timeutils
 from catalogService.utils import x509
 
+import mint.buildtypes as buildtypes
 from mint.mint_error import TargetExists, TargetMissing
 from mint.django_rest.rbuilder.manager import rbuildermanager
 from mint.django_rest.rbuilder.inventory import models as inventorymodels
@@ -275,7 +276,7 @@ class BaseDriver(object):
         return unicode(obj).encode("utf-8")
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key, launchParams):
+                         x509Key, launchParams, source_image):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
@@ -285,6 +286,14 @@ class BaseDriver(object):
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
+
+        # so far deferred images need software updates post installation
+        # and other image types do not
+        should_migrate = False
+        if source_image is not None:
+            if source_image.build_type == buildtypes.DEFERRED_IMAGE:
+                should_migrate = True
+
         system = inventorymodels.System(
             name=systemName,
             description=systemDescription,
@@ -294,6 +303,8 @@ class BaseDriver(object):
             target_system_state=instanceState,
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
+            should_migrate = should_migrate,
+            source_image = source_image,
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
             targetType=cloudType, targetName=cloudName)
@@ -550,7 +561,7 @@ class BaseDriver(object):
                 x509Key = file(x509Key).read()
                 for instanceId in realInstanceId:
                     system = self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509Cert, x509Key, params)
+                        job.cloudName, x509Cert, x509Key, params, image)
                 job.addResults(realInstanceId)
                 job.addHistoryEntry('Done')
                 job.system = system.pk
