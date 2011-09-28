@@ -946,24 +946,15 @@ class BaseDriver(object):
     def _getMintImagesByType(self, imageType):
         return self.db.imageMgr.getAllImagesByType(imageType)
 
-    def _getMintImagesByTypes(self, imageTypes):
-        imgs = []
-        for imageType in imageTypes:
-            imgs.extend(self._getMintImagesByType(imageType))
-        return imgs
-
     def hashMintImages(self, mintImageList, imageList):
         targetImageIds = set(x.getImageId() for x in imageList)
         return dict((self.getImageIdFromMintImage(x, targetImageIds), x)
             for x in mintImageList)
 
-    def addMintDataToImageList(self, imageList, imageTypes):
+    def addMintDataToImageList(self, imageList, imageType):
         cloudAlias = self.getCloudAlias()
-        if not isinstance(imageTypes, (list, tuple)):
-            # Accept single image type here too
-            imageTypes = [ imageTypes ]
 
-        mintImages = self._getMintImagesByTypes(imageTypes)
+        mintImages = self._getMintImagesByType(imageType)
         # Convert the list into a map keyed on the sha1 converted into
         # uuid format
         mintImages = self.hashMintImages(mintImages, imageList)
