@@ -131,7 +131,7 @@ class VMwareClient(baseDriver.BaseDriver):
     # an actual server
     VimServiceTransport = None
 
-    RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+    RBUILDER_BUILD_TYPE = [ 'VMWARE_ESX_IMAGE', 'DEFERRED_IMAGE', ]
     # We should prefer OVA over OVF, but vcenter gets upset with
     # gzip-compressed vmdk images inside ova
     #OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
@@ -352,10 +352,9 @@ class VMwareClient(baseDriver.BaseDriver):
         # FIXME: re-factor this into common code (copied from Xen Ent)
         return self.terminateInstances([instanceId])
 
-    def _getMintImagesByType(self, imageType):
+    def _getMintImagesByTypes(self, imageTypes):
         # start with the most general build type
-        imageType = 'VMWARE_ESX_IMAGE'
-        mintImages = self.db.imageMgr.getAllImagesByType(imageType)
+        mintImages = baseDriver.BaseDriver._getMintImagesByTypes(self, imageTypes)
         if self.client.vmwareVersion < (4, 0, 0):
             # We don't support OVF deployments, so don't even bother
             return mintImages
@@ -368,7 +367,7 @@ class VMwareClient(baseDriver.BaseDriver):
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Finally, prefer OVF 1.0 images (unused at the moment)
         imageType = 'VMWARE_OVF_IMAGE'
-        for mintImage in self.db.imageMgr.getAllImagesByType(imageType):
+        for mintImage in self._getMintImagesByType(imageType):
             mintImagesByBuildId[mintImage['buildId']] = mintImage
         # Sort data by build id
         return [ x[1] for x in sorted(mintImagesByBuildId.items()) ]
