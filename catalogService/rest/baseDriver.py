@@ -72,6 +72,7 @@ class BaseDriver(object):
 
     # Timeout for waiting for an instance to show up as running
     LAUNCH_TIMEOUT = 600
+    LAUNCH_NETWORK_TIMEOUT = LAUNCH_TIMEOUT
     PENDING_STATES = set([ 'pending' ])
     RUNNING_STATES = set([ 'running' ])
     FAILED_STATES = set([ 'terminated' ])
@@ -553,6 +554,7 @@ class BaseDriver(object):
                 if not isinstance(realInstanceId, list):
                     realInstanceId = [ realInstanceId ]
                 self.waitForRunningState(job, realInstanceId)
+                self.waitForNetwork(job, realInstanceId)
                 x509Cert, x509Key = self.getWbemX509()
                 # Read the cert files
                 x509Cert = file(x509Cert).read()
@@ -631,6 +633,24 @@ class BaseDriver(object):
         results = [ (x.getInstanceId(), x.getState()) for x in instances ]
         msg = '; '.join("Instance %s state: %s" % r for r in results)
         self._msg(job, msg)
+
+    def waitForNetwork(self, job, instanceIds):
+        # Wait until all instances have a network
+        expired = time.time() + self.LAUNCH_NETWORK_TIMEOUT
+        while time.time() < expired:
+            instances = self.drvGetInstances(instanceIds)
+            imaps = [ (x, x.getPublicDnsName()) for x in instances ]
+            withNetworks = [ x for (x, y) in imaps if y is not None ]
+            withoutNetworks = [ x for (x, y) in imaps if y is None ]
+            for inst in withNetworks:
+                self._msg(job, "Instance %s: %s" % (
+                    inst.getInstanceId(), inst.getPublicDnsName()))
+            if not withoutNetworks:
+                return
+            instanceIds = sorted(x.getInstanceId() for x in withoutNetworks)
+            msg = ', '.join(instanceIds)
+            self._msg(job, "Waiting for a running state for %s" % msg)
+            time.sleep(10)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         self.cleanUpX509()
