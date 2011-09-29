@@ -34,7 +34,6 @@ from catalogService.rest.models import securityGroups
 from catalogService.utils import timeutils
 from catalogService.utils import x509
 
-import mint.buildtypes as buildtypes
 from mint.mint_error import TargetExists, TargetMissing
 from mint.django_rest.rbuilder.manager import rbuildermanager
 from mint.django_rest.rbuilder.inventory import models as inventorymodels
@@ -276,7 +275,7 @@ class BaseDriver(object):
         return unicode(obj).encode("utf-8")
 
     def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key, launchParams, source_image):
+                         x509Key, launchParams, sourceImage):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
@@ -289,10 +288,9 @@ class BaseDriver(object):
 
         # so far deferred images need software updates post installation
         # and other image types do not
-        should_migrate = False
-        if source_image is not None:
-            if source_image.build_type == buildtypes.DEFERRED_IMAGE:
-                should_migrate = True
+        shouldMigrate = False
+        if sourceImage is not None:
+            shouldMigrate = (sourceImage._imageType == 'DEFERRED_IMAGE')
 
         system = inventorymodels.System(
             name=systemName,
@@ -303,8 +301,8 @@ class BaseDriver(object):
             target_system_state=instanceState,
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
-            should_migrate = should_migrate,
-            source_image = source_image,
+            should_migrate = shouldMigrate,
+            source_image_id = sourceImage.buildId,
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
             targetType=cloudType, targetName=cloudName)
@@ -978,7 +976,9 @@ class BaseDriver(object):
         files = image.get('files', [])
         if not files:
             return None
-        return files[0]['sha1']
+        ffile = files[0]
+        # If uniqueImageId is present, use that.
+        return ffile.get('uniqueImageId', ffile['sha1'])
 
     def _getImageIdFromMintImage_local(self, imageData, targetImageIds):
         """
@@ -996,7 +996,8 @@ class BaseDriver(object):
         # Some of them may have been removed, so only look for the overlapping
         # ones
         inters = targetImageIdsFromMint.intersection(targetImageIds)
-        mintImageId = imageData['_mintImageId'] = fdata['sha1']
+        mintImageId = imageData['_mintImageId'] = fdata.get('uniqueImageId',
+            fdata['sha1'])
         if inters:
             imageId = imageData['_targetImageId'] = inters.pop()
             return imageId
@@ -1036,6 +1037,7 @@ class BaseDriver(object):
             image._fileId = imgf.get('fileId')
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
+        image._imageType = mintImageData['imageType']
 
         for key, methodName in methodMap.iteritems():
             value = mintImageData.get(key)

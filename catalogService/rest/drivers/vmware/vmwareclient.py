@@ -479,6 +479,9 @@ class VMwareClient(baseDriver.BaseDriver):
             targetImageIds)
         if imageSha1 is None:
             return imageSha1
+        if isinstance(imageSha1, int):
+            # fake the image sha1
+            imageSha1 = "%032x" % imageSha1
         return cls._uuid(imageSha1)
 
     def getImagesFromTarget(self, imageIds):
