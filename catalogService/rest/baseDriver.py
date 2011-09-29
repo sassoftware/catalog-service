@@ -302,7 +302,7 @@ class BaseDriver(object):
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
             should_migrate = shouldMigrate,
-            source_image_id = sourceImage.buildId,
+            source_image_id = sourceImage.getBuildId(),
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
             targetType=cloudType, targetName=cloudName)
