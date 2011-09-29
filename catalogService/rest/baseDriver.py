@@ -617,7 +617,7 @@ class BaseDriver(object):
         expired = time.time() + self.LAUNCH_TIMEOUT
         first = True
         while time.time() < expired:
-            instances = self.drvGetInstances(instanceIds)
+            instances = self.drvGetInstances(instanceIds, force=True)
             states = set(x.getState().lower() for x in instances)
             instanceIds = sorted(x.getInstanceId() for x in instances)
             msg = ', '.join(instanceIds)
@@ -638,7 +638,7 @@ class BaseDriver(object):
         # Wait until all instances have a network
         expired = time.time() + self.LAUNCH_NETWORK_TIMEOUT
         while time.time() < expired:
-            instances = self.drvGetInstances(instanceIds)
+            instances = self.drvGetInstances(instanceIds, force=True)
             imaps = [ (x, x.getPublicDnsName()) for x in instances ]
             withNetworks = [ x for (x, y) in imaps if y is not None ]
             withoutNetworks = [ x for (x, y) in imaps if y is None ]

@@ -643,7 +643,7 @@ boot-uuid=%s
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])[0]
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         try:
             resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         except EC2ResponseError, e:

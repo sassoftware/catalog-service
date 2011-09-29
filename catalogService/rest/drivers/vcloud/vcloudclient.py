@@ -252,7 +252,7 @@ class VCloudClient(baseDriver.BaseDriver):
             raise errors.HttpNotFound()
         return ret[0]
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         cloudAlias = self.getCloudAlias()
         if instanceIds:
             idFilter = set(instanceIds)

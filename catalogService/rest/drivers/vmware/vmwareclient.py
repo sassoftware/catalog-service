@@ -438,15 +438,15 @@ class VMwareClient(baseDriver.BaseDriver):
             return ret[0]
         raise errors.HttpNotFound()
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
-        instMap = self.getVirtualMachines()
+        instMap = self.getVirtualMachines(force=force)
         return self.filterInstances(instanceIds,
             self._buildInstanceList(instanceList, instMap))
 
-    def getVirtualMachines(self):
-        if self._virtualMachines is not None:
+    def getVirtualMachines(self, force=False):
+        if self._virtualMachines is not None and not force:
             # NOTE: we cache this, but only per catalog-service request.
             # Each request generates a new Client instance.
             return self._virtualMachines

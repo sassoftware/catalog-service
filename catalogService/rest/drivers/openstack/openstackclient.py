@@ -263,7 +263,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         # Grab the last part of the URL and return it
         return os.path.basename(ref)
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         client = self.client.nova
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()

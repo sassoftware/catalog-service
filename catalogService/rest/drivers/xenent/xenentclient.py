@@ -334,7 +334,7 @@ class XenEntClient(baseDriver.BaseDriver):
             return None
         return startTime
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         client = self.client
         instMap  = client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
