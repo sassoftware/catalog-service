@@ -554,7 +554,6 @@ class VMwareClient(baseDriver.BaseDriver):
                                         name=instanceName,
                                         annotation=instanceDescription,
                                         dc=self.vicfg.getMOR(dataCenter),
-                                        cr=self.vicfg.getMOR(computeResource),
                                         ds=self.vicfg.getMOR(dataStore),
                                         rp=self.vicfg.getMOR(resourcePool))
             return vmMor

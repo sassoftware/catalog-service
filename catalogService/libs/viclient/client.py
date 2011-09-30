@@ -1184,7 +1184,6 @@ class VimService(object):
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 
-    #Marker: 24thMay2011###########################################################################
     def getOvfExportLease(self, vmMor):
         req = ExportVmRequestMsg()
         req.set_element__this(vmMor)
@@ -1350,7 +1349,7 @@ class VimService(object):
         return mor
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
-                dc=None, cr=None, ds=None, rp=None, newuuid=None, template=False):
+                dc=None, ds=None, rp=None, newuuid=None, template=False):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1364,7 +1363,6 @@ class VimService(object):
                     break
             if not mor:
                 raise RuntimeError('No template with UUID %s' %uuid)
-        hostFolder = self.getMoRefProp(dc, 'hostFolder')
         vmFolder = self.getMoRefProp(dc, 'vmFolder')
 
         req = CloneVM_TaskRequestMsg()
@@ -1379,7 +1377,8 @@ class VimService(object):
         cloneSpec.set_element_powerOn(False)
         # set up the data relocation
         loc = cloneSpec.new_location()
-        #loc.set_element_datastore(ds)
+        if ds:
+            loc.set_element_datastore(ds)
         loc.set_element_pool(rp)
         cloneSpec.set_element_location(loc)
         # set up the vm config (uuid)
