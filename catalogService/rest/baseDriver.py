@@ -543,7 +543,8 @@ class BaseDriver(object):
     def launchInstanceInBackground(self, jobId, image, auth, **params):
         job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
         job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
-        job.addHistoryEntry('Running')
+        self._msg(job, "Launching instance from image %s (type %s)" % (
+            image.getImageId(), image._imageType))
         try:
             try:
                 realInstanceId = self.launchInstanceProcess(job, image, auth, **params)
