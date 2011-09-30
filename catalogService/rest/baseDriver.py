@@ -76,6 +76,8 @@ class BaseDriver(object):
     PENDING_STATES = set([ 'pending' ])
     RUNNING_STATES = set([ 'running' ])
     FAILED_STATES = set([ 'terminated' ])
+    WAIT_RUNNING_STATE_SLEEP = 2
+    WAIT_NETWORK_SLEEP = 10
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None):
@@ -629,7 +631,7 @@ class BaseDriver(object):
                 first = False
             else:
                 self._msg(job, "Waiting for a running state...")
-            time.sleep(2)
+            time.sleep(self.WAIT_RUNNING_STATE_SLEEP)
         results = [ (x.getInstanceId(), x.getState()) for x in instances ]
         msg = '; '.join("Instance %s state: %s" % r for r in results)
         self._msg(job, msg)
@@ -649,8 +651,8 @@ class BaseDriver(object):
                 return
             instanceIds = sorted(x.getInstanceId() for x in withoutNetworks)
             msg = ', '.join(instanceIds)
-            self._msg(job, "Waiting for a running state for %s" % msg)
-            time.sleep(10)
+            self._msg(job, "Waiting for network information for %s" % msg)
+            time.sleep(self.WAIT_NETWORK_SLEEP)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         self.cleanUpX509()

@@ -242,9 +242,23 @@ class Children(_BaseNode):
 # Resolve circular reference
 VAppTemplate._slotTypeMap.update(Children=Children)
 
+class NetworkConnection(_BaseNode):
+    tag = 'NetworkConnection'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['network', ],
+        elements=["NetworkConnectionIndex", "IpAddress", "ExternalIpAddress",
+            ("IsConnected", bool), "MACAddress", "IpAddressAllocationMode",
+    ])
+
+class NetworkConnectionSection(_BaseNode):
+    tag = 'NetworkConnectionSection'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['type', 'href', ],
+        elements=["PrimaryNetworkConnectionIndex", NetworkConnection, Link])
+
 class AbstractVApp(_ResourceEntityType):
     __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceEntityType,
-        elements=['VAppParent', 'NetworkSection', ('deployed', bool)])
+        elements=['VAppParent', 'NetworkSection', NetworkConnectionSection, ('deployed', bool)])
 
 class VApp(AbstractVApp):
     tag = 'VApp'

@@ -120,6 +120,10 @@ class VCloudClient(baseDriver.BaseDriver):
 </descriptor>
 """
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+    PENDING_STATES = set([
+        Models.Status.Text.state[Models.Status.Code.POWERED_OFF],
+        Models.Status.Text.state[Models.Status.Code.NOT_CREATED],
+    ])
     OVF_PREFERRENCE_LIST = [ '.ova', ]
 
     @classmethod
@@ -466,6 +470,7 @@ class VCloudClient(baseDriver.BaseDriver):
         instanceName = instance.name
         instanceDescription = instance.getDescription()
         state = Models.Status.Text.state[instance.getStatus()]
+        publicDnsName = instance.NetworkConnectionSection.NetworkConnection.getIpAddress()
         return self._nodeFactory.newInstance(
                 id = instanceId,
                 instanceName = instanceName,
@@ -474,7 +479,9 @@ class VCloudClient(baseDriver.BaseDriver):
                 reservationId = instanceId,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias,
-                state = state,)
+                state = state,
+                publicDnsName=publicDnsName,
+        )
 
     @classmethod
     def _idFromHref(cls, href):
