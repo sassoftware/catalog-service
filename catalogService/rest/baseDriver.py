@@ -289,12 +289,6 @@ class BaseDriver(object):
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
 
-        # so far deferred images need software updates post installation
-        # and other image types do not
-        shouldMigrate = False
-        if sourceImage is not None:
-            shouldMigrate = (sourceImage._imageType == 'DEFERRED_IMAGE')
-
         system = inventorymodels.System(
             name=systemName,
             description=systemDescription,
@@ -304,7 +298,6 @@ class BaseDriver(object):
             target_system_state=instanceState,
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
-            should_migrate = shouldMigrate,
             source_image_id = sourceImage.getBuildId(),
         )
         self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
