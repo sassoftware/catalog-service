@@ -803,7 +803,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 status, progress, error = values
                 if status != "running" or not isinstance(progress, int):
                     return
-                self._msg(job, "Cloning: %d%%", progress)
+                self._msg(job, "Cloning: %d%%" % progress)
 
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
