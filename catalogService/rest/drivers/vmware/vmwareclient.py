@@ -544,7 +544,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _cloneTemplate(self, job, imageId, instanceName, instanceDescription,
                        dataCenter, computeResource, dataStore,
-                       resourcePool, vm=None):
+                       resourcePool, vm=None, callback=None):
         templateUuid = None
         if not vm:
             templateUuid = os.path.basename(imageId)
@@ -555,7 +555,8 @@ class VMwareClient(baseDriver.BaseDriver):
                                         annotation=instanceDescription,
                                         dc=self.vicfg.getMOR(dataCenter),
                                         ds=self.vicfg.getMOR(dataStore),
-                                        rp=self.vicfg.getMOR(resourcePool))
+                                        rp=self.vicfg.getMOR(resourcePool),
+                                        callback=callback)
             return vmMor
         except Exception, e:
             self.log_exception("Exception cloning template: %s" % e)
@@ -798,10 +799,17 @@ class VMwareClient(baseDriver.BaseDriver):
 
         if useTemplate:
             self._msg(job, 'Cloning template')
+            def cloneCallback(values):
+                status, progress, error = values
+                if status != "running":
+                    return
+                self._msg(job, "Cloning: %d%%", progress)
+
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
                                         dataCenter, computeResource,
-                                        dataStore, resourcePool, vm=vm)
+                                        dataStore, resourcePool, vm=vm,
+                                        callback=cloneCallback)
         else:
             vmMor = self.client._getVM(mor=vm)
 

@@ -710,7 +710,8 @@ class VimService(object):
                     else:
                         vals[idx] = None
 
-    def waitForValues(self, objmor, filterProps, endWaitProps, expectedVals):
+    def waitForValues(self, objmor, filterProps, endWaitProps, expectedVals,
+            callback=None):
         """
         Handle Updates for a single object.
         waits till expected values of properties to check are reached
@@ -720,6 +721,8 @@ class VimService(object):
         @param endWaitProps Properties list to check for expected values
         these be properties of a property in the filter properties list
         @param expectedVals values for properties to end the wait
+        @param callback A callback to be called with values of the
+            properties specified in filterProps
         @return true indicating expected values were met, and false otherwise
         """
 
@@ -728,12 +731,13 @@ class VimService(object):
         for i in range(10):
             try:
                 return self._waitForValues(objmor, filterProps, endWaitProps,
-                    expectedVals)
+                    expectedVals, callback=callback)
             except ZSI.client.httplib.BadStatusLine:
                 time.sleep(1)
         raise
 
-    def _waitForValues(self, objmor, filterProps, endWaitProps, expectedVals):
+    def _waitForValues(self, objmor, filterProps, endWaitProps, expectedVals,
+            callback=None):
         version = ''
         endVals = [ None ] * len(endWaitProps)
         filterVals = [ None ] * len(filterProps)
@@ -800,6 +804,9 @@ class VimService(object):
                         if endVal == expectedVal:
                             done = True
                             break
+                    else: #for; expected values not found
+                        if callback:
+                            callback(filterVals)
         finally:
             try:
                 req = DestroyPropertyFilterRequestMsg()
@@ -811,11 +818,12 @@ class VimService(object):
 
         return filterVals
 
-    def waitForTask(self, task):
+    def waitForTask(self, task, callback=None):
         result = self.waitForValues(task,
-                                    [ 'info.state', 'info.error' ],
+                                    [ 'info.state', 'info.progress', 'info.error' ],
                                     [ 'state' ],
-                                    [ [ 'success', 'error' ] ])
+                                    [ [ 'success', 'error' ] ],
+                                    callback=callback)
         if result[0] == 'success':
             return 'success'
         else:
@@ -893,7 +901,7 @@ class VimService(object):
         task = ret.get_element_returnval()
 
         result = self.waitForValues(task,
-                                    [ 'info.state', 'info.error' ],
+                                    [ 'info.state', 'info.progress', 'info.error' ],
                                     [ 'state' ],
                                     [ [ 'success', 'error' ] ])
         if result[0] == 'success':
@@ -920,13 +928,13 @@ class VimService(object):
             setter(value)
         return self._reconfigVM(vm, spec)
 
-    def _reconfigVM(self, vm, spec):
+    def _reconfigVM(self, vm, spec, callback=None):
         req = ReconfigVM_TaskRequestMsg()
         req.set_element__this(_strToMor(vm, 'VirtualMachine'))
         req.set_element_spec(spec)
         ret = self._service.ReconfigVM_Task(req)
         task = ret.get_element_returnval()
-        return self.waitForTask(task)
+        return self.waitForTask(task, callback=callback)
 
     def leaseComplete(self, httpNfcLease):
         req = HttpNfcLeaseCompleteRequestMsg()
@@ -971,13 +979,13 @@ class VimService(object):
         ovf = OVF(ovfContents)
         return ovf.sanitize()
 
-    def destroyVM(self, vmMor):
+    def destroyVM(self, vmMor, callback=None):
         req = Destroy_TaskRequestMsg()
         req.set_element__this(vmMor)
 
         ret = self._service.Destroy_Task(req)
         task = ret.get_element_returnval()
-        ret = self.waitForTask(task)
+        ret = self.waitForTask(task, callback=callback)
         if ret != 'success':
             raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
@@ -1349,7 +1357,8 @@ class VimService(object):
         return mor
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
-                dc=None, ds=None, rp=None, newuuid=None, template=False):
+                dc=None, ds=None, rp=None, newuuid=None, template=False,
+                callback=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1391,7 +1400,7 @@ class VimService(object):
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()
-        ret = self.waitForTask(task)
+        ret = self.waitForTask(task, callback=callback)
         if ret != 'success':
             # FIXME: better exception
             raise RuntimeError("Unable to clone template: %s" % ret)
@@ -1399,7 +1408,7 @@ class VimService(object):
         vm = tinfo.get_element_result()
         return vm
 
-    def shutdownVM(self, mor=None, uuid=None):
+    def shutdownVM(self, mor=None, uuid=None, callback=None):
         mor = self._getVM(mor=mor, uuid=uuid)
         req = ShutdownGuestRequestMsg()
         req.set_element__this(mor)
@@ -1416,17 +1425,17 @@ class VimService(object):
                 req.set_element__this(mor)
                 ret = self._service.PowerOffVM_Task(req)
                 task = ret.get_element_returnval()
-                res = self.waitForTask(task)
+                res = self.waitForTask(task, callback=callback)
                 if res.lower() != 'success':
                     raise RuntimeError(res)
 
-    def startVM(self, mor=None, uuid=None):
+    def startVM(self, mor=None, uuid=None, callback=None):
         mor = self._getVM(mor=mor, uuid=uuid)
         req = PowerOnVM_TaskRequestMsg()
         req.set_element__this(mor)
         ret = self._service.PowerOnVM_Task(req)
         task = ret.get_element_returnval()
-        res = self.waitForTask(task)
+        res = self.waitForTask(task, callback=callback)
         if res.lower() != 'success':
             raise RuntimeError(res)
 
