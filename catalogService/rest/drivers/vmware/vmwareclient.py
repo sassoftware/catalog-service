@@ -801,7 +801,7 @@ class VMwareClient(baseDriver.BaseDriver):
             self._msg(job, 'Cloning template')
             def cloneCallback(values):
                 status, progress, error = values
-                if status != "running":
+                if status != "running" or not isinstance(progress, int):
                     return
                 self._msg(job, "Cloning: %d%%", progress)
 
