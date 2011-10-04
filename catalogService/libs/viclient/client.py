@@ -77,6 +77,8 @@ class VIConfig(object):
         self.props = {}
         self.networks = {}
         self.distributedVirtualSwitches = {}
+        self.vmFolders = {}
+        self.vmFolderTree = {}
 
     def addDatacenter(self, dc):
         self.datacenters.append(dc)
@@ -119,6 +121,25 @@ class VIConfig(object):
 
     def getDistributedVirtualSwitch(self, dvs):
         return self.distributedVirtualSwitches.get(dvs)
+
+    def getVmFolderTree(self, folder):
+        return self.vmFolderTree[folder]
+
+    def getVmFolderLabelsForTree(self, folder):
+        """Return a list of labels and folders for all sub-folders of the
+        specified one"""
+        stack = [ ("", folder) ]
+        ret = []
+        while stack:
+            parentPath, nodeMor = stack.pop()
+            nodeProps = self.vmFolders[nodeMor]
+            nodeLabel = "%s/%s" % (parentPath, nodeProps['name'])
+            children = self.vmFolderTree.get(nodeMor, [])
+            stack.extend((nodeLabel, x) for x in children)
+            ret.append((nodeLabel, nodeMor))
+        ret.sort(key=lambda x: x[0])
+        return ret
+
 
 class Error(Exception):
     pass
@@ -1214,7 +1235,7 @@ class VimService(object):
                                                     'vmFolder',
                                                     'datastore',
                                                     'network' ],
-                                    'Folder': ['name'],
+                                    'Folder': ['name', 'parent', 'childType', ],
                                     'HostSystem': [ 'name',
                                                     'datastore',
                                                     'network' ],
@@ -1241,6 +1262,8 @@ class VimService(object):
                        for x in props.iteritems())
 
         networkTypes = set(['Network', 'DistributedVirtualPortgroup'])
+        vmFolders = {}
+        vmFolderTree = {}
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1269,6 +1292,12 @@ class VimService(object):
                     incompleteNetworks.add(mor)
                     continue
                 networks[mor] = morProps
+            elif objType == 'Folder':
+                childTypes = morProps['childType'].get_element_string()
+                if 'VirtualMachine' in childTypes:
+                    vmFolders[mor] = morProps
+                    parent = morProps['parent']
+                    vmFolderTree.setdefault(parent, []).append(mor)
 
         networksNotInFolder = [ x for (x, y) in networks.items()
             if y is None and x not in incompleteNetworks ]
@@ -1293,6 +1322,8 @@ class VimService(object):
         ret = []
 
         vicfg = VIConfig()
+        vicfg.vmFolders = vmFolders
+        vicfg.vmFolderTree = vmFolderTree
         for cr in crs:
             # for each compute resource, we need to get the config
             # target.  This lets us build up the options for deploying
