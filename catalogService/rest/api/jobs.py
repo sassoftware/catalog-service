@@ -116,11 +116,9 @@ class JobTypeController(base.BaseController):
             cloudType = job.cloudType)
         # XXX this is a hack, we shouldn't have to define which kind of
         # resource to use
-        if jobType == 'instance-launch':
-            return nf.newInstanceLaunchJob(jobm)
         if jobType == 'image-deployment':
             return nf.newImageDeploymentJob(jobm)
-        raise Exception("Unknown job type")
+        return nf.newInstanceLaunchJob(jobm)
 
     def _fillErrorResponse(self, job, errorResponse):
         if not errorResponse:
