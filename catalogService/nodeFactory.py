@@ -51,6 +51,8 @@ class NodeFactory(object):
             'configuration')))
         node.setDescriptorLaunch(clouds.DescriptorLaunch(href =
                                  self.join(cloudId, 'descriptor', 'launch')))
+        node.setDescriptorDeploy(clouds.DescriptorDeploy(href =
+                                 self.join(cloudId, 'descriptor', 'deployImage')))
         searchParams = dict(cloudName = node.getCloudName(),
                 cloudType = self.cloudType,
                 status = 'Running')

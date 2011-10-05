@@ -194,8 +194,8 @@ class VMwareClient(baseDriver.BaseDriver):
         return params
 
     def drvPopulateImageDeploymentDescriptor(self, descr):
-        descr.setDisplayName('VMware Image Deployment Parameters')
-        descr.addDescription('VMware Image Deployment Parameters')
+        descr.setDisplayName('VMware Image Upload Parameters')
+        descr.addDescription('VMware Image Upload Parameters')
         self.drvImageDeploymentDescriptorCommonFields(descr)
         return self._drvPopulateDescriptorFromTarget(descr)
 
