@@ -589,7 +589,7 @@ class BaseDriver(object):
                     job.addHistoryEntry('Image deployment failed, no image was uploaded')
                     job.status = job.STATUS_FAILED
                     return
-                job.addResults(realImageId)
+                job.addResults([realImageId])
                 job.addHistoryEntry('Done')
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
