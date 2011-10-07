@@ -15,6 +15,8 @@ import weakref
 import gzip
 
 from conary.lib import magic, util, sha1helper
+from conary.lib import digestlib
+from restlib import client as rl_client
 
 from catalogService import errors
 from catalogService import instanceStore
@@ -516,6 +518,92 @@ class BaseDriver(object):
                            constraints = dict(constraintName = 'length',
                                               value = 128))
         return descr
+
+    def captureSystem(self, job, instanceId, params):
+        if not hasattr(self, 'drvCaptureSystem'):
+            raise MethodNotImplemented()
+        instance = self.getInstance(instanceId)
+        archive = self.drvCaptureSystem(job, instance, params)
+        self.uploadCapturedImage(job, instance, params, archive)
+        self._msg(job, "Finished")
+
+    class IntervalCallback(object):
+        INTERVAL = 2
+        def __init__(self, totalSize, callback):
+            self.totalSize = totalSize
+            self.last = 0
+            self.callback = callback
+
+        def progress(self, bytes, rate=0):
+            now = time.time()
+            if self.last + self.INTERVAL > now:
+                return
+            self.last = now
+            if self.totalSize == 0:
+                pct = 100
+            else:
+                pct = min((100 * bytes) // self.totalSize, 100)
+            self.callback(pct)
+
+    class DummyWriter(object):
+        @classmethod
+        def write(cls, *args):
+            pass
+
+    def uploadCapturedImage(self, job, instance, params, archive):
+        imageUploadUrl = params.pop('imageUploadUrl')
+        imageFilesCommitUrl = params.pop('imageFilesCommitUrl')
+        outputToken = params.pop('outputToken')
+        imageTitle = params.pop('imageTitle')
+        imageName = params.pop('imageName')
+        headers = { 'X-rBuilder-OutputToken' : outputToken }
+
+        self._msg(job, "Computing SHA1 digest")
+        # Grab file size
+        archive.seek(0, 2)
+        contentLength = archive.tell()
+        archive.seek(0)
+        ctx = digestlib.sha1()
+
+        cb = self.IntervalCallback(contentLength, callback=lambda x:
+            self._msg(job, "SHA1 digest: %d%%" % x))
+        util.copyfileobj(archive, self.DummyWriter, digest=ctx, callback=cb.progress)
+        sha1 = ctx.hexdigest()
+
+        self._msg(job, "Committing captured image")
+        # Grab file size
+        cb = self.IntervalCallback(contentLength,
+            callback=lambda x:
+                self._msg(job, "Uploading captured image: %d%%" % x))
+
+        uploadUrl = "%s/%s" % (imageUploadUrl, imageName)
+        cli = rl_client.Client(uploadUrl, headers)
+        cli.connect()
+        cli.request("PUT", body=archive, headers=headers, callback=cb.progress)
+        xmlTemplate = """\
+<files>
+  <file>
+    <title>%(title)s</title>
+    <size>%(size)s</size>
+    <sha1>%(sha1)s</sha1>
+    <fileName>%(fileName)s</fileName>
+  </file>
+  <metadata>
+    <metadata1>1</metadata1>
+    <metadata2>2</metadata2>
+  </metadata>
+</files>
+"""
+        xml = xmlTemplate % dict(
+            title=imageTitle,
+            size=contentLength,
+            sha1=sha1,
+            fileName=imageName,
+        )
+
+        cli = rl_client.Client(imageFilesCommitUrl, headers)
+        cli.connect()
+        cli.request("PUT", body=xml)
 
     def deployImage(self, xmlString, auth):
         # Grab descriptor

@@ -145,11 +145,12 @@ class Error(Exception):
     pass
 
 class ProgressUpdate(object):
-    def __init__(self, vmclient, httpNfcLease):
+    def __init__(self, vmclient, httpNfcLease, callback=None):
         self.vmclient = vmclient
         self.httpNfcLease = httpNfcLease
         self.totalSize = 0
         self.prevFilesSize = 0
+        self.callback = callback
 
     def progress(self, bytes, rate=0):
         pct = self._percent(bytes)
@@ -158,6 +159,8 @@ class ProgressUpdate(object):
         req.set_element_percent(pct)
 
         self.vmclient._service.HttpNfcLeaseProgress(req)
+        if self.callback:
+            self.callback(pct)
 
     def _percent(self, bytes):
         return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
@@ -390,12 +393,10 @@ class VimService(object):
     def _getDatastoreRef(self, configTarget, datastoreName):
         # determine the data store to use
         datastoreRef = None
-        found = False
         for vdsInfo in configTarget.get_element_datastore():
             dsSummary = vdsInfo.get_element_datastore()
             if (dsSummary.get_element_name() == datastoreName
                 or not datastoreName):
-                found = True
                 if dsSummary.get_element_accessible():
                     datastoreName = dsSummary.get_element_name()
                     datastoreRef = dsSummary.get_element_datastore()
@@ -748,7 +749,6 @@ class VimService(object):
         """
 
         # Sometimes we're seeing BadStatusLine messages coming from vsphere
-        import time
         for i in range(10):
             try:
                 return self._waitForValues(objmor, filterProps, endWaitProps,
@@ -1010,43 +1010,45 @@ class VimService(object):
         if ret != 'success':
             raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
-    def ovfExport(self, vmMor, destinationPath):
+    def ovfExport(self, vmMor, vmName, destinationPath, callback=None):
         httpNfcLease = self.getOvfExportLease(vmMor)
         self.waitForLeaseReady(httpNfcLease)
+        try:
+            ovfFiles = self._ovfExport(httpNfcLease, destinationPath, callback=callback)
+        finally:
+            self.leaseComplete(httpNfcLease)
+
+        descr = self.createOvfDescriptor(vmMor, vmName, vmName, ovfFiles)
+        # Write OVF descriptor to disk
+        xmlData = descr.get_element_ovfDescriptor()
+        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
+        file(ovfFilePath, "w").write(xmlData)
+
+        ovfFileNames = [ os.path.basename(ovfFilePath) ]
+        ovfFileNames.extend(x.get_element_path() for x in ovfFiles)
+        return ovfFileNames
+
+    def _ovfExport(self, httpNfcLease, destinationPath, callback=None):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
         ovfFiles = []
 
-        class LProgressUpdate(ProgressUpdate):
-            def progress(slf, bytes, rate=0):
-                ProgressUpdate.progress(slf, bytes, rate=rate)
-                pct = slf._percent(bytes)
-                #vmwareclient.VMwareClient._msg(job, "Exporting OVF: %d%% complete" % pct)
-                print "Exporting OVF: %d%% complete" % pct
-
-        progressUpdate = LProgressUpdate(self._service, httpNfcLease)
+        progressUpdate = ProgressUpdate(self._service, httpNfcLease,
+            callback=callback)
         progressUpdate.totalSize = totalSize
         progressUpdate.progress(0, 0)
 
         for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
             url = deviceUrl.get_element_url()
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
 
             fileName = os.path.basename(url)
             destFile = os.path.join(destinationPath, fileName)
 
-            abc=vmutils._getFile(destFile, url, callback = progressUpdate)
-            if hasattr(abc, '_error'):
-                errors = []
-                for f in abc._error:
-                    if hasattr(f, '_localizedMessage'):
-                        errors.append(f.LocalizedMessage)
-                raise Exception("Error Exporting: %s" %
-                    '; '.join(errors))
-                self.leaseComplete(httpNfcLease)
-
-            if url.startswith("https://*/"):
-                url = self.baseUrl + url[10:]
-
+            # If there are any exceptions, let them pass, we'll close
+            # the lease regardless
+            vmutils._getFile(destFile, url, callback = progressUpdate)
 
             fileSize = os.stat(destFile).st_size
 
@@ -1059,14 +1061,7 @@ class VimService(object):
             progressUpdate.updateSize(fileSize)
 
         progressUpdate.progress(100, 0)
-
-        self.leaseComplete(httpNfcLease)
-
-        descr = self.createOvfDescriptor(vmMor, 'vm-name', 'vm-description', ovfFiles)
-        # Write OVF descriptor to disk
-        xmlData = descr.get_element_ovfDescriptor()
-        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
-        file(ovfFilePath, "w").write(xmlData)
+        return ovfFiles
 
     def createOvfDescriptor(self, vmMor, name, description, ovfFiles):
         req = CreateDescriptorRequestMsg()
@@ -1220,6 +1215,13 @@ class VimService(object):
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 
+    def getLeaseManifest(self, lease):
+        # XXX Not working yet, we need 4.1
+        req = HttpNfcLeaseGetManifestRequestMsg()
+        req.set_element__this(lease)
+        resp = self._service.HttpNfcLeaseGetManifest(req)
+        manifest = resp.get_element_returnval()
+        return manifest
 
     def markAsTemplate(self, vm=None, uuid=None):
         mor = self._getVM(mor=vm, uuid=uuid)
@@ -1319,8 +1321,6 @@ class VimService(object):
                 networks[network] = nwprops
             nameMap.update((mor, p['name']) for (mor, p) in networks.items())
 
-        ret = []
-
         vicfg = VIConfig()
         vicfg.vmFolders = vmFolders
         vicfg.vmFolderTree = vmFolderTree
@@ -1389,7 +1389,7 @@ class VimService(object):
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
                 dc=None, ds=None, rp=None, newuuid=None, template=False,
-                callback=None):
+                vmFolder=None, callback=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1403,7 +1403,8 @@ class VimService(object):
                     break
             if not mor:
                 raise RuntimeError('No template with UUID %s' %uuid)
-        vmFolder = self.getMoRefProp(dc, 'vmFolder')
+        if vmFolder is None:
+            vmFolder = self.getMoRefProp(dc, 'vmFolder')
 
         req = CloneVM_TaskRequestMsg()
         req.set_element__this(mor)
@@ -1419,7 +1420,8 @@ class VimService(object):
         loc = cloneSpec.new_location()
         if ds:
             loc.set_element_datastore(ds)
-        loc.set_element_pool(rp)
+        if rp:
+            loc.set_element_pool(rp)
         cloneSpec.set_element_location(loc)
         # set up the vm config (uuid)
         config = cloneSpec.new_config()

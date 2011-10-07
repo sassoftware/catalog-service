@@ -5,9 +5,11 @@
 import operator
 import os
 import signal
-import time
-import tempfile
 import StringIO
+import sys
+import tarfile
+import tempfile
+import time
 
 from conary.lib import util
 
@@ -409,6 +411,8 @@ class VMwareClient(baseDriver.BaseDriver):
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias)
 
+            inst._opaqueId = mor
+
             instIdSet.add(instanceId)
             newInstanceList.append(inst)
         # Add back the original instances, unless we have them already
@@ -472,6 +476,44 @@ class VMwareClient(baseDriver.BaseDriver):
                                                    'guest.ipAddress' ],
                                                    root = root)
         return instMap
+
+    def drvCaptureSystem(self, job, instance, params):
+        vmMor = instance._opaqueId
+        vmName = instance.getInstanceName()
+        tmpVmName = self._getCaptureTmpName(vmName)
+        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
+        dcMor = params.get('datacenterMor')
+        resourcePoolMor = params.get('resourcePoolMor')
+        dataStoreMor = params.get('dataStoreMor')
+        folderMor = params.get('folderMor')
+        cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
+            dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
+
+        destDir = tempfile.mkdtemp(prefix="vmware-system-capture-")
+        try:
+            callback = lambda x: self._msg(job, "Exporting OVF: %d%% complete" % x)
+            self._msg(job, "Exporting VM %s" % tmpVmName)
+            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir, callback=callback)
+            archive = self._buildExportArchive(job, vmName, destDir, ovfFiles)
+            return archive
+        finally:
+            self._msg(job, "Destroying VM %s" % tmpVmName)
+            callback = self.taskCallbackFactory(job, "Destroying VM: %d%%")
+            self.client.destroyVM(cloneMor, callback=callback)
+            util.rmtree(destDir, ignore_errors=True)
+
+    def _getCaptureTmpName(self, vmName):
+        from random import Random
+        r = Random().randrange(10000, 99999)
+        return "%s capture %s" % (vmName, r)
+
+    def _buildExportArchive(self, job, vmName, destDir, ovfFiles):
+        dest = tempfile.TemporaryFile(prefix="vmware-system-capture-",
+            suffix=".ova")
+        callback = lambda x, y, pct: self._msg(job, "Archiving: %d%%" % pct)
+        t = TarArchive(dest, destDir, callback=callback)
+        t.archive(ovfFiles)
+        return dest
 
     @classmethod
     def getImageIdFromMintImage(cls, image, targetImageIds):
@@ -615,13 +657,10 @@ class VMwareClient(baseDriver.BaseDriver):
         self.client.waitForLeaseReady(httpNfcLease)
         from catalogService.libs import viclient
 
-        class ProgressUpdate(viclient.client.ProgressUpdate):
-            def progress(slf, bytes, rate=0):
-                viclient.client.ProgressUpdate.progress(slf, bytes, rate=rate)
-                pct = slf._percent(bytes)
-                self._msg(job, "Importing OVF: %d%% complete" % pct)
+        callback = lambda x: self._msg(job, "Importing OVF: %d%% complete" % x)
+        progressUpdate = self.LeaseProgressUpdate(self.client._service,
+            httpNfcLease, callback=callback)
 
-        progressUpdate = ProgressUpdate(self.client, httpNfcLease)
         vmMor = self.client.ovfUpload(httpNfcLease, archive, fileItems,
             progressUpdate)
         return vmMor
@@ -761,6 +800,19 @@ class VMwareClient(baseDriver.BaseDriver):
         self._msg(job, 'Image deployed')
         return uuid
 
+    def taskCallbackFactory(self, job, message):
+        def callback(values):
+            status, progress, error = values
+            if status != "running" or not isinstance(progress, int):
+                return
+            self._msg(job, message % progress)
+        return callback
+
+    @property
+    def LeaseProgressUpdate(cls):
+        from catalogService.libs import viclient
+        return viclient.client.ProgressUpdate
+
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
         imageId = ppop('imageId')
@@ -799,11 +851,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
         if useTemplate:
             self._msg(job, 'Cloning template')
-            def cloneCallback(values):
-                status, progress, error = values
-                if status != "running" or not isinstance(progress, int):
-                    return
-                self._msg(job, "Cloning: %d%%" % progress)
+            cloneCallback = self.taskCallbackFactory(job, "Cloning: %d%%")
 
             vmMor = self._cloneTemplate(job, image.getImageId(), instanceName,
                                         instanceDescription,
@@ -863,82 +911,91 @@ class VMwareClient(baseDriver.BaseDriver):
             # to the instance
             self.log_exception("Exception trying to attach credentials: %s", e)
 
-    def drvExportInstance(self, vmMor, destinationPath):
-        httpNfcLease = self.client.getOvfExportLease(vmMor)
-        self.client.waitForLeaseReady(httpNfcLease)
-        httpNfcLeaseInfo = self.client.getMoRefProp(httpNfcLease, 'info')
-        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
-        ovfFiles = []
 
-        class LProgressUpdate(ProgressUpdate):
-            def progress(slf, bytes, rate=0):
-                ProgressUpdate.progress(slf, bytes, rate=rate)
-                pct = slf._percent(bytes)
-                #vmwareclient.VMwareClient._msg(job, "Exporting OVF: %d%% complete" % pct)
-                print "Exporting OVF: %d%% complete" % pct
+class FileWithProgress(file):
+    """
+    A file object that calls a progress callback
+    """
+    def __init__(self, *args, **kwargs):
+        self._readCallback = kwargs.pop('readCallback', None)
+        file.__init__(self, *args, **kwargs)
+        if self._readCallback:
+            self._readCallback.addFileSize(os.fstat(self.fileno()).st_size)
 
-        progressUpdate = LProgressUpdate(self.client._service, httpNfcLease)
-        progressUpdate.totalSize = totalSize
-        progressUpdate.progress(0, 0)
+    def read(self, size=None):
+        data = file.read(self, size)
+        if self._readCallback:
+            self._readCallback.callback(self.tell())
+        return data
 
-        from catalogService.libs import viclient
-        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
-            url = deviceUrl.get_element_url()
-
-            fileName = os.path.basename(url)
-            destFile = os.path.join(destinationPath, fileName)
-
-            downloadHandle = viclient.vmutils._getFile(destFile, url, callback = progressUpdate)
-            if hasattr(downloadHandle, '_error'):
-                errors = []
-                for f in downloadHandle._error:
-                    if hasattr(f, '_localizedMessage'):
-                        errors.append(f.LocalizedMessage)
-                raise Exception("Error Exporting: %s" %
-                    '; '.join(errors))
-                self.client.leaseComplete(httpNfcLease)
-
-            if url.startswith("https://*/"):
-                url = self.client.baseUrl + url[10:]
-
-
-            fileSize = os.stat(destFile).st_size
-
-            ovfFile = ns0.OvfFile_Def('').pyclass()
-            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
-            ovfFile.set_element_size(fileSize)
-            ovfFile.set_element_path(fileName)
-            ovfFiles.append(ovfFile)
-
-            progressUpdate.updateSize(fileSize)
-
-        progressUpdate.progress(100, 0)
-
-        self.client.leaseComplete(httpNfcLease)
-
-        descr = self.client.createOvfDescriptor(vmMor, 'vm-name', 'vm-description', ovfFiles)
-        # Write OVF descriptor to disk
-        xmlData = descr.get_element_ovfDescriptor()
-        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
-        file(ovfFilePath, "w").write(xmlData)
-
-class ProgressUpdate(object):
-    def __init__(self, vmclient, httpNfcLease):
-        self.vmclient = vmclient
-        self.httpNfcLease = httpNfcLease
+class _Callback(object):
+    """
+    Wrapper around a callback function that gets called with:
+    (currentBytes, totalBytes, percentage)
+    every time a chunk larger than self.INCREMENT bytes was read.
+    """
+    INCREMENT = 1024 * 1024 # Default to 1M
+    def __init__(self, cb):
+        self.baseSize = 0
+        self.currentFileSize = 0
         self.totalSize = 0
-        self.prevFilesSize = 0
+        self.cb = cb
 
-    def progress(self, bytes, rate=0):
-        pct = self._percent(bytes)
-        req = HttpNfcLeaseProgressRequestMsg()
-        req.set_element__this(self.httpNfcLease)
-        req.set_element_percent(pct)
+    def addFileSize(self, size):
+        """Called automatically when a FileWithProgress object using this
+        callback is created"""
+        self.totalSize += size
 
-        self.vmclient._service.HttpNfcLeaseProgress(req)
+    def updateSize(self):
+        "To be called once a file was processed"
+        self.baseSize += self.currentFileSize
+        self.currentFileSize = 0
 
-    def _percent(self, bytes):
-        return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
+    def callback(self, size):
+        """Called by a FileWithProgress' read() method, every time the number
+        of bytes read from the file jumps over the self.INCREMENT boundary"""
+        oldSize = self.baseSize + self.currentFileSize
+        self.currentFileSize = size
+        totCurrent = self.baseSize + self.currentFileSize
+        if (oldSize // self.INCREMENT) == (totCurrent // self.INCREMENT):
+            # Within the same checkpoint, nothing to do
+            return
+        if self.totalSize == 0:
+            pct = 100
+        else:
+            pct = (100 * totCurrent) // self.totalSize
+            if pct > 100:
+                pct = 100
 
-    def updateSize(self, size):
-        self.prevFilesSize += size
+        self.cb(totCurrent, self.totalSize, pct)
+
+class TarArchive(object):
+    Callback = _Callback
+    def __init__(self, destFile, baseDir, callback):
+        self.baseDir = baseDir
+        if isinstance(destFile, basestring):
+            self.tarfile = tarfile.TarFile(destFile, mode="w")
+        else:
+            self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
+        self.callback = self.Callback(callback)
+
+    def setIncrementSize(self, incrementSize):
+        self.callback.INCREMENT = incrementSize
+
+    def archive(self, fileNames):
+        tfiles = []
+        for fname in fileNames:
+            fullPath = os.path.join(self.baseDir, fname)
+            fwp = FileWithProgress(fullPath, readCallback=self.callback)
+            tfiles.append((self.tarfile.gettarinfo(arcname=fname, fileobj=fwp),
+                fwp))
+
+        for ti, fwp in tfiles:
+            self.tarfile.addfile(ti, fileobj=fwp)
+            self.callback.updateSize()
+        self.close()
+
+    def close(self):
+        if self.tarfile is not None:
+            self.tarfile.close()
+            self.tarfile = None

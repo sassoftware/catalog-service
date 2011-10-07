@@ -183,6 +183,7 @@ class BaseInstance(xmlNode.BaseNode):
                   'forceUpdateUrl', # force refresh the installed sw data
                   'update',      # update the sw on the system
                   'job',
+                  '_opaqueId',
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
