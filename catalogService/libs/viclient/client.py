@@ -100,7 +100,7 @@ class VIConfig(object):
         return self.namemap[mor]
 
     def getMOR(self, morid):
-        return self.mormap[morid]
+        return self.mormap.get(morid, None)
 
     def setProperties(self, props):
         self.props = props

@@ -186,12 +186,14 @@ class VMwareClient(baseDriver.BaseDriver):
         cr = getField('cr-%s' % dataCenter)
         rp = getField('resourcePool-%s' % cr)
         network = getField('network-%s' % dataCenter)
+        folder = getField('vmfolder-%s' % dataCenter)
         params.update(dict(
             dataCenter = dataCenter,
             dataStore = getField('dataStore-%s' % cr),
             computeResource = cr,
             resourcePool = rp,
             network = network,
+            vmFolder=folder,
         ))
         return params
 
@@ -238,6 +240,23 @@ class VMwareClient(baseDriver.BaseDriver):
                 continue
             crToDc.update(validCrs)
             validDatacenters.append(dc)
+
+            folders = vicfg.getVmFolderLabelsForTree(dc.properties['vmFolder'])
+
+            descr.addDataField('vmfolder-%s' % dc.obj,
+                descriptions = "VM Folder",
+                required = True,
+                help = [ ('launch/computeResource.html', None) ],
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(
+                        x[1], descriptions=x[0])
+                    for x in folders),
+                   default = folders[0][1],
+                   conditional = descr.Conditional(
+                        fieldName='dataCenter',
+                        operator='eq',
+                        fieldValue=dc.obj)
+                    )
 
             descr.addDataField('cr-%s' %dc.obj,
                                descriptions = 'Compute Resource',
@@ -586,7 +605,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _cloneTemplate(self, job, imageId, instanceName, instanceDescription,
                        dataCenter, computeResource, dataStore,
-                       resourcePool, vm=None, callback=None):
+                       resourcePool, vm=None, vmFolder=None, callback=None):
         templateUuid = None
         if not vm:
             templateUuid = os.path.basename(imageId)
@@ -598,6 +617,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                         dc=self.vicfg.getMOR(dataCenter),
                                         ds=self.vicfg.getMOR(dataStore),
                                         rp=self.vicfg.getMOR(resourcePool),
+                                        vmFolder=self.vicfg.getMOR(vmFolder),
                                         callback=callback)
             return vmMor
         except Exception, e:
@@ -620,6 +640,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _deployOvf(self, job, vmName, uuid, archive, dataCenter,
                      dataStore, host, resourcePool, network,
+                     vmFolder=None,
                      asTemplate = False):
         dataCenterName = dataCenter.properties['name']
         # Grab ovf file
@@ -632,7 +653,8 @@ class VMwareClient(baseDriver.BaseDriver):
         ovfFileObj = archive.extractfile(ovfFileMember)
         archive.baseDir = os.path.dirname(ovfFileMember.name)
 
-        vmFolder = dataCenter.properties['vmFolder']
+        if vmFolder is None:
+            vmFolder = dataCenter.properties['vmFolder']
         self._msg(job, 'Importing OVF descriptor')
 
         from ZSI import FaultException
@@ -688,7 +710,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _deployImage(self, job, image, auth, dataCenter, dataStore,
                      computeResource, resourcePool, vmName, uuid,
-                     network, asTemplate=False):
+                     network, vmFolder=None, asTemplate=False):
 
         logger = lambda *x: self._msg(job, *x)
         dc = self.vicfg.getDatacenter(dataCenter)
@@ -710,8 +732,12 @@ class VMwareClient(baseDriver.BaseDriver):
         tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
         path = self.downloadImage(job, image, tmpDir, auth=auth)
 
-        vmFolder = self.vicfg.getName(dc.properties['vmFolder'])
-        inventoryPrefix = '/%s/%s/' %(dcName, vmFolder)
+        if vmFolder is None:
+            vmFolderMor = dc.properties['vmFolder']
+        else:
+            vmFolderMor = self.vicfg.getMOR(vmFolder)
+        vmFolderName = self.vicfg.getName(vmFolderMor)
+        inventoryPrefix = '/%s/%s/' %(dcName, vmFolderName)
         vmName = self._findUniqueName(inventoryPrefix, vmName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
@@ -729,6 +755,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 vmMor = self._deployOvf(job, vmName, uuid,
                     archive, dc, dataStore=ds,
                     host = host, resourcePool=rp, network = network,
+                    vmFolder=vmFolderMor,
                     asTemplate = asTemplate)
             else:
                 vmMor = self._deployByVmx(job, vmName, uuid,
@@ -773,6 +800,7 @@ class VMwareClient(baseDriver.BaseDriver):
         resourcePool= ppop('resourcePool')
         imageName = ppop('imageName')
         network = ppop('network')
+        vmFolder = ppop('vmFolder')
 
         newImageId = self.instanceStorageClass._generateString(32)
         useTemplate = not self.client.isESX()
@@ -790,8 +818,8 @@ class VMwareClient(baseDriver.BaseDriver):
 
         vm = self._deployImage(job, image, auth, dataCenter,
                                dataStore, computeResource,
-                               resourcePool, vmName, uuid,
-                               network, asTemplate = useTemplate)
+                               resourcePool, vmName, uuid, network,
+                               vmFolder=vmFolder, asTemplate = useTemplate)
 
         # Grab the real uuid
         instMap = self.client.getVirtualMachines(['config.uuid' ], root = vm)
@@ -823,6 +851,7 @@ class VMwareClient(baseDriver.BaseDriver):
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
         network = ppop('network')
+        vmFolder = ppop('vmFolder')
 
         vm = None
 
@@ -842,7 +871,8 @@ class VMwareClient(baseDriver.BaseDriver):
             vm = self._deployImage(job, image, auth, dataCenter,
                                    dataStore, computeResource,
                                    resourcePool, vmName, uuid,
-                                   network, asTemplate = useTemplate)
+                                   network, vmFolder=vmFolder,
+                                   asTemplate = useTemplate)
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
             # images should be marked as deployed for ESX targets
@@ -857,6 +887,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                         instanceDescription,
                                         dataCenter, computeResource,
                                         dataStore, resourcePool, vm=vm,
+                                        vmFolder=vmFolder,
                                         callback=cloneCallback)
         else:
             vmMor = self.client._getVM(mor=vm)
