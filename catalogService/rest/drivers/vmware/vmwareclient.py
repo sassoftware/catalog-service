@@ -673,7 +673,6 @@ class VMwareClient(baseDriver.BaseDriver):
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
             dataStore = dataStore, network = network)
         self.client.waitForLeaseReady(httpNfcLease)
-        from catalogService.libs import viclient
 
         callback = lambda x: self._msg(job, "Importing OVF: %d%% complete" % x)
         progressUpdate = self.LeaseProgressUpdate(self.client._service,
