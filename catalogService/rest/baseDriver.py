@@ -521,7 +521,7 @@ class BaseDriver(object):
 
     def captureSystem(self, job, instanceId, params):
         if not hasattr(self, 'drvCaptureSystem'):
-            raise MethodNotImplemented()
+            raise NotImplemented()
         instance = self.getInstance(instanceId)
         archive = self.drvCaptureSystem(job, instance, params)
         self.uploadCapturedImage(job, instance, params, archive)

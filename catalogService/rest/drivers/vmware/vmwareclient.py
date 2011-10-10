@@ -4,12 +4,9 @@
 
 import operator
 import os
-import signal
 import StringIO
-import sys
 import tarfile
 import tempfile
-import time
 
 from conary.lib import util
 
@@ -642,7 +639,6 @@ class VMwareClient(baseDriver.BaseDriver):
                      dataStore, host, resourcePool, network,
                      vmFolder=None,
                      asTemplate = False):
-        dataCenterName = dataCenter.properties['name']
         # Grab ovf file
         ovfFiles = list(archive.iterFileWithExtensions(['.ovf']))
         if not ovfFiles:
