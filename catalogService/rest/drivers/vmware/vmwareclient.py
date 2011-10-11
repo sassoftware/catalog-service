@@ -99,6 +99,53 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
+_systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>VMware System Capture</displayName>
+    <descriptions>
+      <desc>Capturing a System's Image</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>instanceId</name>
+      <descriptions>
+        <desc>System ID</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must contain between 1 and 36 characters</desc>
+        </descriptions>
+        <length>36</length>
+      </constraints>
+      <required>true</required>
+      <hidden>true</hidden>
+    </field>
+    <field>
+      <name>imageName</name>
+      <descriptions>
+        <desc>Image Name</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must be between 1 and 64 characters, alphanumeric only</desc>
+        </descriptions>
+        <range>
+            <min>1</min>
+            <max>64</max>
+        </range>
+        <regexp>^[-_0-9A-Za-z]+$</regexp>
+      </constraints>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>
+"""
+
+
 class VMwareImage(images.BaseImage):
     'VMware Image'
 
@@ -126,6 +173,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
+    systemCaptureXmlData = _systemCaptureXmlData
     # transport is mocked out during testing to simulate talking to
     # an actual server
     VimServiceTransport = None
