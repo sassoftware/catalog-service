@@ -1404,7 +1404,11 @@ class VimService(object):
             if not mor:
                 raise RuntimeError('No template with UUID %s' %uuid)
         if vmFolder is None:
-            vmFolder = self.getMoRefProp(dc, 'vmFolder')
+            if dc is not None:
+                vmFolder = self.getMoRefProp(dc, 'vmFolder')
+            else:
+                # Copy the parent (folder) from the source vm
+                vmFolder = self.getMoRefProp(mor, 'parent')
 
         req = CloneVM_TaskRequestMsg()
         req.set_element__this(mor)
