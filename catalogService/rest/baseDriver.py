@@ -14,6 +14,8 @@ import urllib2
 import weakref
 import gzip
 
+from lxml import etree
+
 from conary.lib import magic, util, sha1helper
 from conary.lib import digestlib
 from restlib import client as rl_client
@@ -550,6 +552,24 @@ class BaseDriver(object):
         def write(cls, *args):
             pass
 
+    class XML(object):
+        _etree = etree
+
+        @classmethod
+        def Text(cls, tagName, text):
+            txt = cls._etree.Element(tagName)
+            txt.text = text
+            return txt
+        @classmethod
+        def Element(cls, tagName, *children, **attributes):
+            node = cls._etree.Element(tagName, attrib=attributes)
+            node.extend(children)
+            return node
+        @classmethod
+        def toString(cls, elt, encoding=None, prettyPrint=True):
+            return cls._etree.tostring(elt, encoding=encoding, pretty_print=prettyPrint)
+
+
     def uploadCapturedImage(self, job, instance, params, archive):
         imageUploadUrl = params.pop('imageUploadUrl')
         imageFilesCommitUrl = params.pop('imageFilesCommitUrl')
@@ -570,7 +590,6 @@ class BaseDriver(object):
         util.copyfileobj(archive, self.DummyWriter, digest=ctx, callback=cb.progress)
         sha1 = ctx.hexdigest()
 
-        self._msg(job, "Committing captured image")
         # Grab file size
         cb = self.IntervalCallback(contentLength,
             callback=lambda x:
@@ -580,27 +599,19 @@ class BaseDriver(object):
         cli = rl_client.Client(uploadUrl, headers)
         cli.connect()
         cli.request("PUT", body=archive, headers=headers, callback=cb.progress)
-        xmlTemplate = """\
-<files>
-  <file>
-    <title>%(title)s</title>
-    <size>%(size)s</size>
-    <sha1>%(sha1)s</sha1>
-    <fileName>%(fileName)s</fileName>
-  </file>
-  <metadata>
-    <metadata1>1</metadata1>
-    <metadata2>2</metadata2>
-  </metadata>
-</files>
-"""
-        xml = xmlTemplate % dict(
-            title=imageTitle,
-            size=contentLength,
-            sha1=sha1,
-            fileName=imageName,
-        )
+        metadataNodes = [ self.XML.Text(x, y)
+            for (x, y) in params.items() if x.startswith('metadata.') ]
+        root = self.XML.Element("files",
+            self.XML.Element("file",
+                self.XML.Text("title", imageTitle),
+                self.XML.Text("size", str(contentLength)),
+                self.XML.Text("sha1", sha1),
+                self.XML.Text("fileName", imageName),
+            ),
+            self.XML.Element('metadata', *metadataNodes))
+        xml = self.XML.toString(root)
 
+        self._msg(job, "Committing captured image")
         cli = rl_client.Client(imageFilesCommitUrl, headers)
         cli.connect()
         cli.request("PUT", body=xml)

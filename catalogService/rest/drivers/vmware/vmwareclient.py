@@ -563,6 +563,7 @@ class VMwareClient(baseDriver.BaseDriver):
         vmName = instance.getInstanceName()
         tmpVmName = self._getCaptureTmpName(vmName)
         callback = self.taskCallbackFactory(job, "Cloning: %d%%")
+        # Optional params
         dcMor = params.get('datacenterMor')
         resourcePoolMor = params.get('resourcePoolMor')
         dataStoreMor = params.get('dataStoreMor')
