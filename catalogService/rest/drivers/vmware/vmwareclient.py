@@ -124,6 +124,23 @@ _systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <hidden>true</hidden>
     </field>
     <field>
+      <name>imageTitle</name>
+      <descriptions>
+        <desc>Image Title</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must be between 1 and 64 characters</desc>
+        </descriptions>
+        <range>
+            <min>1</min>
+            <max>64</max>
+        </range>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
       <name>imageName</name>
       <descriptions>
         <desc>Image Name</desc>
