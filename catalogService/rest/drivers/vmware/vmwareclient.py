@@ -133,27 +133,21 @@ _systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Field must be between 1 and 64 characters</desc>
         </descriptions>
-        <range>
-            <min>1</min>
-            <max>64</max>
-        </range>
+        <length>64</length>
       </constraints>
       <required>true</required>
     </field>
     <field>
       <name>imageName</name>
       <descriptions>
-        <desc>Image Name</desc>
+        <desc>Image File Name</desc>
       </descriptions>
       <type>str</type>
       <constraints>
         <descriptions>
           <desc>Field must be between 1 and 64 characters, alphanumeric only</desc>
         </descriptions>
-        <range>
-            <min>1</min>
-            <max>64</max>
-        </range>
+        <length>64</length>
         <regexp>^[-_0-9A-Za-z]+$</regexp>
       </constraints>
       <required>true</required>
@@ -286,7 +280,6 @@ class VMwareClient(baseDriver.BaseDriver):
                                             descriptions=x.properties['name'])
             for x in dataCenters),
                            default = dataCenters[0].obj,
-                           readonly = True
                            )
         crToDc = {}
         validDatacenters = []

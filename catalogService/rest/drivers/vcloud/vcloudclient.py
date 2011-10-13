@@ -199,7 +199,6 @@ class VCloudClient(baseDriver.BaseDriver):
                            ],
                            type = descr.EnumeratedType(catalogs),
                            default=catalogs[0].key,
-                           readonly=True,
                            )
         descr.addDataField('dataCenter',
                            descriptions = 'Data Center',
@@ -209,7 +208,6 @@ class VCloudClient(baseDriver.BaseDriver):
                            ],
                            type = descr.EnumeratedType(dataCenters),
                            default=dataCenters[0].key,
-                           readonly=True,
                            )
         for vdcKey, networks in networksMap.items():
             networkKey = 'network-' + vdcKey
@@ -221,7 +219,6 @@ class VCloudClient(baseDriver.BaseDriver):
                                ],
                                type = descr.EnumeratedType(networks),
                                default=networks[0].key,
-                               readonly=True,
                                conditional = descr.Conditional(
                                     fieldName='dataCenter',
                                     operator='eq',
