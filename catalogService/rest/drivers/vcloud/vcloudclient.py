@@ -163,7 +163,7 @@ class VCloudClient(baseDriver.BaseDriver):
         descr.setDisplayName('VMware vCloud Image Upload Parameters')
         descr.addDescription('VMware vCloud Image Upload Parameters')
         self.drvImageDeploymentDescriptorCommonFields(descr)
-        return self._drvPopulateDescriptorFromTarget(descr)
+        return self._drvPopulateDescriptorFromTarget(descr, withNetwork=False)
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("VMware vCloud Launch Parameters")
@@ -171,7 +171,7 @@ class VCloudClient(baseDriver.BaseDriver):
         self.drvLaunchDescriptorCommonFields(descr)
         return self._drvPopulateDescriptorFromTarget(descr)
 
-    def _drvPopulateDescriptorFromTarget(self, descr):
+    def _drvPopulateDescriptorFromTarget(self, descr, withNetwork=True):
         client = self.client
         vdcs = list(client.iterVdcs())
         dataCenters = []
@@ -209,21 +209,22 @@ class VCloudClient(baseDriver.BaseDriver):
                            type = descr.EnumeratedType(dataCenters),
                            default=dataCenters[0].key,
                            )
-        for vdcKey, networks in networksMap.items():
-            networkKey = 'network-' + vdcKey
-            descr.addDataField(networkKey,
-                               descriptions = 'Network',
-                               required = True,
-                               help = [
-                                   ('launch/network.html', None)
-                               ],
-                               type = descr.EnumeratedType(networks),
-                               default=networks[0].key,
-                               conditional = descr.Conditional(
-                                    fieldName='dataCenter',
-                                    operator='eq',
-                                    fieldValue=vdcKey)
-                               )
+        if withNetwork:
+            for vdcKey, networks in networksMap.items():
+                networkKey = 'network-' + vdcKey
+                descr.addDataField(networkKey,
+                                   descriptions = 'Network',
+                                   required = True,
+                                   help = [
+                                       ('launch/network.html', None)
+                                   ],
+                                   type = descr.EnumeratedType(networks),
+                                   default=networks[0].key,
+                                   conditional = descr.Conditional(
+                                        fieldName='dataCenter',
+                                        operator='eq',
+                                        fieldValue=vdcKey)
+                                   )
         return descr
 
     def getImagesFromTarget(self, imageIds):
@@ -277,11 +278,9 @@ class VCloudClient(baseDriver.BaseDriver):
         imageDescription = ppop('imageDescription', imageName)
         dataCenterRef = ppop('dataCenter')
         catalogRef = ppop('catalog')
-        networkRef = ppop('network-%s' % dataCenterRef)
 
         dataCenter = self._getVdc(dataCenterRef)
         catalog = self._getCatalog(catalogRef)
-        network = self._getNetworkFromVdc(dataCenter, networkRef)
 
         vappTemplateRef = self._deployImage(job, image, auth,
             imageName, imageDescription, dataCenter, catalog)
