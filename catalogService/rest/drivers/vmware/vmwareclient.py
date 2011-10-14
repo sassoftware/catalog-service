@@ -152,6 +152,28 @@ _systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </constraints>
       <required>true</required>
     </field>
+    <field>
+      <name>architecture</name>
+      <descriptions>
+        <desc>Architecture</desc>
+      </descriptions>
+      <help lang="en_US" href="@Help_import_image_arch@"/>
+      <enumeratedType>
+        <describedValue>
+          <descriptions>
+            <desc>x86</desc>
+          </descriptions>
+          <key>x86</key>
+        </describedValue>
+        <describedValue>
+          <descriptions>
+            <desc>x86_64</desc>
+          </descriptions>
+          <key>x86_64</key>
+        </describedValue>
+      </enumeratedType>
+      <required>true</required>
+    </field>
   </dataFields>
 </descriptor>
 """
