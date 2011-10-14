@@ -599,8 +599,11 @@ class BaseDriver(object):
         cli = rl_client.Client(uploadUrl, headers)
         cli.connect()
         cli.request("PUT", body=archive, headers=headers, callback=cb.progress)
-        metadataNodes = [ self.XML.Text(x, y)
-            for (x, y) in params.items() if x.startswith('metadata.') ]
+        # partition splits at the first '_'
+        metadataNodes = [ (x.partition('_'), y) for (x, y) in params.items() ]
+        # we only care about a leading metadata
+        metadataNodes = [ self.XML.Text(x[2], y)
+            for (x, y) in metadataNodes if x[0] == 'metadata' ]
         root = self.XML.Element("files",
             self.XML.Element("file",
                 self.XML.Text("title", imageTitle),
