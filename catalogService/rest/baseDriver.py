@@ -1095,7 +1095,7 @@ class BaseDriver(object):
             return None
         ffile = files[0]
         # If uniqueImageId is present, use that.
-        return str(ffile.get('uniqueImageId', ffile['sha1']))
+        return ffile.get('uniqueImageId', ffile['sha1'])
 
     def _getImageIdFromMintImage_local(self, imageData, targetImageIds):
         """
@@ -1113,8 +1113,8 @@ class BaseDriver(object):
         # Some of them may have been removed, so only look for the overlapping
         # ones
         inters = targetImageIdsFromMint.intersection(targetImageIds)
-        mintImageId = imageData['_mintImageId'] = str(
-            fdata.get('uniqueImageId', fdata['sha1']))
+        mintImageId = imageData['_mintImageId'] = fdata.get('uniqueImageId',
+            fdata['sha1'])
         if inters:
             imageId = imageData['_targetImageId'] = inters.pop()
             return imageId
