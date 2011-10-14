@@ -244,4 +244,6 @@ class NodeFactory(object):
 
     @classmethod
     def _quote(cls, data):
+        if isinstance(data, int):
+            data = str(data)
         return urllib.quote(data, safe="")
