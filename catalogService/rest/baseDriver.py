@@ -241,7 +241,7 @@ class BaseDriver(object):
         # nor the grid call allow us to filter by image, at least for now
         if imageIdsFilter is None:
             # no filtering required. We'll make the filter contain everything
-            imageIdsFilter = sorted(x.getImageId() for x in imageList)
+            imageIdsFilter = sorted(str(x.getImageId()) for x in imageList)
 
         # filter the images to those requested
         imagesById = self._ImageMap(imageList)
@@ -255,7 +255,7 @@ class BaseDriver(object):
 
     class _ImageMap(object):
         def __init__(self, imageList):
-            self._ids = dict((x.getImageId(), x) for x in imageList)
+            self._ids = dict((str(x.getImageId()), x) for x in imageList)
             self._ids.update((x._targetImageId, x) for x in imageList
                 if getattr(x, '_targetImageId', None))
 
