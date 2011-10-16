@@ -609,6 +609,7 @@ class VCloudClient(baseDriver.BaseDriver):
         tmpVappTemplateName = self._getCaptureTmpName(vmName)
         vapp = cli.getVAppForVm(instanceId)
         destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
+        vappTemplate = None
         try:
             self._msg(job, "Starting vApp capture '%s'" % tmpVappTemplateName)
             callback = lambda: self._msg(job, "Waiting for capture task to finish")
@@ -619,17 +620,24 @@ class VCloudClient(baseDriver.BaseDriver):
             catalogItemsHref = cli.iterCatalogs().next().href + '/catalogItems'
             cli.addVappTemplateToCatalog(self._loggerFactory(job),
                 name, description, vappTemplate.href, catalogItemsHref)
+            vappTemplate = cli.refreshResource(vappTemplate)
             self._msg(job, "Enabling vApp template for download")
             callback = lambda: self._msg(job, "Waiting for download enablement task to finish")
-            cli.enableVappTemplateForDownload(vappTemplate, callback=callback)
-            vmFiles = cli.exportVappTemplate(vappTemplate, destDir)
+            vappTemplate = cli.enableVappTemplateForDownload(vappTemplate, callback=callback)
+
+            self._msg(job, "Downloading vApp template")
+            downloadProgressUpdate = self.IntervalCallback(0,
+                lambda x: self._msg(job, "Downloaded %d%%" % x))
+            vmFiles = cli.exportVappTemplate(vappTemplate, destDir,
+                downloadProgressUpdate)
             archive = self._buildExportArchive(job, destDir, vmFiles)
             return archive
         finally:
             util.rmtree(destDir, ignore_errors=True)
-            self._msg(job, "Destroying VM %s" % tmpVappTemplateName)
-            callback = lambda: self._msg(job, "Waiting for vApp template removal task to finish")
-            cli.removeVappTemplate(vappTemplate, callback=callback)
+            if vappTemplate is not None:
+                self._msg(job, "Destroying VM %s" % tmpVappTemplateName)
+                callback = lambda: self._msg(job, "Waiting for vApp template removal task to finish")
+                cli.removeVappTemplate(vappTemplate, callback=callback)
 
     def _loggerFactory(self, job):
         return lambda *args: self._msg(job, *args)
@@ -1066,6 +1074,14 @@ class RestClient(restclient.Client):
 
     def _getLinkByRel(self, obj, rel):
         obj = self.refreshIfNeeded(obj)
+        ret = self._findLink(obj, rel)
+        if ret is not None:
+            return ret
+        # Maybe we need to refresh the resource
+        obj = self.refreshResource(obj)
+        return self._findLink(obj, rel)
+
+    def _findLink(self, obj, rel):
         for link in obj.Link:
             if link.rel == rel:
                 return link
@@ -1119,7 +1135,7 @@ class RestClient(restclient.Client):
                 raise
         task = Models.handler.parseString(e.contents)
         self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
-        return vappTemplate
+        return self.refreshResource(vappTemplate)
 
     def exportVappTemplate(self, vappTemplate, destDir, downloadProgressUpdate):
         vappTemplate = self.refreshResource(vappTemplate)
@@ -1152,7 +1168,10 @@ class RestClient(restclient.Client):
         return ret
 
     def removeVappTemplate(self, vappTemplate, callback=None):
+        vappTemplate = self.refreshResource(vappTemplate)
         removePath = self._getLinkByRel(vappTemplate, "remove")
+        if removePath is None:
+            return
         self.path = removePath.href
         self.connect()
 
