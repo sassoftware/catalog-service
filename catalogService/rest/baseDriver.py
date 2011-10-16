@@ -529,23 +529,36 @@ class BaseDriver(object):
         self.uploadCapturedImage(job, instance, params, archive)
         self._msg(job, "Finished")
 
+    def _getCaptureTmpName(self, vmName):
+        from random import Random
+        r = Random().randrange(10000, 99999)
+        return "%s capture %s" % (vmName, r)
+
     class IntervalCallback(object):
         INTERVAL = 2
         def __init__(self, totalSize, callback):
             self.totalSize = totalSize
             self.last = 0
             self.callback = callback
+            self.prevFilesSize = 0
 
         def progress(self, bytes, rate=0):
             now = time.time()
-            if self.last + self.INTERVAL > now:
+            if (self.last + self.INTERVAL > now and
+                    self.prevFilesSize + bytes < self.totalSize):
                 return
             self.last = now
-            if self.totalSize == 0:
-                pct = 100
-            else:
-                pct = min((100 * bytes) // self.totalSize, 100)
+            pct = self._percent(bytes)
             self.callback(pct)
+
+        def _percent(self, bytes):
+            if self.totalSize == 0:
+                return 100
+            return min(100,
+                int((self.prevFilesSize + bytes) * 100.0 / self.totalSize))
+
+        def updateSize(self, size):
+            self.prevFilesSize += size
 
     class DummyWriter(object):
         @classmethod
@@ -1286,6 +1299,102 @@ class BaseDriver(object):
     class ProbeHostError(Exception):
         pass
 
+    def _buildExportArchive(self, job, destDir, ovfFiles):
+        dest = tempfile.TemporaryFile(prefix="system-capture-%s-" % self.cloudType,
+            suffix=".ova")
+        callback = lambda x, y, pct: self._msg(job, "Archiving: %d%%" % pct)
+        t = self.TarWriter(dest, destDir, callback=callback)
+        t.archive(ovfFiles)
+        return dest
+
+class FileWithProgress(file):
+    """
+    A file object that calls a progress callback
+    """
+    def __init__(self, *args, **kwargs):
+        self._readCallback = kwargs.pop('readCallback', None)
+        file.__init__(self, *args, **kwargs)
+        if self._readCallback:
+            self._readCallback.addFileSize(os.fstat(self.fileno()).st_size)
+
+    def read(self, size=None):
+        data = file.read(self, size)
+        if self._readCallback:
+            self._readCallback.callback(self.tell())
+        return data
+
+class _Callback(object):
+    """
+    Wrapper around a callback function that gets called with:
+    (currentBytes, totalBytes, percentage)
+    every time a chunk larger than self.INCREMENT bytes was read.
+    """
+    INCREMENT = 1024 * 1024 # Default to 1M
+    def __init__(self, cb):
+        self.baseSize = 0
+        self.currentFileSize = 0
+        self.totalSize = 0
+        self.cb = cb
+
+    def addFileSize(self, size):
+        """Called automatically when a FileWithProgress object using this
+        callback is created"""
+        self.totalSize += size
+
+    def updateSize(self):
+        "To be called once a file was processed"
+        self.baseSize += self.currentFileSize
+        self.currentFileSize = 0
+
+    def callback(self, size):
+        """Called by a FileWithProgress' read() method, every time the number
+        of bytes read from the file jumps over the self.INCREMENT boundary"""
+        oldSize = self.baseSize + self.currentFileSize
+        self.currentFileSize = size
+        totCurrent = self.baseSize + self.currentFileSize
+        if (oldSize // self.INCREMENT) == (totCurrent // self.INCREMENT):
+            # Within the same checkpoint, nothing to do
+            return
+        if self.totalSize == 0:
+            pct = 100
+        else:
+            pct = (100 * totCurrent) // self.totalSize
+            if pct > 100:
+                pct = 100
+
+        self.cb(totCurrent, self.totalSize, pct)
+
+class TarWriter(object):
+    Callback = _Callback
+    def __init__(self, destFile, baseDir, callback):
+        self.baseDir = baseDir
+        if isinstance(destFile, basestring):
+            self.tarfile = tarfile.TarFile(destFile, mode="w")
+        else:
+            self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
+        self.callback = self.Callback(callback)
+
+    def setIncrementSize(self, incrementSize):
+        self.callback.INCREMENT = incrementSize
+
+    def archive(self, fileNames):
+        tfiles = []
+        for fname in fileNames:
+            fullPath = os.path.join(self.baseDir, fname)
+            fwp = FileWithProgress(fullPath, readCallback=self.callback)
+            tfiles.append((self.tarfile.gettarinfo(arcname=fname, fileobj=fwp),
+                fwp))
+
+        for ti, fwp in tfiles:
+            self.tarfile.addfile(ti, fileobj=fwp)
+            self.callback.updateSize()
+        self.close()
+
+    def close(self):
+        if self.tarfile is not None:
+            self.tarfile.close()
+            self.tarfile = None
+
 class CookieClient(object):
     def __init__(self, server, username, password):
         self.server = server
@@ -1514,4 +1623,6 @@ class Archive(object):
                 if member.name.endswith(extension):
                     yield member
 
+
 BaseDriver.Archive = Archive
+BaseDriver.TarWriter = TarWriter

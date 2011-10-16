@@ -119,6 +119,86 @@ class VCloudClient(baseDriver.BaseDriver):
   </dataFields>
 </descriptor>
 """
+
+    systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>vCloud vApp Capture</displayName>
+    <descriptions>
+      <desc>Capturing a vApp</desc>
+    d/descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>instanceId</name>
+      <descriptions>
+        <desc>System ID</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must contain between 1 and 36 characters</desc>
+        </descriptions>
+        <length>36</length>
+      </constraints>
+      <required>true</required>
+      <hidden>true</hidden>
+    </field>
+    <field>
+      <name>imageTitle</name>
+      <descriptions>
+        <desc>Image Title</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must be between 1 and 64 characters</desc>
+        </descriptions>
+        <length>64</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>imageName</name>
+      <descriptions>
+        <desc>Image File Name</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must be between 1 and 64 characters, alphanumeric only</desc>
+        </descriptions>
+        <length>64</length>
+        <regexp>^[-_0-9A-Za-z]+$</regexp>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>architecture</name>
+      <descriptions>
+        <desc>Architecture</desc>
+      </descriptions>
+      <help lang="en_US" href="@Help_import_image_arch@"/>
+      <enumeratedType>
+        <describedValue>
+          <descriptions>
+            <desc>x86</desc>
+          </descriptions>
+          <key>x86</key>
+        </describedValue>
+        <describedValue>
+          <descriptions>
+            <desc>x86_64</desc>
+          </descriptions>
+          <key>x86_64</key>
+        </describedValue>
+      </enumeratedType>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>
+"""
+
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
     PENDING_STATES = set([
         Models.Status.Text.state[Models.Status.Code.POWERED_OFF],
@@ -138,7 +218,7 @@ class VCloudClient(baseDriver.BaseDriver):
         if port == 443:
             url = "https://%s/api/v1.0/login" % serverName
         else:
-            url = "https://%s:%s/api/1.0/login" % (serverName, port)
+            url = "https://%s:%s/api/v1.0/login" % (serverName, port)
         rcli = RestClient(url)
         return rcli
 
@@ -522,6 +602,35 @@ class VCloudClient(baseDriver.BaseDriver):
             name, description, vapp.href, catalogItemsHref)
         return vapp
 
+    def drvCaptureSystem(self, job, instance, params):
+        cli = self.client
+        instanceId = instance.getInstanceId()
+        vmName = instance.getInstanceName()
+        tmpVappTemplateName = self._getCaptureTmpName(vmName)
+        vapp = cli.getVAppForVm(instanceId)
+        destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
+        try:
+            self._msg(job, "Starting vApp capture '%s'" % tmpVappTemplateName)
+            callback = lambda: self._msg(job, "Waiting for capture task to finish")
+            vappTemplate = cli.captureVApp(vapp, tmpVappTemplateName,
+                callback=callback)
+            name = description = tmpVappTemplateName
+            # XXX FIXME should pick catalog
+            catalogItemsHref = cli.iterCatalogs().next().href + '/catalogItems'
+            cli.addVappTemplateToCatalog(self._loggerFactory(job),
+                name, description, vappTemplate.href, catalogItemsHref)
+            self._msg(job, "Enabling vApp template for download")
+            callback = lambda: self._msg(job, "Waiting for download enablement task to finish")
+            cli.enableVappTemplateForDownload(vappTemplate, callback=callback)
+            vmFiles = cli.exportVappTemplate(vappTemplate, destDir)
+            archive = self._buildExportArchive(job, destDir, vmFiles)
+            return archive
+        finally:
+            util.rmtree(destDir, ignore_errors=True)
+            self._msg(job, "Destroying VM %s" % tmpVappTemplateName)
+            callback = lambda: self._msg(job, "Waiting for vApp template removal task to finish")
+            cli.removeVappTemplate(vappTemplate, callback=callback)
+
     def _loggerFactory(self, job):
         return lambda *args: self._msg(job, *args)
 
@@ -560,6 +669,7 @@ class VCloudClient(baseDriver.BaseDriver):
 
 class RestClient(restclient.Client):
     _nsmap = dict(vc='http://www.vmware.com/vcloud/v1')
+    _ovfNs = dict(ovf="http://schemas.dmtf.org/ovf/envelope/1")
     class TYPES(object):
         vdc = "application/vnd.vmware.vcloud.vdc+xml"
         catalog = "application/vnd.vmware.vcloud.catalog+xml"
@@ -569,6 +679,7 @@ class RestClient(restclient.Client):
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
         instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
         network = "application/vnd.vmware.vcloud.network+xml"
+        captureVAppParams = "application/vnd.vmware.vcloud.captureVAppParams+xml"
 
     TIMEOUT_VAPP_INSTANTIATED = 2
     TIMEOUT_OVF_DESCRIPTOR_PROCESSED = 2
@@ -775,17 +886,17 @@ class RestClient(restclient.Client):
 
     def renameVm(self, vm, vmName, vmDescription):
         # Find upload link
-        links = [ x for x in vm.Link if x.rel == 'edit' ]
-        if not links:
+        link = self._getLinkByRel(vm, 'edit')
+        if link is None:
             return
-        url = links[0].href
+        url = link.href
         self.path = self._pathFromUrl(url)
         self.connect()
         resource = Models.Vm(description=vmDescription)
         resource.name = vmName
 
         body = Models.handler.toXml(resource)
-        headers = { 'Content-Type' : links[0].type}
+        headers = { 'Content-Type' : link.type}
         try:
             self.request("PUT", body=body, headers=headers)
         except restclient.ResponseError, e:
@@ -916,10 +1027,17 @@ class RestClient(restclient.Client):
             if e.status != 201:
                 raise
         vapp = Models.handler.parseString(e.contents)
-        vapp = self.waitForTask(vapp, [ 'queued', 'running' ], callback=callback)
+        vapp = self.waitForResourceTask(vapp, [ 'queued', 'running' ], callback=callback)
         return vapp
 
-    def waitForTask(self, vapp, inProgressStates, callback=None):
+    def _getVmById(self, vmId):
+        self.path = "/api/v1.0/vApp/%s" % os.path.basename(vmId)
+        resp = self.request("GET")
+        data = resp.read()
+        vm = Models.handler.parseString(data)
+        return vm
+
+    def waitForResourceTask(self, vapp, inProgressStates, callback=None):
         while 1:
             tasks = vapp.getTasks()
             if not tasks or tasks[0].status not in inProgressStates:
@@ -929,6 +1047,15 @@ class RestClient(restclient.Client):
             time.sleep(2)
             vapp = self.refreshResource(vapp)
 
+    def waitForTask(self, task,  inProgressStates, callback=None):
+        while 1:
+            task = self.refreshResource(task)
+            if task.status not in inProgressStates:
+                return task
+            if callback:
+                callback()
+            time.sleep(2)
+
     def deleteEntity(self, entity):
         self.path = self._pathFromUrl(entity.href)
         try:
@@ -936,3 +1063,111 @@ class RestClient(restclient.Client):
         except restclient.ResponseError, e:
             if e.status != 202:
                 raise
+
+    def _getLinkByRel(self, obj, rel):
+        obj = self.refreshIfNeeded(obj)
+        for link in obj.Link:
+            if link.rel == rel:
+                return link
+        return None
+
+    def refreshIfNeeded(self, obj):
+        if hasattr(obj, 'Link'):
+            return obj
+        return self.refreshResource(obj)
+
+    def getVAppForVm(self, vm):
+        if isinstance(vm, str):
+            vm = self._getVmById(vm)
+        return self._getLinkByRel(vm, 'up')
+
+    def getVdcForVApp(self, vapp):
+        return self._getLinkByRel(vapp, 'up')
+
+    def captureVApp(self, vapp, tmpVappTemplateName, vdc=None,
+            callback=None):
+        vapp = self.refreshIfNeeded(vapp)
+        if vdc is None:
+            vdc = self.getVdcForVApp(vapp)
+        vdc = self.refreshIfNeeded(vdc)
+        # Find link
+        self.path = [ x.href for x in vdc.Link
+            if x.getType() == self.TYPES.captureVAppParams
+                and x.getRel() == 'add' ][0]
+        self.connect()
+        m = Models.CaptureVAppParams()
+        m.Source = Models.Source(href=vapp.href)
+        m.name = tmpVappTemplateName
+        body = Models.handler.toXml(m)
+        try:
+            self.request("POST", body=body)
+        except restclient.ResponseError, e:
+            if e.status != 201:
+                raise
+        vappTemplate = Models.handler.parseString(e.contents)
+        self.waitForResourceTask(vappTemplate, [ 'queued', 'running' ], callback=callback)
+        return vappTemplate
+
+    def enableVappTemplateForDownload(self, vappTemplate, callback=None):
+        link = self._getLinkByRel(vappTemplate, "enable")
+        self.path = link.href
+        self.connect()
+        try:
+            self.request("POST")
+        except restclient.ResponseError, e:
+            if e.status != 202:
+                raise
+        task = Models.handler.parseString(e.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+        return vappTemplate
+
+    def exportVappTemplate(self, vappTemplate, destDir, downloadProgressUpdate):
+        vappTemplate = self.refreshResource(vappTemplate)
+        # Grab download URL
+        link = self._getLinkByRel(vappTemplate, "download:default")
+        if link is None:
+            raise errors.DownloadError("Unable to download template")
+        self.path = link.href
+        self.connect()
+        resp = self.request("GET")
+        ovf = resp.read()
+        ovfFname = os.path.join(destDir, os.path.basename(link.href))
+        file(ovfFname, "w").write(ovf)
+        # XXX There are definitely better ways to parse the OVF
+        tree = etree.fromstring(ovf)
+        files = tree.xpath("/ovf:Envelope/ovf:References/ovf:File",
+            namespaces=self._ovfNs)
+        files = [ self._getFileAttrs(x) for x in files ]
+        downloadProgressUpdate.totalSize = sum(x[1] for x in files)
+        cb = downloadProgressUpdate.progress
+        baseUrl = os.path.dirname(self.path)
+        ret = [ os.path.basename(ovfFname) ]
+        for fileName, fileSize in files:
+            outPath = os.path.join(destDir, fileName)
+            self.path = "%s/%s" % (baseUrl, fileName)
+            resp = self.request("GET")
+            util.copyfileobj(resp, file(outPath, "w"), callback=cb)
+            downloadProgressUpdate.updateSize(fileSize)
+            ret.append(fileName)
+        return ret
+
+    def removeVappTemplate(self, vappTemplate, callback=None):
+        removePath = self._getLinkByRel(vappTemplate, "remove")
+        self.path = removePath.href
+        self.connect()
+
+        try:
+            self.request("DELETE")
+        except restclient.ResponseError, e:
+            if e.status != 202:
+                raise
+        task = Models.handler.parseString(e.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+
+    @classmethod
+    def _getFileAttrs(cls, fileElement):
+        ovfNs = cls._ovfNs['ovf']
+        return (
+            fileElement.attrib.get('{%s}%s' % (ovfNs, 'href')),
+            int(fileElement.attrib.get('{%s}%s' % (ovfNs, 'size'))),
+        )

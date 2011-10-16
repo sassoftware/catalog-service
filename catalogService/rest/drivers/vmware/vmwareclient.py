@@ -586,31 +586,18 @@ class VMwareClient(baseDriver.BaseDriver):
         cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
             dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
 
-        destDir = tempfile.mkdtemp(prefix="vmware-system-capture-")
+        destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
         try:
             callback = lambda x: self._msg(job, "Exporting OVF: %d%% complete" % x)
             self._msg(job, "Exporting VM %s" % tmpVmName)
             ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir, callback=callback)
-            archive = self._buildExportArchive(job, vmName, destDir, ovfFiles)
+            archive = self._buildExportArchive(job, destDir, ovfFiles)
             return archive
         finally:
             self._msg(job, "Destroying VM %s" % tmpVmName)
             callback = self.taskCallbackFactory(job, "Destroying VM: %d%%")
             self.client.destroyVM(cloneMor, callback=callback)
             util.rmtree(destDir, ignore_errors=True)
-
-    def _getCaptureTmpName(self, vmName):
-        from random import Random
-        r = Random().randrange(10000, 99999)
-        return "%s capture %s" % (vmName, r)
-
-    def _buildExportArchive(self, job, vmName, destDir, ovfFiles):
-        dest = tempfile.TemporaryFile(prefix="vmware-system-capture-",
-            suffix=".ova")
-        callback = lambda x, y, pct: self._msg(job, "Archiving: %d%%" % pct)
-        t = TarArchive(dest, destDir, callback=callback)
-        t.archive(ovfFiles)
-        return dest
 
     @classmethod
     def getImageIdFromMintImage(cls, image, targetImageIds):
@@ -1019,90 +1006,3 @@ class VMwareClient(baseDriver.BaseDriver):
             self.log_exception("Exception trying to attach credentials: %s", e)
 
 
-class FileWithProgress(file):
-    """
-    A file object that calls a progress callback
-    """
-    def __init__(self, *args, **kwargs):
-        self._readCallback = kwargs.pop('readCallback', None)
-        file.__init__(self, *args, **kwargs)
-        if self._readCallback:
-            self._readCallback.addFileSize(os.fstat(self.fileno()).st_size)
-
-    def read(self, size=None):
-        data = file.read(self, size)
-        if self._readCallback:
-            self._readCallback.callback(self.tell())
-        return data
-
-class _Callback(object):
-    """
-    Wrapper around a callback function that gets called with:
-    (currentBytes, totalBytes, percentage)
-    every time a chunk larger than self.INCREMENT bytes was read.
-    """
-    INCREMENT = 1024 * 1024 # Default to 1M
-    def __init__(self, cb):
-        self.baseSize = 0
-        self.currentFileSize = 0
-        self.totalSize = 0
-        self.cb = cb
-
-    def addFileSize(self, size):
-        """Called automatically when a FileWithProgress object using this
-        callback is created"""
-        self.totalSize += size
-
-    def updateSize(self):
-        "To be called once a file was processed"
-        self.baseSize += self.currentFileSize
-        self.currentFileSize = 0
-
-    def callback(self, size):
-        """Called by a FileWithProgress' read() method, every time the number
-        of bytes read from the file jumps over the self.INCREMENT boundary"""
-        oldSize = self.baseSize + self.currentFileSize
-        self.currentFileSize = size
-        totCurrent = self.baseSize + self.currentFileSize
-        if (oldSize // self.INCREMENT) == (totCurrent // self.INCREMENT):
-            # Within the same checkpoint, nothing to do
-            return
-        if self.totalSize == 0:
-            pct = 100
-        else:
-            pct = (100 * totCurrent) // self.totalSize
-            if pct > 100:
-                pct = 100
-
-        self.cb(totCurrent, self.totalSize, pct)
-
-class TarArchive(object):
-    Callback = _Callback
-    def __init__(self, destFile, baseDir, callback):
-        self.baseDir = baseDir
-        if isinstance(destFile, basestring):
-            self.tarfile = tarfile.TarFile(destFile, mode="w")
-        else:
-            self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
-        self.callback = self.Callback(callback)
-
-    def setIncrementSize(self, incrementSize):
-        self.callback.INCREMENT = incrementSize
-
-    def archive(self, fileNames):
-        tfiles = []
-        for fname in fileNames:
-            fullPath = os.path.join(self.baseDir, fname)
-            fwp = FileWithProgress(fullPath, readCallback=self.callback)
-            tfiles.append((self.tarfile.gettarinfo(arcname=fname, fileobj=fwp),
-                fwp))
-
-        for ti, fwp in tfiles:
-            self.tarfile.addfile(ti, fileobj=fwp)
-            self.callback.updateSize()
-        self.close()
-
-    def close(self):
-        if self.tarfile is not None:
-            self.tarfile.close()
-            self.tarfile = None

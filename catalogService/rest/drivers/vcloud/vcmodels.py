@@ -46,6 +46,11 @@ class _BaseNode(xmlNode.BaseNode):
                 slotTypeMap[elementName] = element
         return slots, slotAttributes, slotTypeMap
 
+class ParamsType(_BaseNode):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['name'],
+        elements=['Description'])
+
 class _ReferenceType(_BaseNode):
     __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
         attributes=['type', 'name', 'href', ])
@@ -233,6 +238,11 @@ class InstantiateVAppTemplateParams(_BaseNode):
     _slotTypeMap = dict(deploy=bool, powerOn=bool, VAppParent=VAppParent,
         InstantiationParams=InstantiationParams,
         linkedClone=bool, IsSourceDelete=bool, Source=Source)
+
+class CaptureVAppParams(ParamsType):
+    tag = 'CaptureVAppParams'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(ParamsType,
+        elements=[Source])
 
 class Children(_BaseNode):
     tag = 'Children'
