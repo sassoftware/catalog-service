@@ -138,21 +138,6 @@ _systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
     </field>
     <field>
-      <name>imageName</name>
-      <descriptions>
-        <desc>Image File Name</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Field must be between 1 and 64 characters, alphanumeric only</desc>
-        </descriptions>
-        <length>64</length>
-        <regexp>^[-_0-9A-Za-z]+$</regexp>
-      </constraints>
-      <required>true</required>
-    </field>
-    <field>
       <name>architecture</name>
       <descriptions>
         <desc>Architecture</desc>
