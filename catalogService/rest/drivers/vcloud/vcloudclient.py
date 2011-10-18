@@ -126,7 +126,7 @@ class VCloudClient(baseDriver.BaseDriver):
     <displayName>vCloud vApp Capture</displayName>
     <descriptions>
       <desc>Capturing a vApp</desc>
-    d/descriptions>
+    </descriptions>
   </metadata>
   <dataFields>
     <field>
