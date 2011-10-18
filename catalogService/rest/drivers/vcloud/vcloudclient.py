@@ -255,7 +255,7 @@ class VCloudClient(baseDriver.BaseDriver):
         catalogs = [
             descr.ValueWithDescription(item[1], descriptions=item[0])
                 for item in sorted((x.name, self._id(x.href, 'catalog'))
-                    for x in client.iterCatalogs()) ]
+                    for x in client.iterWritableCatalogs()) ]
         descr.addDataField('catalog',
                            descriptions = 'Catalog',
                            required = True,
@@ -601,8 +601,9 @@ class VCloudClient(baseDriver.BaseDriver):
             vappTemplate = cli.captureVApp(vapp, tmpVappTemplateName,
                 callback=callback)
             name = description = tmpVappTemplateName
-            # XXX FIXME should pick catalog
-            catalogItemsHref = cli.iterCatalogs().next().href + '/catalogItems'
+            # XXX FIXME we may have to let the user pick a catalog
+            # Also, if there are no writable catalogs, this will explode spectacularily
+            catalogItemsHref = cli.iterWritableCatalogs().next().href + '/catalogItems'
             cli.addVappTemplateToCatalog(self._loggerFactory(job),
                 name, description, vappTemplate.href, catalogItemsHref)
             vappTemplate = cli.refreshResource(vappTemplate)
@@ -722,6 +723,7 @@ class RestClient(restclient.Client):
         org = Models.handler.parseString(data)
         self._catalogs = set(x for x in org.Link
             if x.getType() == self.TYPES.catalog)
+        self._writableCatalogs = None
         # Some of the VDCs may be disabled, so we ignore those
         self._vdcs = []
         vdcLinks = [ x for x in org.Link if x.getType() == self.TYPES.vdc ]
@@ -775,6 +777,19 @@ class RestClient(restclient.Client):
 
     def iterCatalogs(self):
         return iter(self._catalogs)
+
+    def iterWritableCatalogs(self):
+        if self._writableCatalogs is not None:
+            return iter(self._writableCatalogs)
+        ret = []
+        for link in sorted(self._catalogs):
+            catalog = self.refreshResource(link)
+            l = self._findLink(catalog, 'add')
+            if l is None:
+                continue
+            ret.append(catalog)
+        self._writableCatalogs = ret
+        return iter(ret)
 
     def iterVdcs(self):
         return iter(self._vdcs)
