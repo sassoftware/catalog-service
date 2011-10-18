@@ -133,13 +133,44 @@ class VIConfig(object):
         while stack:
             parentPath, nodeMor = stack.pop()
             nodeProps = self.vmFolders[nodeMor]
-            nodeLabel = "%s/%s" % (parentPath, nodeProps['name'])
+            nodeLabel = "%s/%s" % (parentPath,
+                self._escapeFolderName(nodeProps['name']))
             children = self.vmFolderTree.get(nodeMor, [])
             stack.extend((nodeLabel, x) for x in children)
             ret.append((nodeLabel, nodeMor))
         ret.sort(key=lambda x: x[0])
         return ret
 
+    def getVmFolderLabelPath(self, folder):
+        """
+        Walk backwards until we reach a top-level folder
+        """
+        stack = []
+        node = folder
+        # Hash datacenters
+        topFolders = dict((dc.properties['vmFolder'], dc)
+            for dc in self.datacenters)
+        dcName = None
+        while 1:
+            morProps = self.vmFolders[node]
+            dc = topFolders.get(node)
+            if dc is not None:
+                dcName = dc.properties['name']
+                stack.append(self._escapeFolderName(morProps['name']))
+                break
+
+            childTypes = morProps['childType'].get_element_string()
+            if 'VirtualMachine' not in childTypes:
+                # Got to a non-VM folder
+                break
+            stack.append(self._escapeFolderName(morProps['name']))
+            node = morProps['parent']
+        stack.reverse()
+        return dcName, '/'.join(stack)
+
+    @classmethod
+    def _escapeFolderName(cls, folderName):
+        return folderName.replace('/', '%2f')
 
 class Error(Exception):
     pass

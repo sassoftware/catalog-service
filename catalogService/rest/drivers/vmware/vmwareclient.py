@@ -784,8 +784,11 @@ class VMwareClient(baseDriver.BaseDriver):
             vmFolderMor = dc.properties['vmFolder']
         else:
             vmFolderMor = self.vicfg.getMOR(vmFolder)
-        vmFolderName = self.vicfg.getName(vmFolderMor)
-        inventoryPrefix = '/%s/%s/' %(dcName, vmFolderName)
+        dcName_, vmFolderPath = self.vicfg.getVmFolderLabelPath(vmFolderMor)
+        if dcName_ is None:
+            # Requested a folder with no path to the top level
+            raise errors.ParameterError()
+        inventoryPrefix = '/%s/%s/' %(dcName_, vmFolderPath)
         vmName = self._findUniqueName(inventoryPrefix, vmName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
