@@ -308,7 +308,7 @@ class VMwareClient(baseDriver.BaseDriver):
             descr.addDataField('vmfolder-%s' % dc.obj,
                 descriptions = "VM Folder",
                 required = True,
-                help = [ ('launch/computeResource.html', None) ],
+                help = [ ('launch/vmfolder.html', None) ],
                 type = descr.EnumeratedType(
                     descr.ValueWithDescription(
                         x[1], descriptions=x[0])
