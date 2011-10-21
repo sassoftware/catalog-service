@@ -1082,6 +1082,8 @@ class RestClient(restclient.Client):
         return self._findLink(obj, rel)
 
     def _findLink(self, obj, rel):
+        if obj.Link is None:
+            return None
         for link in obj.Link:
             if link.rel == rel:
                 return link
@@ -1099,6 +1101,19 @@ class RestClient(restclient.Client):
 
     def getVdcForVApp(self, vapp):
         return self._getLinkByRel(vapp, 'up')
+
+    def getOvfDescriptorForVappTemplate(self, vappTemplate):
+        try:
+            ovfLink = self._getLinkByRel(vappTemplate, 'ovf')
+        except restclient.ResponseError:
+            # Probably permission errors
+            return None
+        if ovfLink is None:
+            return None
+        self.path = ovfLink.href
+        self.connect()
+        resp = self.request("GET")
+        return resp.read()
 
     def captureVApp(self, vapp, tmpVappTemplateName, vdc=None,
             callback=None):
