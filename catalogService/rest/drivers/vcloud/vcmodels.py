@@ -99,8 +99,9 @@ class Files(xmlNode.BaseNodeCollection):
 
 class Error(_BaseNode):
     tag = 'Error'
-    __slots__ = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
-    _slotAttributes = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=[ 'minorErrorCode', 'majorErrorCode', 'message',
+            'vendorSpecificErrorCode', 'stackTrace', ])
 
 class Owner(_ReferenceType):
     tag = 'Owner'

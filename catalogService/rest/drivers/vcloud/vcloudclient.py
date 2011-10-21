@@ -3,7 +3,6 @@
 #
 
 import os
-import socket
 import tempfile
 import time
 
@@ -338,7 +337,7 @@ class VCloudClient(baseDriver.BaseDriver):
             return image.getImageId()
 
         ppop = launchParams.pop
-        imageId = ppop('imageId')
+        ppop('imageId')
         imageName = ppop('imageName')
         imageDescription = ppop('imageDescription', imageName)
         dataCenterRef = ppop('dataCenter')
@@ -354,7 +353,7 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
-        imageId = ppop('imageId')
+        ppop('imageId')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
         dataCenterRef = ppop('dataCenter')
@@ -667,6 +666,7 @@ class RestClient(restclient.Client):
     class TYPES(object):
         vdc = "application/vnd.vmware.vcloud.vdc+xml"
         catalog = "application/vnd.vmware.vcloud.catalog+xml"
+        error = 'application/vnd.vmware.vcloud.error+xml'
         vApp = "application/vnd.vmware.vcloud.vApp+xml"
         vAppTemplate = "application/vnd.vmware.vcloud.vAppTemplate+xml"
         catalogItem = "application/vnd.vmware.vcloud.catalogItem+xml"
@@ -682,9 +682,30 @@ class RestClient(restclient.Client):
     def connect(self):
         try:
             return restclient.Client.connect(self)
-        except socket.error:
-            # XXX need to raise a meaningful exception
-            raise
+        except restclient.ConnectionError, e:
+            msg = "%s (%s://%s%s)" % (e, self.scheme, self.hostport, self.path)
+            raise errors.ParameterError(msg)
+
+    def makeRequest(self, *args, **kwargs):
+        expectedStatusCodes = kwargs.pop('expectedStatusCodes', None)
+        # Sanitize error codes a bit
+        if expectedStatusCodes is not None:
+            if not isinstance(expectedStatusCodes, set):
+                expectedStatusCodes = set(expectedStatusCodes)
+        try:
+            resp = self.request(*args, **kwargs)
+        except restclient.ResponseError, e:
+            if expectedStatusCodes and e.status in expectedStatusCodes:
+                return e
+            # XXX Munge exception here
+            if e.headers['Content-Type'] == self.TYPES.error:
+                error = Models.handler.parseString(e.contents)
+                raise errors.ParameterError("vCloud error: %s" % error.message)
+            raise errors.CatalogError("Unknown error: %s" % e)
+        if expectedStatusCodes:
+            raise errors.ParameterError("vCloud error: expected codes %s, got %s"
+                % (expectedStatusCodes, e.status))
+        return resp
 
     def verify(self):
         self.path = '/api/versions'
@@ -692,7 +713,7 @@ class RestClient(restclient.Client):
             self.connect()
         except restclient.ConnectionError:
             return False
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         tree = etree.parse(resp)
         paths = tree.xpath('/v:SupportedVersions/v:VersionInfo/v:LoginUrl',
             namespaces=dict(v="http://www.vmware.com/vcloud/versions"))
@@ -706,7 +727,7 @@ class RestClient(restclient.Client):
         self.connect()
         self.setUserPassword("%s@%s" % (self._username, self._organization),
             self._password)
-        resp = self.request("POST")
+        resp = self.makeRequest("POST")
         auth = resp.getheader('x-vcloud-authorization')
         self.headers.update({'x-vcloud-authorization' : auth})
         self.setUserPassword(None, None)
@@ -718,7 +739,7 @@ class RestClient(restclient.Client):
         self._orgPath = self._pathFromUrl(paths)
         # Browse the org
         self.path = self._orgPath
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         org = Models.handler.parseString(data)
         self._catalogs = set(x for x in org.Link
@@ -770,6 +791,8 @@ class RestClient(restclient.Client):
         self.path = '/api/v1.0/logout'
         self.connect()
         try:
+            # We really don't want to fail on the way out, so swollow
+            # all exceptions
             self.request("POST")
         except restclient.ResponseError:
             pass
@@ -819,14 +842,14 @@ class RestClient(restclient.Client):
     def browseCatalog(self, link):
         self.path = self._pathFromUrl(link.href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
     def browseVdc(self, link):
         self.path = self._pathFromUrl(link.href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
@@ -840,18 +863,15 @@ class RestClient(restclient.Client):
         self.connect()
         headers = { 'Content-Type' : self.TYPES.uploadVAppTemplateParams }
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        vapp = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        vapp = Models.handler.parseString(resp.contents)
         return vapp
 
     def uploadOvfDescriptor(self, vapp, ovfFileObj):
         self.path = self._pathFromUrl(vapp.Files[0].Link[0].href)
         self.connect()
-        self.request("PUT", body=ovfFileObj.read())
+        self.makeRequest("PUT", body=ovfFileObj.read())
 
     def waitForOvfDescriptorUpload(self, job, vapp, _msg):
         for i in range(10):
@@ -871,7 +891,7 @@ class RestClient(restclient.Client):
     def refreshResource(self, vapp):
         self.path = self._pathFromUrl(vapp.href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
@@ -905,11 +925,8 @@ class RestClient(restclient.Client):
 
         body = Models.handler.toXml(resource)
         headers = { 'Content-Type' : link.type}
-        try:
-            self.request("PUT", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
+        self.makeRequest("PUT", body=body, headers=headers,
+            expectedStatusCodes=[202])
 
     def uploadVAppFile(self, vapp, job, url, fobj, callback, statusCallback):
         while 1:
@@ -931,7 +948,7 @@ class RestClient(restclient.Client):
     def _uploadVAppFile(self, job, url, fobj, callback):
         self.path = self._pathFromUrl(url)
         self.connect()
-        self.request("PUT", body=fobj, callback=callback)
+        self.makeRequest("PUT", body=fobj, callback=callback)
 
     def _retryForUniqueness(self, logger, suggestedName, function, *args, **kwargs):
         """
@@ -981,12 +998,9 @@ class RestClient(restclient.Client):
         self.connect()
         headers = { 'Content-Type' : self.TYPES.catalogItem }
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        catalogItem = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        catalogItem = Models.handler.parseString(resp.contents)
         return catalogItem
 
     def instantiateVAppTemplate(self, logger, name, description,
@@ -1029,18 +1043,15 @@ class RestClient(restclient.Client):
         self.connect()
         headers = { 'Content-Type' : self.TYPES.instantiateVAppTemplateParams}
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        vapp = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        vapp = Models.handler.parseString(resp.contents)
         vapp = self.waitForResourceTask(vapp, [ 'queued', 'running' ], callback=callback)
         return vapp
 
     def _getVmById(self, vmId):
         self.path = "/api/v1.0/vApp/%s" % os.path.basename(vmId)
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         vm = Models.handler.parseString(data)
         return vm
@@ -1066,11 +1077,7 @@ class RestClient(restclient.Client):
 
     def deleteEntity(self, entity):
         self.path = self._pathFromUrl(entity.href)
-        try:
-            self.request("DELETE")
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
+        self.makeRequest("DELETE", expectedStatusCodes=[202])
 
     def _getLinkByRel(self, obj, rel):
         obj = self.refreshIfNeeded(obj)
@@ -1103,16 +1110,12 @@ class RestClient(restclient.Client):
         return self._getLinkByRel(vapp, 'up')
 
     def getOvfDescriptorForVappTemplate(self, vappTemplate):
-        try:
-            ovfLink = self._getLinkByRel(vappTemplate, 'ovf')
-        except restclient.ResponseError:
-            # Probably permission errors
-            return None
+        ovfLink = self._getLinkByRel(vappTemplate, 'ovf')
         if ovfLink is None:
             return None
         self.path = ovfLink.href
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         return resp.read()
 
     def captureVApp(self, vapp, tmpVappTemplateName, vdc=None,
@@ -1130,12 +1133,8 @@ class RestClient(restclient.Client):
         m.Source = Models.Source(href=vapp.href)
         m.name = tmpVappTemplateName
         body = Models.handler.toXml(m)
-        try:
-            self.request("POST", body=body)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        vappTemplate = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, expectedStatusCodes=[201])
+        vappTemplate = Models.handler.parseString(resp.contents)
         self.waitForResourceTask(vappTemplate, [ 'queued', 'running' ], callback=callback)
         return vappTemplate
 
@@ -1143,12 +1142,8 @@ class RestClient(restclient.Client):
         link = self._getLinkByRel(vappTemplate, "enable")
         self.path = link.href
         self.connect()
-        try:
-            self.request("POST")
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
-        task = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
         self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
         return self.refreshResource(vappTemplate)
 
@@ -1160,7 +1155,7 @@ class RestClient(restclient.Client):
             raise errors.DownloadError("Unable to download template")
         self.path = link.href
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         ovf = resp.read()
         ovfFname = os.path.join(destDir, os.path.basename(link.href))
         file(ovfFname, "w").write(ovf)
@@ -1176,7 +1171,7 @@ class RestClient(restclient.Client):
         for fileName, fileSize in files:
             outPath = os.path.join(destDir, fileName)
             self.path = "%s/%s" % (baseUrl, fileName)
-            resp = self.request("GET")
+            resp = self.makeRequest("GET")
             util.copyfileobj(resp, file(outPath, "w"), callback=cb)
             downloadProgressUpdate.updateSize(fileSize)
             ret.append(fileName)
@@ -1190,12 +1185,8 @@ class RestClient(restclient.Client):
         self.path = removePath.href
         self.connect()
 
-        try:
-            self.request("DELETE")
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
-        task = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("DELETE", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
         self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
 
     @classmethod
