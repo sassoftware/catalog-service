@@ -602,9 +602,25 @@ class VCloudClient(baseDriver.BaseDriver):
             name = description = tmpVappTemplateName
             # XXX FIXME we may have to let the user pick a catalog
             # Also, if there are no writable catalogs, this will explode spectacularily
-            catalogItemsHref = cli.iterWritableCatalogs().next().href + '/catalogItems'
-            cli.addVappTemplateToCatalog(self._loggerFactory(job),
-                name, description, vappTemplate.href, catalogItemsHref)
+            for catalog in cli.iterWritableCatalogs():
+                l = cli._findLink(catalog, 'add')
+                if l is None:
+                    # This is a writable catalog, we should have a
+                    # link here; but just in case
+                    continue
+                catalogItemsHref = l.href
+                try:
+                    cli.addVappTemplateToCatalog(self._loggerFactory(job),
+                        name, description, vappTemplate.href, catalogItemsHref)
+                except restclient.ResponseError, e:
+                    if e.status == 403:
+                        # Try another "writable" catalog
+                        continue
+                    raise
+                else:
+                    break
+            else: # for; we've run out of catalogs to try
+                raise
             vappTemplate = cli.refreshResource(vappTemplate)
             self._msg(job, "Enabling vApp template for download")
             callback = lambda: self._msg(job, "Waiting for download enablement task to finish")
