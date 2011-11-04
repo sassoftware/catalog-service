@@ -578,7 +578,7 @@ class VMwareClient(baseDriver.BaseDriver):
         try:
             callback = lambda x: self._msg(job, "Exporting OVF: %d%% complete" % x)
             self._msg(job, "Exporting VM %s" % tmpVmName)
-            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir, callback=callback)
+            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir, progressUpdate)
             archive = self._buildExportArchive(job, destDir, ovfFiles)
             return archive
         finally:
