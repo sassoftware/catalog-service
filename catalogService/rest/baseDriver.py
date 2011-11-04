@@ -663,15 +663,8 @@ class BaseDriver(object):
         imageId = os.path.basename(descriptorData.getField('imageId'))
 
         params = self.getDeployImageParameters(image, descriptorData)
-
-        realImageId = self.deployImageProcess(job, image, auth=None, **params)
-
-        newImageParams = self.getNewImageParameters(job, image,
-            descriptorData, params)
-        newImageParams['createdBy'] = self.userId
-        job = jobmodels.Job(**newImageParams)
-        return self._nodeFactory.newImageDeploymentJob(job)
-
+        self.deployImageProcess(job, image, auth=None, **params)
+        return image
 
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
@@ -1035,7 +1028,10 @@ class BaseDriver(object):
         path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
             vmRef = self._deployImageFromFile(job, path, *args, **kwargs)
-            image.setImageId(self.getImageIdFromTargetImageRef(vmRef))
+            targetImageId = self.getImageIdFromTargetImageRef(vmRef)
+            image.setId(targetImageId)
+            image.setImageId(targetImageId)
+            image.setInternalTargetId(targetImageId)
             self.linkTargetImageToImage(image)
             return vmRef
         finally:
