@@ -346,8 +346,10 @@ class VCloudClient(baseDriver.BaseDriver):
         dataCenter = self._getVdc(dataCenterRef)
         catalog = self._getCatalog(catalogRef)
 
-        self._deployImage(job, image, auth,
+        vapp = self._deployImage(job, image, auth,
             imageName, imageDescription, dataCenter, catalog)
+        image.setShortName(vapp.name)
+        image.setLongName(vapp.name)
         return image.getImageId()
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
