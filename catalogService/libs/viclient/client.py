@@ -175,29 +175,20 @@ class VIConfig(object):
 class Error(Exception):
     pass
 
-class ProgressUpdate(object):
+class LeaseProgressUpdate(object):
     def __init__(self, vmclient, httpNfcLease, callback=None):
         self.vmclient = vmclient
         self.httpNfcLease = httpNfcLease
-        self.totalSize = 0
-        self.prevFilesSize = 0
         self.callback = callback
 
-    def progress(self, bytes, rate=0):
-        pct = self._percent(bytes)
+    def progress(self, percent):
         req = HttpNfcLeaseProgressRequestMsg()
         req.set_element__this(self.httpNfcLease)
-        req.set_element_percent(pct)
+        req.set_element_percent(percent)
 
         self.vmclient._service.HttpNfcLeaseProgress(req)
         if self.callback:
-            self.callback(pct)
-
-    def _percent(self, bytes):
-        return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
-
-    def updateSize(self, size):
-        self.prevFilesSize += size
+            self.callback(percent)
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -1041,11 +1032,12 @@ class VimService(object):
         if ret != 'success':
             raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
-    def ovfExport(self, vmMor, vmName, destinationPath, callback=None):
+    def ovfExport(self, vmMor, vmName, destinationPath, progressUpdate):
         httpNfcLease = self.getOvfExportLease(vmMor)
         self.waitForLeaseReady(httpNfcLease)
         try:
-            ovfFiles = self._ovfExport(httpNfcLease, destinationPath, callback=callback)
+            ovfFiles = self._ovfExport(httpNfcLease, destinationPath,
+                progressUpdate)
         finally:
             self.leaseComplete(httpNfcLease)
 
@@ -1059,13 +1051,11 @@ class VimService(object):
         ovfFileNames.extend(x.get_element_path() for x in ovfFiles)
         return ovfFileNames
 
-    def _ovfExport(self, httpNfcLease, destinationPath, callback=None):
+    def _ovfExport(self, httpNfcLease, destinationPath, progressUpdate):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
         ovfFiles = []
 
-        progressUpdate = ProgressUpdate(self._service, httpNfcLease,
-            callback=callback)
         progressUpdate.totalSize = totalSize
         progressUpdate.progress(0, 0)
 

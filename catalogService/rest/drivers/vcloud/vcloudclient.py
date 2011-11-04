@@ -346,10 +346,9 @@ class VCloudClient(baseDriver.BaseDriver):
         dataCenter = self._getVdc(dataCenterRef)
         catalog = self._getCatalog(catalogRef)
 
-        vappTemplateRef = self._deployImage(job, image, auth,
+        self._deployImage(job, image, auth,
             imageName, imageDescription, dataCenter, catalog)
-
-        return [ self._idFromHref(vappTemplateRef) ]
+        return image.getImageId()
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
@@ -368,8 +367,9 @@ class VCloudClient(baseDriver.BaseDriver):
         network = self._getNetworkFromVdc(dataCenter, networkRef)
 
         if not image.getIsDeployed():
-            vappTemplateRef = self._deployImage(job, image, auth,
+            vappTemplate = self._deployImage(job, image, auth,
                 vappTemplateName, vappTemplateDescription, dataCenter, catalog)
+            vappTemplateRef = vappTemplate.href
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
             # images should be marked as deployed for ESX targets
@@ -450,34 +450,27 @@ class VCloudClient(baseDriver.BaseDriver):
                 return res
         raise RuntimeError("Unable to find resource %s" % longRef)
 
+    def getImageIdFromTargetImageRef(self, vappTemplate):
+        return self._idFromHref(vappTemplate.href)
 
-    def _deployImage(self, job, image, auth, vappTemplateName,
+    def _deployImageFromFile(self, job, imagePath, vappTemplateName,
             vappTemplateDescription, dataCenter, catalog):
 
         logger = lambda *x: self._msg(job, *x)
-
-        tmpDir = tempfile.mkdtemp(prefix="vcloud-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth)
 
         vappTemplateName = self._findUniqueName(catalog, vappTemplateName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        archive = self.Archive(path, logger)
+        archive = self.Archive(imagePath, logger)
         archive.extract()
         self._msg(job, 'Uploading image to VMware vCloud')
         try:
             vapp = self.uploadVAppTemplate(job, vappTemplateName,
                 vappTemplateDescription, archive, dataCenter, catalog)
-
-            self.db.targetMgr.linkTargetImageToImage(self.cloudType,
-                self.cloudName, image._fileId, self._idFromHref(vapp.href))
-            return vapp.href
+            return vapp
         finally:
-            # clean up our mess
-            util.rmtree(tmpDir, ignore_errors=True)
-
-        pass
+            pass
 
     def _findUniqueName(self, catalog, vappTemplateName):
         return vappTemplateName

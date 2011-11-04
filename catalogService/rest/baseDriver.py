@@ -640,6 +640,39 @@ class BaseDriver(object):
             descriptor = descr)
         return self.deployImageFromDescriptorData(descrData, auth, xmlString)
 
+    def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl):
+        imageId = imageFileInfo['fileId']
+        baseFileName = imageFileInfo['baseFileName']
+        image = self._nodeFactory.newImage(id=imageId,
+            imageId=imageId, isDeployed=False,
+            is_rBuilderImage=True,
+            cloudName=self.cloudName,
+            baseFileName=baseFileName,
+            downloadUrl=imageDownloadUrl)
+        image._fileId = imageId
+        return image
+
+    def deployImageFromUrl(self, job, image, descriptorDataXml):
+        # Grab descriptor
+        descr = self.getImageDeploymentDescriptor()
+        descr.setRootElement("descriptor_data")
+        # Parse the XML string into descriptor data
+        descriptorData = descriptor.DescriptorData(
+            fromStream=descriptorDataXml, descriptor=descr)
+
+        imageId = os.path.basename(descriptorData.getField('imageId'))
+
+        params = self.getDeployImageParameters(image, descriptorData)
+
+        realImageId = self.deployImageProcess(job, image, auth=None, **params)
+
+        newImageParams = self.getNewImageParameters(job, image,
+            descriptorData, params)
+        newImageParams['createdBy'] = self.userId
+        job = jobmodels.Job(**newImageParams)
+        return self._nodeFactory.newImageDeploymentJob(job)
+
+
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
         descr = self.getLaunchDescriptor()
@@ -866,10 +899,6 @@ class BaseDriver(object):
         ret.update(type_='image-deployment')
         return ret
 
-    def linkTargetImageToImage(self, image, targetImageId):
-        self.db.targetMgr.linkTargetImageToImage(self.cloudType,
-            self.cloudName, image._fileId, targetImageId)
-
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
         descr = self.getCloudConfigurationDescriptor()
@@ -990,6 +1019,32 @@ class BaseDriver(object):
             if val is not None:
                 return val
         return None
+
+    def linkTargetImageToImage(self, image):
+        targetImageId = image.getImageId()
+        rbuilderImageId = image._fileId
+        self.db.targetMgr.linkTargetImageToImage(self.cloudType,
+            self.cloudName, rbuilderImageId, targetImageId)
+
+    def _deployImage(self, job, image, auth, *args, **kwargs):
+        # This is really OO spaghetti.
+        # deployImageProcess in sublcasses calls _deployImage in the
+        # base class, which calls _deployImageFromFile from the subclass
+        # again.
+        tmpDir = tempfile.mkdtemp(prefix="%s-download-" % self.cloudType)
+        path = self.downloadImage(job, image, tmpDir, auth=auth)
+        try:
+            vmRef = self._deployImageFromFile(job, path, *args, **kwargs)
+            image.setImageId(self.getImageIdFromTargetImageRef(vmRef))
+            self.linkTargetImageToImage(image)
+            return vmRef
+        finally:
+            # clean up our mess
+            util.rmtree(tmpDir, ignore_errors=True)
+
+    def getImageIdFromTargetImageRef(self, vmRef):
+        # Default implementation is fairly dumb
+        return vmRef
 
     def extractImage(self, path):
         if path.endswith('.zip'):

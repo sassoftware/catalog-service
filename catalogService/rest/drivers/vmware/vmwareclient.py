@@ -562,7 +562,6 @@ class VMwareClient(baseDriver.BaseDriver):
         vmMor = instance._opaqueId
         vmName = instance.getInstanceName()
         tmpVmName = self._getCaptureTmpName(vmName)
-        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
         # Optional params
         dcMor = params.get('datacenterMor')
         resourcePoolMor = params.get('resourcePoolMor')
@@ -570,6 +569,10 @@ class VMwareClient(baseDriver.BaseDriver):
         folderMor = params.get('folderMor')
         cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
             dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
+
+        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
+        progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
+            callback=callback)
 
         destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
         try:
@@ -728,8 +731,8 @@ class VMwareClient(baseDriver.BaseDriver):
         self.client.waitForLeaseReady(httpNfcLease)
 
         callback = lambda x: self._msg(job, "Importing OVF: %d%% complete" % x)
-        progressUpdate = self.LeaseProgressUpdate(self.client._service,
-            httpNfcLease, callback=callback)
+        progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
+            callback=callback)
 
         vmMor = self.client.ovfUpload(httpNfcLease, archive, fileItems,
             progressUpdate)
@@ -756,9 +759,12 @@ class VMwareClient(baseDriver.BaseDriver):
             raise RuntimeError('An error occurred when registering the '
                                'VM: %s' %str(e))
 
-    def _deployImage(self, job, image, auth, dataCenter, dataStore,
-                     computeResource, resourcePool, vmName, uuid,
-                     network, vmFolder=None, asTemplate=False):
+    def getImageIdFromTargetImageRef(self, vmRef):
+        return self._getVmUuid(vmRef)
+
+    def _deployImageFromFile(self, job, filePath, dataCenter,
+                             dataStore, computeResource, resourcePool, vmName,
+                             uuid, network, vmFolder=None, asTemplate=False):
 
         logger = lambda *x: self._msg(job, *x)
         dc = self.vicfg.getDatacenter(dataCenter)
@@ -777,9 +783,6 @@ class VMwareClient(baseDriver.BaseDriver):
             raise RuntimeError('no host can access the requested datastore')
         host = hosts[0]
 
-        tmpDir = tempfile.mkdtemp(prefix="vmware-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth)
-
         if vmFolder is None:
             vmFolderMor = dc.properties['vmFolder']
         else:
@@ -795,7 +798,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
         fileExtensions = [ '.ovf', '.vmx' ]
         try:
-            archive = self.Archive(path, logger)
+            archive = self.Archive(filePath, logger)
             archive.extract()
             vmFiles = list(archive.iterFileWithExtensions(fileExtensions))
             if not vmFiles:
@@ -836,8 +839,14 @@ class VMwareClient(baseDriver.BaseDriver):
                 self.client.markAsTemplate(vm=vmMor)
             return vmMor
         finally:
-            # clean up our mess
-            util.rmtree(tmpDir, ignore_errors=True)
+            pass
+
+    def _getVmUuid(self, vmMor):
+        # Grab the real uuid
+        instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
+
+        uuid = instMap[vmMor]['config.uuid']
+        return uuid
 
     def deployImageProcess(self, job, image, auth, **params):
         if image.getIsDeployed():
@@ -871,13 +880,8 @@ class VMwareClient(baseDriver.BaseDriver):
                                dataStore, computeResource,
                                resourcePool, vmName, uuid, network,
                                vmFolder=vmFolder, asTemplate = useTemplate)
-
-        # Grab the real uuid
-        instMap = self.client.getVirtualMachines(['config.uuid' ], root = vm)
-
-        uuid = instMap[vm]['config.uuid']
         self._msg(job, 'Image deployed')
-        return uuid
+        return image.getImageId()
 
     def taskCallbackFactory(self, job, message):
         def callback(values):
@@ -887,10 +891,13 @@ class VMwareClient(baseDriver.BaseDriver):
             self._msg(job, message % progress)
         return callback
 
-    @property
-    def LeaseProgressUpdate(cls):
-        from catalogService.libs import viclient
-        return viclient.client.ProgressUpdate
+    class ProgressUpdate(baseDriver.BaseDriver.IntervalCallback):
+        INTERVAL = 5
+
+    def LeaseProgressUpdate(self, lease, callback):
+        from catalogService.libs.viclient import client
+        progress = client.LeaseProgressUpdate(self.client._service, lease, callback)
+        return self.ProgressUpdate(totalSize=0, callback=progress.progress)
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
@@ -950,9 +957,7 @@ class VMwareClient(baseDriver.BaseDriver):
             self.log_exception("Exception attaching credentials: %s" % e)
         self._msg(job, 'Launching')
         self.client.startVM(mor = vmMor)
-        # Grab the real uuid
-        instMap = self.client.getVirtualMachines(['config.uuid' ], root = vmMor)
-        uuid = instMap[vmMor]['config.uuid']
+        uuid = self._getVmUuid(vmMor)
         self._msg(job, 'Instance launched')
         return uuid
 
