@@ -880,8 +880,6 @@ class VMwareClient(baseDriver.BaseDriver):
                                dataStore, computeResource,
                                resourcePool, vmName, uuid, network,
                                vmFolder=vmFolder, asTemplate = useTemplate)
-        image.setShortName(vmName)
-        image.setLongName(vmName)
         self._msg(job, 'Image deployed')
         return image.getImageId()
 
