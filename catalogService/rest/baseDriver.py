@@ -1027,7 +1027,7 @@ class BaseDriver(object):
         tmpDir = tempfile.mkdtemp(prefix="%s-download-" % self.cloudType)
         path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
-            vmRef = self._deployImageFromFile(job, path, *args, **kwargs)
+            vmRef = self._deployImageFromFile(job, image, path, *args, **kwargs)
             targetImageId = self.getImageIdFromTargetImageRef(vmRef)
             image.setId(targetImageId)
             image.setImageId(targetImageId)

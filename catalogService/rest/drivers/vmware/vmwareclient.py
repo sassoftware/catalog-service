@@ -762,7 +762,7 @@ class VMwareClient(baseDriver.BaseDriver):
     def getImageIdFromTargetImageRef(self, vmRef):
         return self._getVmUuid(vmRef)
 
-    def _deployImageFromFile(self, job, filePath, dataCenter,
+    def _deployImageFromFile(self, job, image, filePath, dataCenter,
                              dataStore, computeResource, resourcePool, vmName,
                              uuid, network, vmFolder=None, asTemplate=False):
 
@@ -837,6 +837,7 @@ class VMwareClient(baseDriver.BaseDriver):
             if asTemplate:
                 self._msg(job, 'Converting VM to template')
                 self.client.markAsTemplate(vm=vmMor)
+            image.setShortName(vmName)
             return vmMor
         finally:
             pass

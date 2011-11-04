@@ -453,7 +453,7 @@ class VCloudClient(baseDriver.BaseDriver):
     def getImageIdFromTargetImageRef(self, vappTemplate):
         return self._idFromHref(vappTemplate.href)
 
-    def _deployImageFromFile(self, job, imagePath, vappTemplateName,
+    def _deployImageFromFile(self, job, image, imagePath, vappTemplateName,
             vappTemplateDescription, dataCenter, catalog):
 
         logger = lambda *x: self._msg(job, *x)
@@ -468,6 +468,7 @@ class VCloudClient(baseDriver.BaseDriver):
         try:
             vapp = self.uploadVAppTemplate(job, vappTemplateName,
                 vappTemplateDescription, archive, dataCenter, catalog)
+            image.setShortName(vapp.name)
             return vapp
         finally:
             pass
