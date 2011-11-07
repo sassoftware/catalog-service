@@ -408,9 +408,6 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageId = self._importImage(imageMetadata, fobj)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
-        # Mark the image as deployed
-        self.linkTargetImageToImage(image, imageId)
-        image.setInternalTargetId(imageId)
         return imageId
 
     def _launchInstanceOnTarget(self, name, imageRef, flavorRef):
