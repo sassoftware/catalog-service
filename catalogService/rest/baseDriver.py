@@ -39,8 +39,6 @@ from catalogService.utils import timeutils
 from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
-from mint.django_rest.rbuilder.manager import rbuildermanager
-from mint.django_rest.rbuilder.inventory import models as inventorymodels
 
 from rpath_job import api1 as rpath_job
 
@@ -84,7 +82,8 @@ class BaseDriver(object):
     WAIT_NETWORK_SLEEP = 10
 
     def __init__(self, cfg, driverName, cloudName=None,
-                 nodeFactory=None, userId = None, db = None):
+                 nodeFactory=None, userId = None, db = None,
+                 inventoryHandler=None):
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
@@ -105,8 +104,41 @@ class BaseDriver(object):
         self._bootUuid = None
         self._targetConfig = None
 
-        self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
+        if inventoryHandler is None:
+            inventoryHandler = self.InventoryHandler(weakref.ref(self))
+        self.inventoryHandler = inventoryHandler
         self._postInit()
+
+    class InventoryHandler(object):
+        """
+        Interface to the rbuilder inventory service, replaced in case of rmake3
+        """
+        def __init__(self, parent):
+            self.parent = parent
+            self.cloudType = parent().cloudType
+            self.cloudName = parent().cloudName
+            from mint.django_rest.rbuilder.manager import rbuildermanager
+            self.inventoryManager = rbuildermanager.RbuilderManager(
+                cfg=parent().db.cfg,
+                userName=parent().userId)
+
+        @property
+        def log_info(self):
+            return self.parent().log_info
+
+        def addSystem(self, systemFields, dnsName=None, withNetwork=True):
+            from mint.django_rest.rbuilder.inventory import models as inventorymodels
+            system = inventorymodels.System(**systemFields)
+            self.inventoryManager.addLaunchedSystem(system, dnsName=dnsName,
+                targetType=self.cloudType, targetName=self.cloudName)
+            self.log_info("System id %s added to inventory for instance %s." % \
+                (system.pk, system.target_system_id))
+
+        def reset(self):
+            pass
+
+        def commit(self):
+            pass
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -281,8 +313,17 @@ class BaseDriver(object):
             return None
         return unicode(obj).encode("utf-8")
 
-    def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key, launchParams, sourceImage):
+    def updateInventory(self, instanceIdList, x509Cert,
+                        x509Key, launchParams, sourceImage, withNetwork=True):
+        self.inventoryHandler.reset()
+        for instanceId in instanceIdList:
+            self._updateInventory(instanceId, x509Cert,
+                x509Key, launchParams, sourceImage,
+                withNetwork=withNetwork)
+            self.inventoryHandler.commit()
+
+    def _updateInventory(self, instanceId, x509Cert, x509Key,
+                         launchParams, sourceImage, withNetwork=True):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
@@ -293,7 +334,7 @@ class BaseDriver(object):
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
 
-        system = inventorymodels.System(
+        systemFields = dict(
             name=systemName,
             description=systemDescription,
             target_system_id=instanceId,
@@ -304,11 +345,8 @@ class BaseDriver(object):
             ssl_client_key = x509Key,
             source_image_id = sourceImage.getBuildId(),
         )
-        self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
-            targetType=cloudType, targetName=cloudName)
-        self.log_info("System id %s added to inventory for instance %s." % \
-            (system.pk, instanceId))
-        return system
+        self.inventoryHandler.addSystem(systemFields,
+            dnsName=instanceDnsName, withNetwork=True)
 
     def getInstance(self, instanceId, force=False):
         if self.client is None:
@@ -653,6 +691,7 @@ class BaseDriver(object):
         return image
 
     def deployImageFromUrl(self, job, image, descriptorDataXml):
+        """Only invoked via rmake"""
         # Grab descriptor
         descr = self.getImageDeploymentDescriptor()
         descr.setRootElement("descriptor_data")
@@ -660,11 +699,23 @@ class BaseDriver(object):
         descriptorData = descriptor.DescriptorData(
             fromStream=descriptorDataXml, descriptor=descr)
 
-        imageId = os.path.basename(descriptorData.getField('imageId'))
-
         params = self.getDeployImageParameters(image, descriptorData)
         self.deployImageProcess(job, image, auth=None, **params)
         return image
+
+    def launchSystemSynchronously(self, job, image, descriptorDataXml):
+        """Only invoked via rmake"""
+        # Grab descriptor
+        descr = self.getLaunchDescriptor()
+        descr.setRootElement("descriptor_data")
+        # Parse the XML string into descriptor data
+        descriptorData = descriptor.DescriptorData(
+            fromStream=descriptorDataXml, descriptor=descr)
+
+        params = self.getLaunchInstanceParameters(image, descriptorData)
+        instanceIdList = self.launchInstanceWrapper(job, image, auth=None, **params)
+        return instanceIdList
+
 
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
@@ -674,6 +725,29 @@ class BaseDriver(object):
             descriptor = descr)
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
+    def launchInstanceWrapper(self, job, image, auth, **launchParams):
+        realInstanceId = self.launchInstanceProcess(job, image, auth,
+            **launchParams)
+        if not realInstanceId:
+            job.addHistoryEntry('Launch failed, no instance was created')
+            return
+        # Some drivers (like ec2) may have the ability to launch
+        # multiple instances with the same call.
+        instanceIdList = realInstanceId
+        if not isinstance(instanceIdList, list):
+            instanceIdList = [ instanceIdList ]
+        x509Cert, x509Key = self.getWbemX509()
+        # Read the cert files
+        x509Cert = file(x509Cert).read()
+        x509Key = file(x509Key).read()
+        self.updateInventory(instanceIdList, x509Cert, x509Key, launchParams,
+            image, withNetwork=True)
+        self.waitForRunningState(job, instanceIdList)
+        self.waitForNetwork(job, instanceIdList)
+        self.updateInventory(instanceIdList, x509Cert, x509Key, launchParams,
+            image, withNetwork=False)
+        return instanceIdList
+
     def launchInstanceInBackground(self, jobId, image, auth, **params):
         job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
         job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
@@ -681,27 +755,12 @@ class BaseDriver(object):
             image.getImageId(), image._imageType))
         try:
             try:
-                realInstanceId = self.launchInstanceProcess(job, image, auth, **params)
-                if not realInstanceId:
-                    job.addHistoryEntry('Launch failed, no instance was created')
+                instanceIds = self.launchInstanceWrapper(job, image, auth, **params)
+                if instanceIds is None:
                     job.status = job.STATUS_FAILED
                     return
-                # Some drivers (like ec2) may have the ability to launch
-                # multiple instances with the same call.
-                if not isinstance(realInstanceId, list):
-                    realInstanceId = [ realInstanceId ]
-                self.waitForRunningState(job, realInstanceId)
-                self.waitForNetwork(job, realInstanceId)
-                x509Cert, x509Key = self.getWbemX509()
-                # Read the cert files
-                x509Cert = file(x509Cert).read()
-                x509Key = file(x509Key).read()
-                for instanceId in realInstanceId:
-                    system = self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509Cert, x509Key, params, image)
-                job.addResults(realInstanceId)
+                job.addResults(instanceIds)
                 job.addHistoryEntry('Done')
-                job.system = system.pk
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
                 err = errors.CatalogErrorResponse(e.status,
