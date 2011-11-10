@@ -725,7 +725,13 @@ class BaseDriver(object):
             descriptor = descr)
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
-    def launchInstanceWrapper(self, job, image, auth, **launchParams):
+    def launchInstanceWrapper(self, *args, **kwargs):
+        try:
+            self._launchInstanceWrapper(*args, **kwargs)
+        finally:
+            self.cleanUpX509()
+
+    def _launchInstanceWrapper(self, job, image, auth, **launchParams):
         realInstanceId = self.launchInstanceProcess(job, image, auth,
             **launchParams)
         if not realInstanceId:
@@ -755,7 +761,7 @@ class BaseDriver(object):
             image.getImageId(), image._imageType))
         try:
             try:
-                instanceIds = self.launchInstanceWrapper(job, image, auth, **params)
+                instanceIds = self._launchInstanceWrapper(job, image, auth, **params)
                 if instanceIds is None:
                     job.status = job.STATUS_FAILED
                     return
