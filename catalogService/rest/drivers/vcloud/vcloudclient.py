@@ -213,10 +213,11 @@ class VCloudClient(baseDriver.BaseDriver):
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
         rcli = self._getVCloudClient(cloudConfig)
-        rcli.setCredentials(cloudConfig['organization'],
+        org = cloudConfig['organization']
+        rcli.setCredentials(org,
             credentials['username'], credentials['password'])
         # Do the actual login
-        rcli.login()
+        rcli.login(org)
         return rcli
 
     @classmethod
@@ -731,7 +732,7 @@ class RestClient(restclient.Client):
             return False
         return self._pathFromUrl(paths[0].text)
 
-    def login(self):
+    def login(self, org):
         # We only support 1.0
         self.path = '/api/v1.0/login'
         self.connect()
@@ -744,8 +745,10 @@ class RestClient(restclient.Client):
 
         tree = etree.parse(resp)
         # Find href for this org
-        paths = tree.xpath('/vc:OrgList/vc:Org/@href',
+        orgNodes = tree.xpath('/vc:OrgList/vc:Org',
             namespaces = self._nsmap)
+        orgNodes = [  (x.attrib['name'], x.attrib['href']) for x in orgNodes ]
+        paths = [ x[1] for x in orgNodes if x[0] == org ]
         self._orgPath = self._pathFromUrl(paths)
         # Browse the org
         self.path = self._orgPath
