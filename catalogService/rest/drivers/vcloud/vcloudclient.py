@@ -709,7 +709,7 @@ class RestClient(restclient.Client):
             if expectedStatusCodes and e.status in expectedStatusCodes:
                 return e
             # XXX Munge exception here
-            if e.headers['Content-Type'] == self.TYPES.error:
+            if self.getContentTypeFromHeaders(e.headers) == self.TYPES.error:
                 error = Models.handler.parseString(e.contents)
                 raise errors.ParameterError("vCloud error: %s" % error.message)
             raise errors.CatalogError("Unknown error: %s" % e)
@@ -717,6 +717,14 @@ class RestClient(restclient.Client):
             raise errors.ParameterError("vCloud error: expected codes %s, got %s"
                 % (expectedStatusCodes, e.status))
         return resp
+
+    @classmethod
+    def getContentTypeFromHeaders(cls, headers):
+        data = headers.get('Content-Type')
+        if data is None:
+            return None
+        # Take out any additional params
+        return data.split(';', 1)[0]
 
     def verify(self):
         self.path = '/api/versions'
