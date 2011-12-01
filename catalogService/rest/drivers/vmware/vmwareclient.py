@@ -567,10 +567,10 @@ class VMwareClient(baseDriver.BaseDriver):
         resourcePoolMor = params.get('resourcePoolMor')
         dataStoreMor = params.get('dataStoreMor')
         folderMor = params.get('folderMor')
+        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
         cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
             dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
 
-        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
         progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
             callback=callback)
 
