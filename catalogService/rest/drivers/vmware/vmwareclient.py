@@ -571,14 +571,20 @@ class VMwareClient(baseDriver.BaseDriver):
         cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
             dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
 
-        progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
-            callback=callback)
-
         destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
         try:
             callback = lambda x: self._msg(job, "Exporting OVF: %d%% complete" % x)
             self._msg(job, "Exporting VM %s" % tmpVmName)
-            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir, progressUpdate)
+
+            # It's unfortunate that we need to create the lease outside
+            # of ovfExport; the interval callback needs it
+            # beforehand
+            httpNfcLease = self.client.getOvfExportLease(cloneMor)
+            progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
+                callback=callback)
+
+            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir,
+                httpNfcLease, progressUpdate)
             archive = self._buildExportArchive(job, destDir, ovfFiles)
             return archive
         finally:

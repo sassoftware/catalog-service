@@ -1032,8 +1032,7 @@ class VimService(object):
         if ret != 'success':
             raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
-    def ovfExport(self, vmMor, vmName, destinationPath, progressUpdate):
-        httpNfcLease = self.getOvfExportLease(vmMor)
+    def ovfExport(self, vmMor, vmName, destinationPath, httpNfcLease, progressUpdate):
         self.waitForLeaseReady(httpNfcLease)
         try:
             ovfFiles = self._ovfExport(httpNfcLease, destinationPath,
