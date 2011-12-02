@@ -598,6 +598,9 @@ class BaseDriver(object):
         def updateSize(self, size):
             self.prevFilesSize += size
 
+        def updateTotalSize(self, size):
+            self.totalSize += size
+
     class DummyWriter(object):
         @classmethod
         def write(cls, *args):
@@ -1418,7 +1421,8 @@ class BaseDriver(object):
     def _buildExportArchive(self, job, destDir, ovfFiles):
         dest = tempfile.TemporaryFile(prefix="system-capture-%s-" % self.cloudType,
             suffix=".ova")
-        callback = lambda x, y, pct: self._msg(job, "Archiving: %d%%" % pct)
+        callback = lambda pct: self._msg(job, "Archiving: %d%%" % pct)
+        callback = self.IntervalCallback(0, callback)
         t = self.TarWriter(dest, destDir, callback=callback)
         t.archive(ovfFiles)
         return dest
@@ -1431,64 +1435,22 @@ class FileWithProgress(file):
         self._readCallback = kwargs.pop('readCallback', None)
         file.__init__(self, *args, **kwargs)
         if self._readCallback:
-            self._readCallback.addFileSize(os.fstat(self.fileno()).st_size)
+            self._readCallback.updateTotalSize(os.fstat(self.fileno()).st_size)
 
     def read(self, size=None):
         data = file.read(self, size)
         if self._readCallback:
-            self._readCallback.callback(self.tell())
+            self._readCallback.progress(self.tell())
         return data
 
-class _Callback(object):
-    """
-    Wrapper around a callback function that gets called with:
-    (currentBytes, totalBytes, percentage)
-    every time a chunk larger than self.INCREMENT bytes was read.
-    """
-    INCREMENT = 1024 * 1024 # Default to 1M
-    def __init__(self, cb):
-        self.baseSize = 0
-        self.currentFileSize = 0
-        self.totalSize = 0
-        self.cb = cb
-
-    def addFileSize(self, size):
-        """Called automatically when a FileWithProgress object using this
-        callback is created"""
-        self.totalSize += size
-
-    def updateSize(self):
-        "To be called once a file was processed"
-        self.baseSize += self.currentFileSize
-        self.currentFileSize = 0
-
-    def callback(self, size):
-        """Called by a FileWithProgress' read() method, every time the number
-        of bytes read from the file jumps over the self.INCREMENT boundary"""
-        oldSize = self.baseSize + self.currentFileSize
-        self.currentFileSize = size
-        totCurrent = self.baseSize + self.currentFileSize
-        if (oldSize // self.INCREMENT) == (totCurrent // self.INCREMENT):
-            # Within the same checkpoint, nothing to do
-            return
-        if self.totalSize == 0:
-            pct = 100
-        else:
-            pct = (100 * totCurrent) // self.totalSize
-            if pct > 100:
-                pct = 100
-
-        self.cb(totCurrent, self.totalSize, pct)
-
 class TarWriter(object):
-    Callback = _Callback
     def __init__(self, destFile, baseDir, callback):
         self.baseDir = baseDir
         if isinstance(destFile, basestring):
             self.tarfile = tarfile.TarFile(destFile, mode="w")
         else:
             self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
-        self.callback = self.Callback(callback)
+        self.callback = callback
 
     def setIncrementSize(self, incrementSize):
         self.callback.INCREMENT = incrementSize
@@ -1503,7 +1465,7 @@ class TarWriter(object):
 
         for ti, fwp in tfiles:
             self.tarfile.addfile(ti, fileobj=fwp)
-            self.callback.updateSize()
+            self.callback.updateSize(ti.size)
         self.close()
 
     def close(self):
