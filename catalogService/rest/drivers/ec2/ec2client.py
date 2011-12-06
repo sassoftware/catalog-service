@@ -514,7 +514,7 @@ class EC2Client(baseDriver.BaseDriver):
         self._validateS3Bucket(ec2PublicKey, ec2PrivateKey, ec2S3Bucket)
         # Validate credentials
         cli = self.drvCreateCloudClient(dict(publicAccessKeyId=ec2PublicKey,
-            secretAccessKey=ec2PublicKey))
+            secretAccessKey=ec2PrivateKey))
         # Do a call to force cred validation
         try:
             cli.get_all_regions()
