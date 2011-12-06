@@ -413,12 +413,23 @@ class BaseDriver(object):
 
     def drvCreateCloud(self, descriptorData):
         cloudName = self.getCloudNameFromDescriptorData(descriptorData)
-        config = dict((k.getName(), k.getValue())
-            for k in descriptorData.getFields())
         self.cloudName = cloudName
+        config = self.getTargetConfigFromDescriptorData(descriptorData)
         self.drvVerifyCloudConfiguration(config)
         self.saveTarget(config)
         return self._createCloudNode(cloudName, config)
+
+    @classmethod
+    def getTargetConfigFromDescriptorData(cls, descriptorData):
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        ret = dict()
+        for descriptorFieldName, configFieldName in cls._configNameMap:
+            descrFieldData = config.pop(descriptorFieldName)
+            ret[configFieldName] = descrFieldData
+        # The rest of the descriptor fields go in unchanged
+        ret.update(config)
+        return ret
 
     @classmethod
     def getCloudNameFromDescriptorData(cls, descriptorData):
@@ -426,6 +437,12 @@ class BaseDriver(object):
 
     def drvVerifyCloudConfiguration(self, config):
         pass
+
+    @classmethod
+    def _strip(cls, obj):
+        if not isinstance(obj, basestring):
+            return obj
+        return obj.strip()
 
     def saveTarget(self, dataDict):
         try:
@@ -1021,19 +1038,8 @@ class BaseDriver(object):
         descrData = descriptor.DescriptorData(descriptor = descr)
 
         cloudConfig = self.getTargetConfiguration(isAdmin = True)
-        kvlist = []
-        for k, v in cloudConfig.items():
-            df = descr.getDataField(k)
-            if df is None:
-                continue
-            # We add all field names and values to the list first, so we can
-            # sort them after adding the extra maps
-            kvlist.append((k, v))
-        for field, k in self._configNameMap:
-            kvlist.append((field, cloudConfig.get(k)))
-        kvlist.sort()
 
-        for k, v in kvlist:
+        for k, v in sorted(cloudConfig.items()):
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 

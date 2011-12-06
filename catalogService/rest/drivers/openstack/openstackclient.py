@@ -199,9 +199,6 @@ class OpenStackClient(baseDriver.BaseDriver):
                     "Error initializing client: %s" % (e, ))
         return clients
 
-    def drvVerifyCloudConfiguration(self, config):
-        return
-
     def terminateInstances(self, instanceIds):
         running_instances = self.getInstances(instanceIds)
         for server in running_instances:

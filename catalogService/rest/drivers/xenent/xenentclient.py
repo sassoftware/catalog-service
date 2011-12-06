@@ -270,9 +270,6 @@ class XenEntClient(baseDriver.BaseDriver):
         self._uuidToRefMap[uuid] = ref
         return ref
 
-    def drvVerifyCloudConfiguration(self, config):
-        return
-
     def terminateInstances(self, instanceIds):
         client = self.client
 
