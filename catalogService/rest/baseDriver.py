@@ -1039,7 +1039,10 @@ class BaseDriver(object):
 
         cloudConfig = self.getTargetConfiguration(isAdmin = True)
 
+        validFields = set(x.name for x in descr.getDataFields())
         for k, v in sorted(cloudConfig.items()):
+            if k not in validFields:
+                continue
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
 
