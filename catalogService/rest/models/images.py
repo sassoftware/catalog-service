@@ -19,6 +19,7 @@ class BaseImage(xmlNode.BaseNode):
                   'cloudAlias', 'isDeployed', 'buildId',
                   'internalTargetId', 'architecture',
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
+                  'checksum', 'size',
                   '_xmlNodeHash', '_fileId', '_targetImageId', '_imageType', ]
     _slotAttributes = set([ 'id' ])
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,

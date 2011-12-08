@@ -513,7 +513,7 @@ class XenEntClient(baseDriver.BaseDriver):
         raise errors.CatalogError("Task has finished unexpectedly: %s" % status)
 
     def _importImage(self, image, vmFile, srUuid):
-        checksum = image.getImageId()
+        checksum = image.getChecksum() or image.getImageId()
         taskRef = self.client.xenapi.task.create("Import of %s" % checksum,
             "Import of %s" % checksum)
         vmRef, vmUuid = self._putVmImage(vmFile, srUuid, taskRef)
@@ -715,13 +715,10 @@ class XenEntClient(baseDriver.BaseDriver):
 
     def _setVmMetadata(self, vmRef, checksum = None,
             templateUuid = None):
-        if checksum:
-            self._wrapper_add_to_other_config(vmRef,
-                'cloud-catalog-checksum', checksum)
-
-        if templateUuid:
-            self._wrapper_add_to_other_config(vmRef,
-                'cloud-catalog-template-uuid', templateUuid)
+        self._wrapper_add_to_other_config(vmRef,
+            'cloud-catalog-checksum', checksum)
+        self._wrapper_add_to_other_config(vmRef,
+            'cloud-catalog-template-uuid', templateUuid)
 
     def _wrapper_add_to_other_config(self, vmRef, key, data):
         try:

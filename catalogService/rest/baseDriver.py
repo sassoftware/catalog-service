@@ -701,11 +701,15 @@ class BaseDriver(object):
     def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl):
         imageId = imageFileInfo['fileId']
         baseFileName = imageFileInfo['baseFileName']
+        checksum = imageFileInfo.get('sha1')
+        size = imageFileInfo.get('size')
         image = self._nodeFactory.newImage(id=imageId,
             imageId=imageId, isDeployed=False,
             is_rBuilderImage=True,
             cloudName=self.cloudName,
             baseFileName=baseFileName,
+            checksum=checksum,
+            size=size,
             downloadUrl=imageDownloadUrl)
         image._fileId = imageId
         return image
