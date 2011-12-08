@@ -700,18 +700,19 @@ class BaseDriver(object):
 
     def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl):
         imageId = imageFileInfo['fileId']
-        baseFileName = imageFileInfo['baseFileName']
-        checksum = imageFileInfo.get('sha1')
-        size = imageFileInfo.get('size')
         image = self._nodeFactory.newImage(id=imageId,
             imageId=imageId, isDeployed=False,
             is_rBuilderImage=True,
             cloudName=self.cloudName,
-            baseFileName=baseFileName,
-            checksum=checksum,
-            size=size,
             downloadUrl=imageDownloadUrl)
-        image._fileId = imageId
+        self.updateImageFromFileInfo(image, imageFileInfo)
+        return image
+
+    def updateImageFromFileInfo(self, image, imageFileInfo):
+        image.setBaseFileName(imageFileInfo['baseFileName'])
+        image.setChecksum(imageFileInfo.get('sha1'))
+        image.setSize(imageFileInfo.get('size'))
+        image._fileId = imageFileInfo['fileId']
         return image
 
     def deployImageFromUrl(self, job, image, descriptorDataXml):
