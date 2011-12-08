@@ -311,7 +311,7 @@ class VCloudClient(baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
             img.opaqueId = image.href
             ret.append(img)
-        return ret
+        return self.filterImages(imageIds, ret)
 
     def drvGetInstance(self, instanceId):
         ret = self.drvGetInstances([instanceId])

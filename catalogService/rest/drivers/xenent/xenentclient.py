@@ -571,7 +571,7 @@ class XenEntClient(baseDriver.BaseDriver):
         cloudAlias = self.getCloudAlias()
         instMap  = self.client.xenapi.VM.get_all_records()
 
-        imageList = images.BaseImages()
+        imageList = []
 
         for vmRef, vm in instMap.items():
             if not vm['is_a_template']:
@@ -597,7 +597,7 @@ class XenEntClient(baseDriver.BaseDriver):
                     internalTargetId = vm['uuid'],
                     cloudAlias = cloudAlias)
             imageList.append(image)
-        return imageList
+        return self.filterImages(imageIdsFilter, imageList)
 
     def cloneTemplate(self, job, imageId, instanceName, instanceDescription):
         client = self.client

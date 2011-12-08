@@ -264,13 +264,15 @@ class BaseDriver(object):
         return self.drvGetImages(imageIds)
 
     def drvGetImages(self, imageIdsFilter):
-        imageList = self.getImagesFromTarget(imageIdsFilter)
+        # The image identifiers in the filter may not match exactly the
+        # image IDs from the target, so we need to fetch everything
+        # here.
+        imageList = self.getImagesFromTarget(None)
         imageList = self.addMintDataToImageList(imageList,
             self.RBUILDER_BUILD_TYPE)
+        return self.filterImages(imageIdsFilter, imageList)
 
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
+    def filterImages(self, imageIdsFilter, imageList):
         if imageIdsFilter is None:
             # no filtering required. We'll make the filter contain everything
             imageIdsFilter = sorted(str(x.getImageId()) for x in imageList)

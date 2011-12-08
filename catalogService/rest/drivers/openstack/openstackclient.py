@@ -357,7 +357,7 @@ class OpenStackClient(baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
             img.opaqueId = self._getLinkRel(image, 'self')
             ret.append(img)
-        return ret
+        return self.filterImages(imageIdsFilter, ret)
 
     @classmethod
     def _getLinkRel(cls, obj, rel):
