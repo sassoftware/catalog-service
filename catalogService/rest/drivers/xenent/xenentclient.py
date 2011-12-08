@@ -721,6 +721,8 @@ class XenEntClient(baseDriver.BaseDriver):
             'cloud-catalog-template-uuid', templateUuid)
 
     def _wrapper_add_to_other_config(self, vmRef, key, data):
+        if data is None:
+            return
         try:
             self.client.xenapi.VM.add_to_other_config(vmRef, key, data)
         except XenAPI.Failure, e:
