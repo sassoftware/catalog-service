@@ -12,6 +12,7 @@ from conary.lib import util
 from restlib import client as restclient
 
 from catalogService import errors
+from catalogService.libs.ovf import OVF
 from catalogService.rest import baseDriver
 from catalogService.rest.models import instances
 
@@ -445,7 +446,8 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def _getResourceRef(self, longRef, resourceIter):
         # Take out the leading vdc- or catalog- part
-        ref = longRef.split('-', 1)[1]
+        ref = longRef.rsplit('-', 1)[-1]
+
         for res in resourceIter:
             if os.path.basename(res.href) == ref:
                 return res
@@ -581,6 +583,19 @@ class VCloudClient(baseDriver.BaseDriver):
             name, description, vapp.href, catalogItemsHref)
         return vapp
 
+    def uploadMedia(self, job, vdc, catalog, mediaName, mediaFile):
+        cli = self.client
+        self._refreshLastCalled = 0
+        media = cli.uploadMedia(vdc, job, mediaName, mediaFile,
+            callbackFactory=self._callbackFactory,
+            statusCallback=self._statusCallback)
+        catalogItemsHref = catalog.href + '/catalogItems'
+        name = mediaName
+        description = mediaName
+        cli.addVappTemplateToCatalog(self._loggerFactory(job),
+            name, description, media.href, catalogItemsHref)
+        return media
+
     def drvCaptureSystem(self, job, instance, params):
         cli = self.client
         instanceId = instance.getInstanceId()
@@ -680,6 +695,7 @@ class RestClient(restclient.Client):
         error = 'application/vnd.vmware.vcloud.error+xml'
         vApp = "application/vnd.vmware.vcloud.vApp+xml"
         vAppTemplate = "application/vnd.vmware.vcloud.vAppTemplate+xml"
+        media = "application/vnd.vmware.vcloud.media+xml"
         catalogItem = "application/vnd.vmware.vcloud.catalogItem+xml"
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
         instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
@@ -889,6 +905,34 @@ class RestClient(restclient.Client):
         vapp = Models.handler.parseString(resp.contents)
         return vapp
 
+    def uploadMedia(self, vdc, job, mediaName, mediaFile,
+            callbackFactory=None,
+            statusCallback=None):
+        mediaFile.seek(0, 2)
+        fileSize = mediaFile.tell()
+        mediaFile.seek(0)
+
+        link = self._getLinkByRel(vdc, 'add', type=self.TYPES.media)
+        self.path = self._pathFromUrl(link.href)
+
+        media = Models.Media()
+        media.setSize(fileSize)
+
+        media.name = mediaName
+        media.imageType = "iso"
+        body = Models.handler.toXml(media)
+        headers = { 'Content-Type' : self.TYPES.media}
+        self.connect()
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        media = Models.handler.parseString(resp.contents)
+        link = self._getLinkByRel(media.Files[0], 'upload:default')
+
+        callback = callbackFactory(media, job, link.href, fileSize)
+        self.uploadVAppFile(media, job, link.href, mediaFile, callback=callback,
+            statusCallback=statusCallback)
+        return media
+
     def uploadOvfDescriptor(self, vapp, ovfFileObj):
         self.path = self._pathFromUrl(vapp.Files[0].Link[0].href)
         self.connect()
@@ -910,7 +954,11 @@ class RestClient(restclient.Client):
             raise RuntimeError("Timeout waiting for OVF descriptor to be processed")
 
     def refreshResource(self, vapp):
-        self.path = self._pathFromUrl(vapp.href)
+        if isinstance(vapp, basestring):
+            href = vapp
+        else:
+            href = vapp.href
+        self.path = self._pathFromUrl(href)
         self.connect()
         resp = self.makeRequest("GET")
         data = resp.read()
@@ -1030,6 +1078,11 @@ class RestClient(restclient.Client):
             self._instantiateVAppTemplate, description,
             vdcRef, vappTemplateRef, networkRef, callback=callback)
 
+    def _getNetworksForVappTemplate(self, vappTemplateRef):
+        ovfString = self.getOvfDescriptorForVappTemplate(vappTemplateRef)
+        ovf = OVF(ovfString)
+        return ovf.networkNames
+
     def _instantiateVAppTemplate(self, name, description,
             vdcRef, vappTemplateRef, networkRef, callback=None):
         m = Models.InstantiateVAppTemplateParams(Description=description)
@@ -1049,15 +1102,16 @@ class RestClient(restclient.Client):
         info = Models.OVFInfo("Configuration parameters for logical networks")
         nwsect.setInfo(info)
 
-        nwconf = Models.NetworkConfig(networkName='Network Name')
-        nwsect.setNetworkConfig(nwconf)
-
-        nwc = Models.NetworkConfiguration()
-        nwconf.setConfiguration(nwc)
-
         pnet = Models.ParentNetwork(href=networkRef)
-        nwc.setParentNetwork(pnet)
-        nwc.setFenceMode('bridged')
+
+        for networkName in self._getNetworksForVappTemplate(vappTemplateRef):
+            nwconf = Models.NetworkConfig(networkName='dvportgroup-19802')
+            nwsect.setNetworkConfig(nwconf)
+
+            nwc = Models.NetworkConfiguration()
+            nwconf.setConfiguration(nwc)
+            nwc.setParentNetwork(pnet)
+            nwc.setFenceMode('bridged')
 
         body = Models.handler.toXml(m)
         self.path = "%s/action/instantiateVAppTemplate" % self._pathFromUrl(vdcRef)
@@ -1100,21 +1154,24 @@ class RestClient(restclient.Client):
         self.path = self._pathFromUrl(entity.href)
         self.makeRequest("DELETE", expectedStatusCodes=[202])
 
-    def _getLinkByRel(self, obj, rel):
+    def _getLinkByRel(self, obj, rel, type=None):
         obj = self.refreshIfNeeded(obj)
-        ret = self._findLink(obj, rel)
+        ret = self._findLink(obj, rel, type=type)
         if ret is not None:
             return ret
         # Maybe we need to refresh the resource
         obj = self.refreshResource(obj)
-        return self._findLink(obj, rel)
+        return self._findLink(obj, rel, type=type)
 
-    def _findLink(self, obj, rel):
+    def _findLink(self, obj, rel, type=None):
         if obj.Link is None:
             return None
         for link in obj.Link:
-            if link.rel == rel:
-                return link
+            if link.rel != rel:
+                continue
+            if type is not None and link.type != type:
+                continue
+            return link
         return None
 
     def refreshIfNeeded(self, obj):
@@ -1134,7 +1191,7 @@ class RestClient(restclient.Client):
         ovfLink = self._getLinkByRel(vappTemplate, 'ovf')
         if ovfLink is None:
             return None
-        self.path = ovfLink.href
+        self.path = self._pathFromUrl(ovfLink.href)
         self.connect()
         resp = self.makeRequest("GET")
         return resp.read()
