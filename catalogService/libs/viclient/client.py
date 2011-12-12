@@ -9,7 +9,7 @@ import time
 
 from catalogService.libs.ovf import OVF
 
-from VimService_client import *
+from VimService_client import *  # pyflakes=ignore
 #from ZSI.wstools import logging
 from ZSI.wstools import TimeoutSocket
 from ZSI import FaultException
