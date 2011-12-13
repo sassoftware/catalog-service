@@ -295,8 +295,7 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def getImagesFromTarget(self, imageIds):
         cloudAlias = self.getCloudAlias()
-        imagesMap = dict(
-            self._iterResourceEntities(RestClient.TYPES.vAppTemplate))
+        imagesMap = dict(self._iterVappTemplates())
         ret = []
         for imageId, image in imagesMap.iteritems():
             imageName = image.name
@@ -506,9 +505,16 @@ class VCloudClient(baseDriver.BaseDriver):
                 id_ = self._idFromHref(entity.href)
                 yield id_, entity
 
+    def _iterVappTemplates(self):
+        return self._iterResourceEntities(RestClient.TYPES.vAppTemplate)
+
+    def _iterVApps(self):
+        cli = self.client
+        return self._iterResourceEntities(RestClient.TYPES.vApp)
+
     def _iterVms(self, idFilter=None):
         cli = self.client
-        for _, vapp in self._iterResourceEntities(RestClient.TYPES.vApp):
+        for _, vapp in self._iterVApps():
             vapp = cli.refreshResource(vapp)
             for id_, vm in self._iterVmsInVapp(vapp, idFilter=idFilter):
                 yield id_, (vapp, vm)
@@ -522,6 +528,9 @@ class VCloudClient(baseDriver.BaseDriver):
             id_ = self._idFromHref(vm.href)
             if idFilter is None or id_ in idFilter:
                 yield id_, vm
+
+    def _iterMedia(self):
+        return self._iterResourceEntities(RestClient.TYPES.media)
 
     def _newInstance(self, instanceId, instance, cloudAlias):
         instanceName = instance.name
@@ -595,6 +604,16 @@ class VCloudClient(baseDriver.BaseDriver):
         cli.addVappTemplateToCatalog(self._loggerFactory(job),
             name, description, media.href, catalogItemsHref)
         return media
+
+    def insertMedia(self, job, vapp, media):
+        self._msg(job, "Attaching media '%s' to '%s'" % (media.name, vapp.name))
+        callback = lambda: self._msg(job, "Waiting for media to be attached")
+        self.client.insertMedia(vapp, media, callback=callback)
+
+    def powerOnVapp(self, job, vapp):
+        self._msg(job, "Powering on '%s'" % (vapp.name, ))
+        callback = lambda: self._msg(job, "Waiting for vapp to power on")
+        self.client.powerOnVapp(vapp, callback=callback)
 
     def drvCaptureSystem(self, job, instance, params):
         cli = self.client
@@ -696,6 +715,7 @@ class RestClient(restclient.Client):
         vApp = "application/vnd.vmware.vcloud.vApp+xml"
         vAppTemplate = "application/vnd.vmware.vcloud.vAppTemplate+xml"
         media = "application/vnd.vmware.vcloud.media+xml"
+        mediaInsertOrEjectParams = "application/vnd.vmware.vcloud.mediaInsertOrEjectParams+xml"
         catalogItem = "application/vnd.vmware.vcloud.catalogItem+xml"
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
         instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
@@ -932,6 +952,32 @@ class RestClient(restclient.Client):
         self.uploadVAppFile(media, job, link.href, mediaFile, callback=callback,
             statusCallback=statusCallback)
         return media
+
+    def insertMedia(self, vm, media, callback=None):
+        link = self._getLinkByRel(vm, 'media:insertMedia')
+        self.path = self._pathFromUrl(link.href)
+
+        headers = { 'Content-Type' : self.TYPES.mediaInsertOrEjectParams}
+        m = Models.Media(href=media.href)
+        rsc = Models.MediaInsertOrEjectParams(Media=m)
+        body = Models.handler.toXml(rsc)
+
+        self.connect()
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        return self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+
+    def powerOnVapp(self, vapp, callback=None):
+        link = self._getLinkByRel(vapp, 'power:powerOn')
+        if link is None:
+            return
+        self.path = self._pathFromUrl(link.href)
+
+        self.connect()
+        resp = self.makeRequest("POST", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        return self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
 
     def uploadOvfDescriptor(self, vapp, ovfFileObj):
         self.path = self._pathFromUrl(vapp.Files[0].Link[0].href)

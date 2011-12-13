@@ -230,6 +230,11 @@ class Source(_ReferenceType):
 class VAppParent(_ReferenceType):
     tag = 'VAppParent'
 
+class MediaInsertOrEjectParams(_BaseNode):
+    tag = 'MediaInsertOrEjectParams'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(ParamsType,
+        elements=[Media])
+
 class InstantiateVAppTemplateParams(_BaseNode):
     tag = 'InstantiateVAppTemplateParams'
     __slots__ = [ 'name', 'Description', 'deploy', 'powerOn',
