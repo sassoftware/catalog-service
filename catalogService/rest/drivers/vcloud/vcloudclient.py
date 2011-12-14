@@ -405,7 +405,9 @@ class VCloudClient(baseDriver.BaseDriver):
             return vapp
         vm = vmList[0]
         self._msg(job, 'Renaming vm: %s -> %s' % (vm.name, instanceName))
-        self.client.renameVm(vm, instanceName, instanceDescription)
+        callback = lambda: self._msg(job, "Waiting for rename task to finish")
+        self.client.renameVm(vm, instanceName, instanceDescription,
+            callback=callback)
         return vapp
 
     def _getMintImagesByType(self, imageType):
@@ -1052,7 +1054,7 @@ class RestClient(restclient.Client):
                 callback=callbackFactory(vapp, job, url, fobj.getSize()),
                 statusCallback=statusCallback)
 
-    def renameVm(self, vm, vmName, vmDescription):
+    def renameVm(self, vm, vmName, vmDescription, callback=None):
         # Find upload link
         link = self._getLinkByRel(vm, 'edit')
         if link is None:
@@ -1065,8 +1067,10 @@ class RestClient(restclient.Client):
 
         body = Models.handler.toXml(resource)
         headers = { 'Content-Type' : link.type}
-        self.makeRequest("PUT", body=body, headers=headers,
+        resp = self.makeRequest("PUT", body=body, headers=headers,
             expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
 
     def uploadVAppFile(self, vapp, job, url, fobj, callback, statusCallback):
         while 1:
