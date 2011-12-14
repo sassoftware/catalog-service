@@ -57,6 +57,7 @@ class CatalogError(Exception):
         self.msg = message
         self.tracebackData = kw.get('tracebackData', None)
         self.productCodeData = kw.get('productCodeData', None)
+        self.error = kw.get('error', None)
 
     def __str__(self):
         return self.msg

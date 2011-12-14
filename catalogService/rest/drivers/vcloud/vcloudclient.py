@@ -386,8 +386,7 @@ class VCloudClient(baseDriver.BaseDriver):
                 catalog)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
-        self._msg(job, 'Launching')
-        vapp = self._startVApp(vapp)
+        vapp = self._startVApp(job, vapp)
         self._msg(job, 'Instance launched')
         vmList = [ x[0] for x in self._iterVmsInVapp(vapp) ]
         return vmList
@@ -488,11 +487,32 @@ class VCloudClient(baseDriver.BaseDriver):
             vdc.href, vappTemplateRef, network.href, callback=callback)
         return vappRef
 
-    def _startVApp(self, vappRef):
+    def _startVApp(self, job, vappRef):
         vapp = self.client.refreshResource(vappRef)
+        self.powerOnVapp(job, vapp)
         return vapp
 
-    def _attachCredentials(self, job, instanceName, vapp, dataCenter, catalog):
+    def _attachCredentials(self, job, instanceName, vapp, vdc, catalog):
+        filename = self.getCredentialsIsoFile()
+        try:
+            self._msg(job, 'Uploading initial configuration')
+            fileobj = baseDriver.Archive.CommandArchive.File(
+                os.path.basename(filename), os.path.dirname(filename))
+            mediaName = 'Credentials for %s' % instanceName
+            media = self.uploadMedia(job, vdc, catalog, mediaName, fileobj)
+        finally:
+            # We use filename below only for the actual name; no need to keep
+            # this file around now
+            os.unlink(filename)
+
+        try:
+            for _, vm in self._iterVmsInVapp(vapp):
+                self.insertMedia(job, vm, media)
+        except Exception, e:
+            # We will not fail the request if we could not attach credentials
+            # to the instance
+            self.log_exception("Exception trying to attach credentials: %s", e)
+
         return vapp
 
     def _iterResourceEntities(self, resourceEntityType):
@@ -641,7 +661,7 @@ class VCloudClient(baseDriver.BaseDriver):
                 try:
                     cli.addVappTemplateToCatalog(self._loggerFactory(job),
                         name, description, vappTemplate.href, catalogItemsHref)
-                except restclient.ResponseError, e:
+                except errors.CatalogError, e:
                     if e.status == 403:
                         # Try another "writable" catalog
                         continue
@@ -746,8 +766,13 @@ class RestClient(restclient.Client):
                 return e
             # XXX Munge exception here
             if self.getContentTypeFromHeaders(e.headers) == self.TYPES.error:
-                error = Models.handler.parseString(e.contents)
-                raise errors.ParameterError("vCloud error: %s" % error.message)
+                try:
+                    error = Models.handler.parseString(e.contents)
+                    message = "vCloud error: %s" % error.message
+                except:
+                    error = message = e.contents
+                raise errors.CatalogError(status=e.status, message=message,
+                    error=error)
             raise errors.CatalogError("Unknown error: %s" % e)
         if expectedStatusCodes:
             raise errors.ParameterError("vCloud error: expected codes %s, got %s"
@@ -1085,10 +1110,12 @@ class RestClient(restclient.Client):
                 ret = function(resourceName, *args, **kwargs)
                 logger("Resource name: %s" % resourceName)
                 return ret
-            except restclient.ResponseError, e:
+            except errors.CatalogError, e:
                 if e.status == 400:
-                    error = Models.handler.parseString(e.contents)
-                    if error.minorErrorCode == 'DUPLICATE_NAME':
+                    minorErrorCode = None
+                    if e.error:
+                        minorErrorCode = getattr(e.error, 'minorErrorCode')
+                    if e.error.minorErrorCode == 'DUPLICATE_NAME':
                         # Naming conflict. Try again with a different name
                         logger("Duplicate name %s" % resourceName)
                         continue
