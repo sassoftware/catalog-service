@@ -1182,7 +1182,7 @@ class RestClient(restclient.Client):
         pnet = Models.ParentNetwork(href=networkRef)
 
         for networkName in self._getNetworksForVappTemplate(vappTemplateRef):
-            nwconf = Models.NetworkConfig(networkName='dvportgroup-19802')
+            nwconf = Models.NetworkConfig(networkName=networkName)
             nwsect.setNetworkConfig(nwconf)
 
             nwc = Models.NetworkConfiguration()
