@@ -346,6 +346,7 @@ class BaseDriver(object):
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
             source_image_id = sourceImage.getBuildId(),
+            boot_uuid = self.getBootUuid(),
         )
         self.inventoryHandler.addSystem(systemFields,
             dnsName=instanceDnsName, withNetwork=True)
