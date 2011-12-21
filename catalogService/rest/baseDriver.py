@@ -397,6 +397,13 @@ class BaseDriver(object):
             ret[key] = str(field.getValue())
         return ret
 
+    def reset(self):
+        self._cloudClient = None
+        self._cloudCredentials = None
+        self._bootUuid = None
+        self._x509Cert = None
+        self._x509Key = None
+
     def drvGetCloudClient(self):
         """
         Authenticate the user, cache the cloud credentials and the client
