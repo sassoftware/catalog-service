@@ -53,6 +53,7 @@ class BaseDriver(object):
     CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
+    Instances        = instances.BaseInstances
     InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
     KeyPair          = keypairs.BaseKeyPair
