@@ -1068,7 +1068,20 @@ class BaseDriver(object):
                                                          self.cloudName)
         except TargetMissing:
             targetData = {}
+
+        targetData = self.remapTargetConfigurationFields(targetData)
         return targetData
+
+    @classmethod
+    def remapTargetConfigurationFields(cls, targetConfig):
+        ret = targetConfig.copy()
+        undef = object()
+        for nameDescr, nameDb in cls._configNameMap:
+            val = ret.pop(nameDb, undef)
+            if val is undef:
+                continue
+            ret[nameDescr] = val
+        return ret
 
     def getTargetConfiguration(self, isAdmin = False, forceAdmin = False):
         # We can't set both isAdmin and forceAdmin at the same time

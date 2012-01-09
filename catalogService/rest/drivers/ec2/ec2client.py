@@ -393,26 +393,6 @@ class EC2Client(baseDriver.BaseDriver):
     def _getS3ConnectionInfo(self, credentials):
         return S3Connection.DefaultHost, None, None, True, None
 
-    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
-        if 'ec2PublicKey' not in targetData:
-            # Not configured
-            return {}
-        ret = dict(name = self.DefaultCloudName,
-            alias = targetData.get('alias', EC2_ALIAS),
-            description = targetData.get('description', EC2_DESCRIPTION),
-            accountId = targetData.get('ec2AccountId', ''),
-            )
-        if isAdmin:
-            ret.update(dict(
-                publicAccessKeyId = targetData.get('ec2PublicKey', ''),
-                secretAccessKey = targetData.get('ec2PrivateKey', ''),
-                certificateData = fixPEM(targetData.get('ec2Certificate', ''),
-                    error=False),
-                certificateKeyData = fixPEM(targetData.get('ec2CertificateKey',
-                    ''), error=False),
-                s3Bucket = targetData.get('ec2S3Bucket', '')))
-        return ret
-
     def _getS3Connection(self, credentials):
         publicAccessKeyId = credentials['publicAccessKeyId']
         secretAccessKey = credentials['secretAccessKey']
