@@ -446,7 +446,7 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def _getResourceRef(self, longRef, resourceIter):
         # Take out the leading vdc- or catalog- part
-        ref = longRef.rsplit('-', 1)[-1]
+        ref = longRef.split('-', 1)[-1]
 
         for res in resourceIter:
             if os.path.basename(res.href) == ref:
