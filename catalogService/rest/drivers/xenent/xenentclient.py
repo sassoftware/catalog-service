@@ -575,13 +575,8 @@ class XenEntClient(baseDriver.BaseDriver):
             if not vm['is_a_template']:
                 continue
 
-            imgChecksum = vm['other_config'].get('cloud-catalog-checksum')
-            if imgChecksum:
-                is_rBuilderImage = True
-                imageId = imgChecksum
-            else:
-                is_rBuilderImage = False
-                imageId = vm['uuid']
+            is_rBuilderImage = False
+            imageId = vm['uuid']
 
             if imageIdsFilter is not None and imageId not in imageIdsFilter:
                 continue
