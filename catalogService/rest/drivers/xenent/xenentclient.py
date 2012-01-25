@@ -520,17 +520,13 @@ class XenEntClient(baseDriver.BaseDriver):
         self._setVmMetadata(vmRef, checksum = checksum)
         return vmRef, vmUuid
 
-    def _deployImage(self, job, image, auth, srUuid):
-        tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth, extension='.xva')
-        try:
-            job.addHistoryEntry('Importing image')
-            templRef, templUuid = self._importImage(image, path, srUuid)
+    def _deployImageFromFile(self, job, image, filePath, srUuid):
+        self._msg(job, 'Importing image')
+        templRef, templUuid = self._importImage(image, filePath, srUuid)
+        return templRef
 
-            image.setImageId(templUuid)
-            image.setInternalTargetId(templUuid)
-        finally:
-            util.rmtree(tmpDir, ignore_errors = True)
+    def getImageIdFromTargetImageRef(self, vmRef):
+        return self.client.xenapi.VM.get_uuid(vmRef)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
@@ -555,17 +551,17 @@ class XenEntClient(baseDriver.BaseDriver):
 
         imageId = image.getInternalTargetId()
 
-        job.addHistoryEntry('Cloning template')
+        self._msg(job, 'Cloning template')
         realId = self.cloneTemplate(job, imageId, instanceName,
             instanceDescription)
-        job.addHistoryEntry('Attaching credentials')
+        self._msg(job, 'Attaching credentials')
         try:
             self._attachCredentials(realId, srUuid)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
-        job.addHistoryEntry('Launching')
+        self._msg(job, 'Launching')
         self.startVm(realId)
-        return self.client.xenapi.VM.get_uuid(realId)
+        return self.getImageIdFromTargetImageRef(realId)
 
     def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
