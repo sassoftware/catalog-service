@@ -518,6 +518,8 @@ class XenEntClient(baseDriver.BaseDriver):
             "Import of %s" % checksum)
         vmRef, vmUuid = self._putVmImage(vmFile, srUuid, taskRef)
         self._setVmMetadata(vmRef, checksum = checksum)
+        vmName = self.client.xenapi.VM.get_name_label(vmRef)
+        image.setShortName(vmName)
         return vmRef, vmUuid
 
     def _deployImageFromFile(self, job, image, filePath, srUuid):
