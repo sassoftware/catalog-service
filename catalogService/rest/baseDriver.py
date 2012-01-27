@@ -84,7 +84,8 @@ class BaseDriver(object):
 
     def __init__(self, cfg, driverName, cloudName=None,
                  nodeFactory=None, userId = None, db = None,
-                 inventoryHandler=None):
+                 inventoryHandler=None,
+                 zoneAddresses=None):
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
@@ -108,6 +109,7 @@ class BaseDriver(object):
         if inventoryHandler is None:
             inventoryHandler = self.InventoryHandler(weakref.ref(self))
         self.inventoryHandler = inventoryHandler
+        self.zoneAddresses = zoneAddresses
         self._postInit()
 
     class InventoryHandler(object):
@@ -200,7 +202,7 @@ class BaseDriver(object):
         drv =  self.__class__(self._cfg, self.driverName, cloudName,
                               self._nodeFactory,
                               userId = request.auth[0],
-                              db = self.db)
+                              db = self.db, zoneAddresses=self.zoneAddresses)
         drv.setLogger(request.logger)
         drv.request = request
         return drv
@@ -1411,13 +1413,29 @@ class BaseDriver(object):
         bootUuidFile.write(self.getBootUuid())
         bootUuidFile.flush()
 
-        # Make ISO, if it doesn't exist already
-        cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
-            "-o", isoFile,
+        directMethodFile = None
+        if self.zoneAddresses:
+            directMethodFile = tempfile.NamedTemporaryFile()
+            tmpl = "directMethod %s\n"
+            directMethodFile.write(tmpl % "[]")
+            for za in self.zoneAddresses:
+                directMethodFile.write(tmpl % za)
+            directMethodFile.flush()
+
+        graftList = [
             "SECURITY-CONTEXT-BOOTSTRAP=%s" % empty,
             "etc/sfcb/clients/%s.0=%s" % (certHash, certFile),
             "etc/conary/rpath-tools/boot-uuid=%s" % bootUuidFile.name,
         ]
+
+        if directMethodFile:
+            graftList.append("etc/conary/rpath-tools/config.d/directMethod=%s"
+                % directMethodFile.name)
+
+        # Make ISO, if it doesn't exist already
+        cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
+            "-o", isoFile,
+        ] + graftList
 
         devnull = file(os.devnull, "w")
         p = subprocess.Popen(cmd, shell = False, stdout=devnull,
