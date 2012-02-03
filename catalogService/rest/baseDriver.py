@@ -75,7 +75,7 @@ class BaseDriver(object):
 
     # Timeout for waiting for an instance to show up as running
     LAUNCH_TIMEOUT = 600
-    LAUNCH_NETWORK_TIMEOUT = LAUNCH_TIMEOUT
+    LAUNCH_NETWORK_TIMEOUT = 1200 # windows reboots, etc.
     PENDING_STATES = set([ 'pending' ])
     RUNNING_STATES = set([ 'running' ])
     FAILED_STATES = set([ 'terminated' ])
