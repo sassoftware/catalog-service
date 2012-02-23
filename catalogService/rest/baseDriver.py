@@ -693,7 +693,7 @@ class BaseDriver(object):
                 self.XML.Text("title", imageTitle),
                 self.XML.Text("size", str(contentLength)),
                 self.XML.Text("sha1", sha1),
-                self.XML.Text("fileName", imageName),
+                self.XML.Text("file_name", imageName),
             ),
             self.XML.Element('metadata', *metadataNodes))
         xml = self.XML.toString(root)
