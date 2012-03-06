@@ -27,7 +27,7 @@ class ImagesController(BaseCloudController):
 
     def create(self, request, cloudName):
         "deploy an image"
-        request.logger.info("User %s: launching instance in %s/%s" % (
+        request.logger.info("User %s: deploying image in %s/%s" % (
             request.auth[0], self.driver.cloudType, cloudName))
         # We need to pass in authentication information, downloading private
         # images requires that.

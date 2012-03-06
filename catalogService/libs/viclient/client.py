@@ -1342,6 +1342,14 @@ class VimService(object):
         vicfg.vmFolders = vmFolders
         vicfg.vmFolderTree = vmFolderTree
         for cr in crs:
+            # grab the previously retreived properties for this
+            # compute resource
+            crProps = props[cr]
+            dataCenter = hostFolderToDataCenter.get(crProps['parent'])
+            if dataCenter is None:
+                # The CR's parent (host folder) is not discoverable under one
+                # of the data centers, so skip this compute resource
+                continue
             # for each compute resource, we need to get the config
             # target.  This lets us build up the options for deploying
             # VMs
@@ -1358,9 +1366,6 @@ class VimService(object):
                 # their names.
                 ds = ds.get_element_datastore()
                 nameMap[ds.get_element_datastore()] = ds.get_element_name()
-            # grab the previously retreived properties for this
-            # compute resource
-            crProps = props[cr]
             # get the top level resource pool for the compute resource
             crRp = crProps['resourcePool']
 
@@ -1376,8 +1381,7 @@ class VimService(object):
             crRps = dict(x for x in props.iteritems() if x[0] in crRpMors)
             # nowe we can create some objects that are easier to deal with
             cr = ComputeResource(cr, crProps, configTarget, crRps)
-            dc = hostFolderToDataCenter[crProps['parent']]
-            dc.addComputeResource(cr)
+            dataCenter.addComputeResource(cr)
 
         for dc in hostFolderToDataCenter.values():
             vicfg.addDatacenter(dc)
