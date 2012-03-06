@@ -12,7 +12,7 @@ class BaseCloud(xmlNode.BaseNode):
     tag = 'cloud'
     __slots__ = [ 'id', 'cloudName', 'description', 'cloudAlias',
         'type', 'images', 'instances', 'userCredentials', 'configuration',
-        'descriptorLaunch', 'activeJobs', ]
+        'descriptorLaunch', 'descriptorDeploy', 'activeJobs', ]
     _slotAttributes = set(['id'])
 
 class BaseClouds(xmlNode.BaseNodeCollection):
@@ -44,6 +44,9 @@ class Configuration(BaseHrefNode):
 class DescriptorLaunch(BaseHrefNode):
     tag = 'descriptorLaunch'
 
+class DescriptorDeploy(BaseHrefNode):
+    tag = 'descriptorDeploy'
+
 class ActiveJobs(BaseHrefNode):
     tag = "activeJobs"
 
@@ -56,11 +59,12 @@ class Handler(xmllib.DataBinder):
     userCredentialsClass = UserCredentials
     configurationClass = Configuration
     descriptorLaunchClass = DescriptorLaunch
+    descriptorDeployClass = DescriptorDeploy
     activeJobsClass = ActiveJobs
     def __init__(self):
         xmllib.DataBinder.__init__(self)
         for cls in [ self.cloudClass, self.cloudsClass, self.typeClass,
                      self.imagesClass, self.instancesClass,
                      self.userCredentialsClass, self.configurationClass,
-                     self.descriptorLaunchClass, self.activeJobsClass ]:
+                     self.descriptorLaunchClass, self.descriptorDeployClass, self.activeJobsClass ]:
             self.registerType(cls, cls.tag)

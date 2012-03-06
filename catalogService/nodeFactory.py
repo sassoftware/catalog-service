@@ -51,6 +51,8 @@ class NodeFactory(object):
             'configuration')))
         node.setDescriptorLaunch(clouds.DescriptorLaunch(href =
                                  self.join(cloudId, 'descriptor', 'launch')))
+        node.setDescriptorDeploy(clouds.DescriptorDeploy(href =
+                                 self.join(cloudId, 'descriptor', 'deployImage')))
         searchParams = dict(cloudName = node.getCloudName(),
                 cloudType = self.cloudType,
                 status = 'Running')
@@ -97,6 +99,8 @@ class NodeFactory(object):
         node = self.imageFactory(*args, **kwargs)
         node.setId(self.getImageUrl(node))
         node.setCloudType(self.cloudType)
+        if node.getInternalTargetId() is None:
+            node.setInternalTargetId(node.getImageId())
         return node
 
     def newInstance(self, *args, **kwargs):
@@ -240,4 +244,6 @@ class NodeFactory(object):
 
     @classmethod
     def _quote(cls, data):
+        if isinstance(data, int):
+            data = str(data)
         return urllib.quote(data, safe="")

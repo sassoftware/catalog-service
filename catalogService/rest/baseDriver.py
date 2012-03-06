@@ -14,7 +14,11 @@ import urllib2
 import weakref
 import gzip
 
+from lxml import etree
+
 from conary.lib import magic, util, sha1helper
+from conary.lib import digestlib
+from restlib import client as rl_client
 
 from catalogService import errors
 from catalogService import instanceStore
@@ -35,8 +39,6 @@ from catalogService.utils import timeutils
 from catalogService.utils import x509
 
 from mint.mint_error import TargetExists, TargetMissing
-from mint.django_rest.rbuilder.manager import rbuildermanager
-from mint.django_rest.rbuilder.inventory import models as inventorymodels
 
 from rpath_job import api1 as rpath_job
 
@@ -51,6 +53,7 @@ class BaseDriver(object):
     CredentialsFields = credentials.BaseFields
     Image            = images.BaseImage
     Instance         = instances.BaseInstance
+    Instances        = instances.BaseInstances
     InstanceUpdateStatus = instances.BaseInstanceUpdateStatus
     InstanceType     = instances.InstanceType
     KeyPair          = keypairs.BaseKeyPair
@@ -72,12 +75,17 @@ class BaseDriver(object):
 
     # Timeout for waiting for an instance to show up as running
     LAUNCH_TIMEOUT = 600
+    LAUNCH_NETWORK_TIMEOUT = 1200 # windows reboots, etc.
     PENDING_STATES = set([ 'pending' ])
     RUNNING_STATES = set([ 'running' ])
     FAILED_STATES = set([ 'terminated' ])
+    WAIT_RUNNING_STATE_SLEEP = 2
+    WAIT_NETWORK_SLEEP = 10
 
     def __init__(self, cfg, driverName, cloudName=None,
-                 nodeFactory=None, userId = None, db = None):
+                 nodeFactory=None, userId = None, db = None,
+                 inventoryHandler=None,
+                 zoneAddresses=None):
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
@@ -90,8 +98,6 @@ class BaseDriver(object):
         self._nodeFactory = nodeFactory
         self._nodeFactory.userId = userId
         self._logger = None
-        self._instanceStore = None
-        self._jobsStore = jobs.ApplianceVersionUpdateJobSqlStore(self.db)
         self._instanceLaunchJobStore = jobs.LaunchJobSqlStore(self.db)
         self._imageDeploymentJobStore = jobs.DeployImageJobSqlStore(self.db)
         self._instanceUpdateJobStore = jobs.ApplianceUpdateJobSqlStore(self.db)
@@ -100,8 +106,42 @@ class BaseDriver(object):
         self._bootUuid = None
         self._targetConfig = None
 
-        self.inventoryManager = rbuildermanager.RbuilderManager(cfg=self.db.cfg, userName=userId)
+        if inventoryHandler is None:
+            inventoryHandler = self.InventoryHandler(weakref.ref(self))
+        self.inventoryHandler = inventoryHandler
+        self.zoneAddresses = zoneAddresses
         self._postInit()
+
+    class InventoryHandler(object):
+        """
+        Interface to the rbuilder inventory service, replaced in case of rmake3
+        """
+        def __init__(self, parent):
+            self.parent = parent
+            self.cloudType = parent().cloudType
+            self.cloudName = parent().cloudName
+            from mint.django_rest.rbuilder.manager import rbuildermanager
+            self.inventoryManager = rbuildermanager.RbuilderManager(
+                cfg=parent().db.cfg,
+                userName=parent().userId)
+
+        @property
+        def log_info(self):
+            return self.parent().log_info
+
+        def addSystem(self, systemFields, dnsName=None, withNetwork=True):
+            from mint.django_rest.rbuilder.inventory import models as inventorymodels
+            system = inventorymodels.System(**systemFields)
+            self.inventoryManager.addLaunchedSystem(system, dnsName=dnsName,
+                targetType=self.cloudType, targetName=self.cloudName)
+            self.log_info("System id %s added to inventory for instance %s." % \
+                (system.pk, system.target_system_id))
+
+        def reset(self):
+            pass
+
+        def commit(self):
+            pass
 
     def _getInstanceStore(self):
         keyPrefix = '%s/%s' % (self._sanitizeKey(self.cloudName),
@@ -162,7 +202,7 @@ class BaseDriver(object):
         drv =  self.__class__(self._cfg, self.driverName, cloudName,
                               self._nodeFactory,
                               userId = request.auth[0],
-                              db = self.db)
+                              db = self.db, zoneAddresses=self.zoneAddresses)
         drv.setLogger(request.logger)
         drv.request = request
         return drv
@@ -227,16 +267,18 @@ class BaseDriver(object):
         return self.drvGetImages(imageIds)
 
     def drvGetImages(self, imageIdsFilter):
-        imageList = self.getImagesFromTarget(imageIdsFilter)
+        # The image identifiers in the filter may not match exactly the
+        # image IDs from the target, so we need to fetch everything
+        # here.
+        imageList = self.getImagesFromTarget(None)
         imageList = self.addMintDataToImageList(imageList,
             self.RBUILDER_BUILD_TYPE)
+        return self.filterImages(imageIdsFilter, imageList)
 
-        # now that we've grabbed all the images, we can return only the one
-        # we want.  This is horribly inefficient, but neither the mint call
-        # nor the grid call allow us to filter by image, at least for now
+    def filterImages(self, imageIdsFilter, imageList):
         if imageIdsFilter is None:
             # no filtering required. We'll make the filter contain everything
-            imageIdsFilter = sorted(x.getImageId() for x in imageList)
+            imageIdsFilter = sorted(str(x.getImageId()) for x in imageList)
 
         # filter the images to those requested
         imagesById = self._ImageMap(imageList)
@@ -250,7 +292,7 @@ class BaseDriver(object):
 
     class _ImageMap(object):
         def __init__(self, imageList):
-            self._ids = dict((x.getImageId(), x) for x in imageList)
+            self._ids = dict((str(x.getImageId()), x) for x in imageList)
             self._ids.update((x._targetImageId, x) for x in imageList
                 if getattr(x, '_targetImageId', None))
 
@@ -276,8 +318,17 @@ class BaseDriver(object):
             return None
         return unicode(obj).encode("utf-8")
 
-    def _updateInventory(self, instanceId, cloudType, cloudName, x509Cert,
-                         x509Key, launchParams):
+    def updateInventory(self, instanceIdList, x509Cert,
+                        x509Key, launchParams, sourceImage, withNetwork=True):
+        self.inventoryHandler.reset()
+        for instanceId in instanceIdList:
+            self._updateInventory(instanceId, x509Cert,
+                x509Key, launchParams, sourceImage,
+                withNetwork=withNetwork)
+            self.inventoryHandler.commit()
+
+    def _updateInventory(self, instanceId, x509Cert, x509Key,
+                         launchParams, sourceImage, withNetwork=True):
         self.log_info("Adding launched instance %s to system inventory. " % \
             instanceId)
         instance = self.getInstance(instanceId)
@@ -287,7 +338,8 @@ class BaseDriver(object):
         instanceName = self._toStr(instance.getInstanceName())
         instanceDescription = self._toStr(instance.getInstanceDescription())
         instanceState = self._toStr(instance.getState())
-        system = inventorymodels.System(
+
+        systemFields = dict(
             name=systemName,
             description=systemDescription,
             target_system_id=instanceId,
@@ -296,12 +348,11 @@ class BaseDriver(object):
             target_system_state=instanceState,
             ssl_client_certificate = x509Cert,
             ssl_client_key = x509Key,
+            source_image_id = sourceImage.getBuildId(),
+            boot_uuid = self.getBootUuid(),
         )
-        self.inventoryManager.addLaunchedSystem(system, dnsName=instanceDnsName,
-            targetType=cloudType, targetName=cloudName)
-        self.log_info("System id %s added to inventory for instance %s." % \
-            (system.pk, instanceId))
-        return system
+        self.inventoryHandler.addSystem(systemFields,
+            dnsName=instanceDnsName, withNetwork=True)
 
     def getInstance(self, instanceId, force=False):
         if self.client is None:
@@ -349,6 +400,13 @@ class BaseDriver(object):
             ret[key] = str(field.getValue())
         return ret
 
+    def reset(self):
+        self._cloudClient = None
+        self._cloudCredentials = None
+        self._bootUuid = None
+        self._x509Cert = None
+        self._x509Key = None
+
     def drvGetCloudClient(self):
         """
         Authenticate the user, cache the cloud credentials and the client
@@ -358,7 +416,6 @@ class BaseDriver(object):
             if not cred:
                 return None
             self._cloudClient = self.drvCreateCloudClient(cred)
-            self._instanceStore = self._getInstanceStore()
         return self._cloudClient
 
     client = property(drvGetCloudClient)
@@ -369,12 +426,23 @@ class BaseDriver(object):
 
     def drvCreateCloud(self, descriptorData):
         cloudName = self.getCloudNameFromDescriptorData(descriptorData)
-        config = dict((k.getName(), k.getValue())
-            for k in descriptorData.getFields())
         self.cloudName = cloudName
+        config = self.getTargetConfigFromDescriptorData(descriptorData)
         self.drvVerifyCloudConfiguration(config)
         self.saveTarget(config)
         return self._createCloudNode(cloudName, config)
+
+    @classmethod
+    def getTargetConfigFromDescriptorData(cls, descriptorData):
+        config = dict((k.getName(), k.getValue())
+            for k in descriptorData.getFields())
+        ret = dict()
+        for descriptorFieldName, configFieldName in cls._configNameMap:
+            descrFieldData = config.pop(descriptorFieldName)
+            ret[configFieldName] = descrFieldData
+        # The rest of the descriptor fields go in unchanged
+        ret.update(config)
+        return ret
 
     @classmethod
     def getCloudNameFromDescriptorData(cls, descriptorData):
@@ -382,6 +450,12 @@ class BaseDriver(object):
 
     def drvVerifyCloudConfiguration(self, config):
         pass
+
+    @classmethod
+    def _strip(cls, obj):
+        if not isinstance(obj, basestring):
+            return obj
+        return obj.strip()
 
     def saveTarget(self, dataDict):
         try:
@@ -515,6 +589,120 @@ class BaseDriver(object):
                                               value = 128))
         return descr
 
+    def captureSystem(self, job, instanceId, params):
+        if not hasattr(self, 'drvCaptureSystem'):
+            raise NotImplemented()
+        instance = self.getInstance(instanceId)
+        archive = self.drvCaptureSystem(job, instance, params)
+        self.uploadCapturedImage(job, instance, params, archive)
+        self._msg(job, "Finished")
+
+    def _getCaptureTmpName(self, vmName):
+        from random import Random
+        r = Random().randrange(10000, 99999)
+        return "%s capture %s" % (vmName, r)
+
+    class IntervalCallback(object):
+        INTERVAL = 2
+        def __init__(self, totalSize, callback):
+            self.totalSize = totalSize
+            self.last = 0
+            self.callback = callback
+            self.prevFilesSize = 0
+
+        def progress(self, bytes, rate=0):
+            now = time.time()
+            if (self.last + self.INTERVAL > now and
+                    self.prevFilesSize + bytes < self.totalSize):
+                return
+            self.last = now
+            pct = self._percent(bytes)
+            self.callback(pct)
+
+        def _percent(self, bytes):
+            if self.totalSize == 0:
+                return 100
+            return min(100,
+                int((self.prevFilesSize + bytes) * 100.0 / self.totalSize))
+
+        def updateSize(self, size):
+            self.prevFilesSize += size
+
+        def updateTotalSize(self, size):
+            self.totalSize += size
+
+    class DummyWriter(object):
+        @classmethod
+        def write(cls, *args):
+            pass
+
+    class XML(object):
+        _etree = etree
+
+        @classmethod
+        def Text(cls, tagName, text):
+            txt = cls._etree.Element(tagName)
+            txt.text = text
+            return txt
+        @classmethod
+        def Element(cls, tagName, *children, **attributes):
+            node = cls._etree.Element(tagName, attrib=attributes)
+            node.extend(children)
+            return node
+        @classmethod
+        def toString(cls, elt, encoding=None, prettyPrint=True):
+            return cls._etree.tostring(elt, encoding=encoding, pretty_print=prettyPrint)
+
+
+    def uploadCapturedImage(self, job, instance, params, archive):
+        imageUploadUrl = params.pop('imageUploadUrl')
+        imageFilesCommitUrl = params.pop('imageFilesCommitUrl')
+        outputToken = params.pop('outputToken')
+        imageTitle = params.pop('imageTitle')
+        imageName = params.pop('imageName')
+        headers = { 'X-rBuilder-OutputToken' : outputToken }
+
+        self._msg(job, "Computing SHA1 digest")
+        # Grab file size
+        archive.seek(0, 2)
+        contentLength = archive.tell()
+        archive.seek(0)
+        ctx = digestlib.sha1()
+
+        cb = self.IntervalCallback(contentLength, callback=lambda x:
+            self._msg(job, "SHA1 digest: %d%%" % x))
+        util.copyfileobj(archive, self.DummyWriter, digest=ctx, callback=cb.progress)
+        sha1 = ctx.hexdigest()
+
+        # Grab file size
+        cb = self.IntervalCallback(contentLength,
+            callback=lambda x:
+                self._msg(job, "Uploading captured image: %d%%" % x))
+
+        uploadUrl = "%s/%s" % (imageUploadUrl, imageName)
+        cli = rl_client.Client(uploadUrl, headers)
+        cli.connect()
+        cli.request("PUT", body=archive, headers=headers, callback=cb.progress)
+        # partition splits at the first '_'
+        metadataNodes = [ (x.partition('_'), y) for (x, y) in params.items() ]
+        # we only care about a leading metadata
+        metadataNodes = [ self.XML.Text(x[2], y)
+            for (x, y) in metadataNodes if x[0] == 'metadata' ]
+        root = self.XML.Element("files",
+            self.XML.Element("file",
+                self.XML.Text("title", imageTitle),
+                self.XML.Text("size", str(contentLength)),
+                self.XML.Text("sha1", sha1),
+                self.XML.Text("fileName", imageName),
+            ),
+            self.XML.Element('metadata', *metadataNodes))
+        xml = self.XML.toString(root)
+
+        self._msg(job, "Committing captured image")
+        cli = rl_client.Client(imageFilesCommitUrl, headers)
+        cli.connect()
+        cli.request("PUT", body=xml)
+
     def deployImage(self, xmlString, auth):
         # Grab descriptor
         descr = self.getImageDeploymentDescriptor()
@@ -522,6 +710,50 @@ class BaseDriver(object):
         descrData = descriptor.DescriptorData(fromStream = xmlString,
             descriptor = descr)
         return self.deployImageFromDescriptorData(descrData, auth, xmlString)
+
+    def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl):
+        imageId = imageFileInfo['fileId']
+        image = self._nodeFactory.newImage(id=imageId,
+            imageId=imageId, isDeployed=False,
+            is_rBuilderImage=True,
+            cloudName=self.cloudName,
+            downloadUrl=imageDownloadUrl)
+        self.updateImageFromFileInfo(image, imageFileInfo)
+        return image
+
+    def updateImageFromFileInfo(self, image, imageFileInfo):
+        image.setBaseFileName(imageFileInfo['baseFileName'])
+        image.setChecksum(imageFileInfo.get('sha1'))
+        image.setSize(imageFileInfo.get('size'))
+        image._fileId = imageFileInfo['fileId']
+        return image
+
+    def deployImageFromUrl(self, job, image, descriptorDataXml):
+        """Only invoked via rmake"""
+        # Grab descriptor
+        descr = self.getImageDeploymentDescriptor()
+        descr.setRootElement("descriptor_data")
+        # Parse the XML string into descriptor data
+        descriptorData = descriptor.DescriptorData(
+            fromStream=descriptorDataXml, descriptor=descr)
+
+        params = self.getDeployImageParameters(image, descriptorData)
+        self.deployImageProcess(job, image, auth=None, **params)
+        return image
+
+    def launchSystemSynchronously(self, job, image, descriptorDataXml):
+        """Only invoked via rmake"""
+        # Grab descriptor
+        descr = self.getLaunchDescriptor()
+        descr.setRootElement("descriptor_data")
+        # Parse the XML string into descriptor data
+        descriptorData = descriptor.DescriptorData(
+            fromStream=descriptorDataXml, descriptor=descr)
+
+        params = self.getLaunchInstanceParameters(image, descriptorData)
+        instanceIdList = self.launchInstanceWrapper(job, image, auth=None, **params)
+        return instanceIdList
+
 
     def launchInstance(self, xmlString, auth):
         # Grab the launch descriptor
@@ -531,32 +763,48 @@ class BaseDriver(object):
             descriptor = descr)
         return self.launchInstanceFromDescriptorData(descrData, auth, xmlString)
 
+    def launchInstanceWrapper(self, *args, **kwargs):
+        try:
+            self._launchInstanceWrapper(*args, **kwargs)
+        finally:
+            self.cleanUpX509()
+
+    def _launchInstanceWrapper(self, job, image, auth, **launchParams):
+        realInstanceId = self.launchInstanceProcess(job, image, auth,
+            **launchParams)
+        if not realInstanceId:
+            job.addHistoryEntry('Launch failed, no instance was created')
+            return
+        # Some drivers (like ec2) may have the ability to launch
+        # multiple instances with the same call.
+        instanceIdList = realInstanceId
+        if not isinstance(instanceIdList, list):
+            instanceIdList = [ instanceIdList ]
+        x509Cert, x509Key = self.getWbemX509()
+        # Read the cert files
+        x509Cert = file(x509Cert).read()
+        x509Key = file(x509Key).read()
+        self.updateInventory(instanceIdList, x509Cert, x509Key, launchParams,
+            image, withNetwork=True)
+        self.waitForRunningState(job, instanceIdList)
+        self.waitForNetwork(job, instanceIdList)
+        self.updateInventory(instanceIdList, x509Cert, x509Key, launchParams,
+            image, withNetwork=False)
+        return instanceIdList
+
     def launchInstanceInBackground(self, jobId, image, auth, **params):
         job = self._instanceLaunchJobStore.get(jobId, commitAfterChange = True)
         job.setFields([('pid', os.getpid()), ('status', job.STATUS_RUNNING) ])
-        job.addHistoryEntry('Running')
+        self._msg(job, "Launching instance from image %s (type %s)" % (
+            image.getImageId(), image._imageType))
         try:
             try:
-                realInstanceId = self.launchInstanceProcess(job, image, auth, **params)
-                if not realInstanceId:
-                    job.addHistoryEntry('Launch failed, no instance was created')
+                instanceIds = self._launchInstanceWrapper(job, image, auth, **params)
+                if instanceIds is None:
                     job.status = job.STATUS_FAILED
                     return
-                # Some drivers (like ec2) may have the ability to launch
-                # multiple instances with the same call.
-                if not isinstance(realInstanceId, list):
-                    realInstanceId = [ realInstanceId ]
-                self.waitForRunningState(job, realInstanceId)
-                x509Cert, x509Key = self.getWbemX509()
-                # Read the cert files
-                x509Cert = file(x509Cert).read()
-                x509Key = file(x509Key).read()
-                for instanceId in realInstanceId:
-                    system = self._updateInventory(instanceId, job.cloudType,
-                        job.cloudName, x509Cert, x509Key, params)
-                job.addResults(realInstanceId)
+                job.addResults(instanceIds)
                 job.addHistoryEntry('Done')
-                job.system = system.pk
                 job.status = job.STATUS_COMPLETED
             except errors.CatalogError, e:
                 err = errors.CatalogErrorResponse(e.status,
@@ -585,6 +833,8 @@ class BaseDriver(object):
                     job.addHistoryEntry('Image deployment failed, no image was uploaded')
                     job.status = job.STATUS_FAILED
                     return
+                if not isinstance(realImageId, list):
+                    realImageId = [realImageId]
                 job.addResults(realImageId)
                 job.addHistoryEntry('Done')
                 job.status = job.STATUS_COMPLETED
@@ -609,7 +859,7 @@ class BaseDriver(object):
         expired = time.time() + self.LAUNCH_TIMEOUT
         first = True
         while time.time() < expired:
-            instances = self.drvGetInstances(instanceIds)
+            instances = self.drvGetInstances(instanceIds, force=True)
             states = set(x.getState().lower() for x in instances)
             instanceIds = sorted(x.getInstanceId() for x in instances)
             msg = ', '.join(instanceIds)
@@ -621,10 +871,28 @@ class BaseDriver(object):
                 first = False
             else:
                 self._msg(job, "Waiting for a running state...")
-            time.sleep(2)
+            time.sleep(self.WAIT_RUNNING_STATE_SLEEP)
         results = [ (x.getInstanceId(), x.getState()) for x in instances ]
         msg = '; '.join("Instance %s state: %s" % r for r in results)
         self._msg(job, msg)
+
+    def waitForNetwork(self, job, instanceIds):
+        # Wait until all instances have a network
+        expired = time.time() + self.LAUNCH_NETWORK_TIMEOUT
+        while time.time() < expired:
+            instances = self.drvGetInstances(instanceIds, force=True)
+            imaps = [ (x, x.getPublicDnsName()) for x in instances ]
+            withNetworks = [ x for (x, y) in imaps if y is not None ]
+            withoutNetworks = [ x for (x, y) in imaps if y is None ]
+            for inst in withNetworks:
+                self._msg(job, "Instance %s: %s" % (
+                    inst.getInstanceId(), inst.getPublicDnsName()))
+            if not withoutNetworks:
+                return
+            instanceIds = sorted(x.getInstanceId() for x in withoutNetworks)
+            msg = ', '.join(instanceIds)
+            self._msg(job, "Waiting for network information for %s" % msg)
+            time.sleep(self.WAIT_NETWORK_SLEEP)
 
     def launchInstanceInBackgroundCleanup(self, image, **params):
         self.cleanUpX509()
@@ -727,10 +995,6 @@ class BaseDriver(object):
         ret.update(type_='image-deployment')
         return ret
 
-    def linkTargetImageToImage(self, image, targetImageId):
-        self.db.targetMgr.linkTargetImageToImage(self.cloudType,
-            self.cloudName, image._fileId, targetImageId)
-
     def createCloud(self, cloudConfigurationData):
         # Grab the configuration descriptor
         descr = self.getCloudConfigurationDescriptor()
@@ -792,21 +1056,34 @@ class BaseDriver(object):
         descrData = descriptor.DescriptorData(descriptor = descr)
 
         cloudConfig = self.getTargetConfiguration(isAdmin = True)
-        kvlist = []
-        for k, v in cloudConfig.items():
-            df = descr.getDataField(k)
-            if df is None:
-                continue
-            # We add all field names and values to the list first, so we can
-            # sort them after adding the extra maps
-            kvlist.append((k, v))
-        for field, k in self._configNameMap:
-            kvlist.append((field, cloudConfig.get(k)))
-        kvlist.sort()
 
-        for k, v in kvlist:
+        validFields = set(x.name for x in descr.getDataFields())
+        for k, v in sorted(cloudConfig.items()):
+            if k not in validFields:
+                continue
             descrData.addField(k, value = v, checkConstraints=False)
         return self._nodeFactory.newCloudConfigurationDescriptorData(descrData)
+
+    def _getStoredTargetConfiguration(self):
+        try:
+            targetData = self.db.targetMgr.getTargetData(self.cloudType,
+                                                         self.cloudName)
+        except TargetMissing:
+            targetData = {}
+
+        targetData = self.remapTargetConfigurationFields(targetData)
+        return targetData
+
+    @classmethod
+    def remapTargetConfigurationFields(cls, targetConfig):
+        ret = targetConfig.copy()
+        undef = object()
+        for nameDescr, nameDb in cls._configNameMap:
+            val = ret.pop(nameDb, undef)
+            if val is undef:
+                continue
+            ret[nameDescr] = val
+        return ret
 
     def getTargetConfiguration(self, isAdmin = False, forceAdmin = False):
         # We can't set both isAdmin and forceAdmin at the same time
@@ -817,11 +1094,7 @@ class BaseDriver(object):
             raise errors.PermissionDenied("Permission Denied - user is not adminstrator")
         if not forceAdmin and bool(self._targetConfig):
             return self._targetConfig
-        try:
-            targetData = self.db.targetMgr.getTargetData(self.cloudType,
-                                                         self.cloudName)
-        except TargetMissing:
-            targetData = {}
+        targetData = self._getStoredTargetConfiguration()
 
         # If we force admin, don't pollute _targetConfig
         ret = self.drvGetTargetConfiguration(targetData,
@@ -847,6 +1120,35 @@ class BaseDriver(object):
             if val is not None:
                 return val
         return None
+
+    def linkTargetImageToImage(self, image):
+        targetImageId = image.getImageId()
+        rbuilderImageId = image._fileId
+        self.db.targetMgr.linkTargetImageToImage(self.cloudType,
+            self.cloudName, rbuilderImageId, targetImageId)
+
+    def _deployImage(self, job, image, auth, *args, **kwargs):
+        # This is really OO spaghetti.
+        # deployImageProcess in sublcasses calls _deployImage in the
+        # base class, which calls _deployImageFromFile from the subclass
+        # again.
+        tmpDir = tempfile.mkdtemp(prefix="%s-download-" % self.cloudType)
+        path = self.downloadImage(job, image, tmpDir, auth=auth)
+        try:
+            vmRef = self._deployImageFromFile(job, image, path, *args, **kwargs)
+            targetImageId = self.getImageIdFromTargetImageRef(vmRef)
+            image.setId(targetImageId)
+            image.setImageId(targetImageId)
+            image.setInternalTargetId(targetImageId)
+            self.linkTargetImageToImage(image)
+            return vmRef
+        finally:
+            # clean up our mess
+            util.rmtree(tmpDir, ignore_errors=True)
+
+    def getImageIdFromTargetImageRef(self, vmRef):
+        # Default implementation is fairly dumb
+        return vmRef
 
     def extractImage(self, path):
         if path.endswith('.zip'):
@@ -966,7 +1268,9 @@ class BaseDriver(object):
         files = image.get('files', [])
         if not files:
             return None
-        return files[0]['sha1']
+        ffile = files[0]
+        # If uniqueImageId is present, use that.
+        return ffile.get('uniqueImageId', ffile['sha1'])
 
     def _getImageIdFromMintImage_local(self, imageData, targetImageIds):
         """
@@ -984,7 +1288,8 @@ class BaseDriver(object):
         # Some of them may have been removed, so only look for the overlapping
         # ones
         inters = targetImageIdsFromMint.intersection(targetImageIds)
-        mintImageId = imageData['_mintImageId'] = fdata['sha1']
+        mintImageId = imageData['_mintImageId'] = fdata.get('uniqueImageId',
+            fdata['sha1'])
         if inters:
             imageId = imageData['_targetImageId'] = inters.pop()
             return imageId
@@ -1024,6 +1329,7 @@ class BaseDriver(object):
             image._fileId = imgf.get('fileId')
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
+        image._imageType = mintImageData['imageType']
 
         for key, methodName in methodMap.iteritems():
             value = mintImageData.get(key)
@@ -1107,13 +1413,29 @@ class BaseDriver(object):
         bootUuidFile.write(self.getBootUuid())
         bootUuidFile.flush()
 
-        # Make ISO, if it doesn't exist already
-        cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
-            "-o", isoFile,
+        directMethodFile = None
+        if self.zoneAddresses:
+            directMethodFile = tempfile.NamedTemporaryFile()
+            tmpl = "directMethod %s\n"
+            directMethodFile.write(tmpl % "[]")
+            for za in self.zoneAddresses:
+                directMethodFile.write(tmpl % za)
+            directMethodFile.flush()
+
+        graftList = [
             "SECURITY-CONTEXT-BOOTSTRAP=%s" % empty,
             "etc/sfcb/clients/%s.0=%s" % (certHash, certFile),
             "etc/conary/rpath-tools/boot-uuid=%s" % bootUuidFile.name,
         ]
+
+        if directMethodFile:
+            graftList.append("etc/conary/rpath-tools/config.d/directMethod=%s"
+                % directMethodFile.name)
+
+        # Make ISO, if it doesn't exist already
+        cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
+            "-o", isoFile,
+        ] + graftList
 
         devnull = file(os.devnull, "w")
         p = subprocess.Popen(cmd, shell = False, stdout=devnull,
@@ -1151,6 +1473,61 @@ class BaseDriver(object):
 
     class ProbeHostError(Exception):
         pass
+
+    def _buildExportArchive(self, job, destDir, ovfFiles):
+        dest = tempfile.TemporaryFile(prefix="system-capture-%s-" % self.cloudType,
+            suffix=".ova")
+        callback = lambda pct: self._msg(job, "Archiving: %d%%" % pct)
+        callback = self.IntervalCallback(0, callback)
+        t = self.TarWriter(dest, destDir, callback=callback)
+        t.archive(ovfFiles)
+        return dest
+
+class FileWithProgress(file):
+    """
+    A file object that calls a progress callback
+    """
+    def __init__(self, *args, **kwargs):
+        self._readCallback = kwargs.pop('readCallback', None)
+        file.__init__(self, *args, **kwargs)
+        if self._readCallback:
+            self._readCallback.updateTotalSize(os.fstat(self.fileno()).st_size)
+
+    def read(self, size=None):
+        data = file.read(self, size)
+        if self._readCallback:
+            self._readCallback.progress(self.tell())
+        return data
+
+class TarWriter(object):
+    def __init__(self, destFile, baseDir, callback):
+        self.baseDir = baseDir
+        if isinstance(destFile, basestring):
+            self.tarfile = tarfile.TarFile(destFile, mode="w")
+        else:
+            self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
+        self.callback = callback
+
+    def setIncrementSize(self, incrementSize):
+        self.callback.INCREMENT = incrementSize
+
+    def archive(self, fileNames):
+        tfiles = []
+        for fname in fileNames:
+            fullPath = os.path.join(self.baseDir, fname)
+            fwp = FileWithProgress(fullPath, readCallback=self.callback)
+            tfiles.append((self.tarfile.gettarinfo(arcname=fname, fileobj=fwp),
+                fwp))
+
+        for ti, fwp in tfiles:
+            self.tarfile.addfile(ti, fileobj=fwp)
+            self.callback.updateSize(ti.size)
+        self.close()
+
+    def close(self):
+        if self.tarfile is not None:
+            self.tarfile.close()
+            self.tarfile = None
 
 class CookieClient(object):
     def __init__(self, server, username, password):
@@ -1380,4 +1757,6 @@ class Archive(object):
                 if member.name.endswith(extension):
                     yield member
 
+
 BaseDriver.Archive = Archive
+BaseDriver.TarWriter = TarWriter

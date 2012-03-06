@@ -183,6 +183,8 @@ class BaseInstance(xmlNode.BaseNode):
                   'forceUpdateUrl', # force refresh the installed sw data
                   'update',      # update the sw on the system
                   'job',
+                  '_opaqueId',
+                  'credentials',
                   ]
     _slotTypeMap = dict(updateStatus = BaseInstanceUpdateStatus,
                         productCode = _ProductCode,
@@ -196,6 +198,13 @@ class BaseInstance(xmlNode.BaseNode):
                         update = UpdateHref,
                         job = BaseInstanceJobHref)
     _slotAttributes = set([ 'id' ])
+
+    def setCredentials(self, credentialsIds):
+        self.credentials = Credentials()
+        fact = xmllib.StringNode
+        self.credentials.extend(
+            fact().setName("opaqueCredentialsId").characters(str(x))
+                for x in credentialsIds)
 
 class IntegerNode(xmlNode.xmllib.IntegerNode):
     "Basic integer node"
@@ -211,6 +220,9 @@ class InstanceType(xmlNode.BaseNode):
 class InstanceTypes(xmlNode.BaseNodeCollection):
     tag = "instanceTypes"
 
+class Credentials(xmlNode.BaseNodeCollection):
+    tag = "credentials"
+
 class Handler(xmlNode.Handler):
     launchIndexClass = IntegerNode
     instanceClass = BaseInstance
@@ -224,3 +236,4 @@ class Handler(xmlNode.Handler):
         self.registerType(self.instancesClass, self.instancesClass.tag)
         self.registerType(self.instanceTypeClass, self.instanceTypeClass.tag)
         self.registerType(self.instanceTypesClass, self.instanceTypesClass.tag)
+        self.registerType(Credentials, Credentials.tag)

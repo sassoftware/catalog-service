@@ -199,9 +199,6 @@ class OpenStackClient(baseDriver.BaseDriver):
                     "Error initializing client: %s" % (e, ))
         return clients
 
-    def drvVerifyCloudConfiguration(self, config):
-        return
-
     def terminateInstances(self, instanceIds):
         running_instances = self.getInstances(instanceIds)
         for server in running_instances:
@@ -263,7 +260,7 @@ class OpenStackClient(baseDriver.BaseDriver):
         # Grab the last part of the URL and return it
         return os.path.basename(ref)
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         client = self.client.nova
         cloudAlias = self.getCloudAlias()
         instanceList = instances.BaseInstances()
@@ -351,7 +348,6 @@ class OpenStackClient(baseDriver.BaseDriver):
             img = self._nodeFactory.newImage(
                 id = imageId,
                 imageId = imageId,
-                internalTargetId = imageId,
                 isDeployed = True,
                 is_rBuilderImage = False,
                 shortName = imageName,
@@ -361,7 +357,7 @@ class OpenStackClient(baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
             img.opaqueId = self._getLinkRel(image, 'self')
             ret.append(img)
-        return ret
+        return self.filterImages(imageIdsFilter, ret)
 
     @classmethod
     def _getLinkRel(cls, obj, rel):
@@ -409,9 +405,6 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageId = self._importImage(imageMetadata, fobj)
         finally:
             util.rmtree(tmpDir, ignore_errors = True)
-        # Mark the image as deployed
-        self.linkTargetImageToImage(image, imageId)
-        image.setInternalTargetId(imageId)
         return imageId
 
     def _launchInstanceOnTarget(self, name, imageRef, flavorRef):

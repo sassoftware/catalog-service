@@ -1,19 +1,16 @@
 #!/usr/bin/python
 #
-# Copyright (c) 2008 rPath, Inc.  All Rights Reserved.
+# Copyright (c) 2008-2011 rPath, Inc.  All Rights Reserved.
 #
 
-import errno
-import glob
 import os
-import select
-import struct
 import sys
 import time
-from lxml import etree
 
-from VimService_client import *
-from ZSI.wstools import logging
+from catalogService.libs.ovf import OVF
+
+from VimService_client import *  # pyflakes=ignore
+#from ZSI.wstools import logging
 from ZSI.wstools import TimeoutSocket
 from ZSI import FaultException
 #logging.setLevel(logging.DEBUG)
@@ -77,6 +74,8 @@ class VIConfig(object):
         self.props = {}
         self.networks = {}
         self.distributedVirtualSwitches = {}
+        self.vmFolders = {}
+        self.vmFolderTree = {}
 
     def addDatacenter(self, dc):
         self.datacenters.append(dc)
@@ -98,7 +97,7 @@ class VIConfig(object):
         return self.namemap[mor]
 
     def getMOR(self, morid):
-        return self.mormap[morid]
+        return self.mormap.get(morid, None)
 
     def setProperties(self, props):
         self.props = props
@@ -120,29 +119,73 @@ class VIConfig(object):
     def getDistributedVirtualSwitch(self, dvs):
         return self.distributedVirtualSwitches.get(dvs)
 
+    def getVmFolderTree(self, folder):
+        return self.vmFolderTree[folder]
+
+    def getVmFolderLabelsForTree(self, folder):
+        """Return a list of labels and folders for all sub-folders of the
+        specified one"""
+        stack = [ ("", folder) ]
+        ret = []
+        while stack:
+            parentPath, nodeMor = stack.pop()
+            nodeProps = self.vmFolders[nodeMor]
+            nodeLabel = "%s/%s" % (parentPath,
+                self._escapeFolderName(nodeProps['name']))
+            children = self.vmFolderTree.get(nodeMor, [])
+            stack.extend((nodeLabel, x) for x in children)
+            ret.append((nodeLabel, nodeMor))
+        ret.sort(key=lambda x: x[0])
+        return ret
+
+    def getVmFolderLabelPath(self, folder):
+        """
+        Walk backwards until we reach a top-level folder
+        """
+        stack = []
+        node = folder
+        # Hash datacenters
+        topFolders = dict((dc.properties['vmFolder'], dc)
+            for dc in self.datacenters)
+        dcName = None
+        while 1:
+            morProps = self.vmFolders[node]
+            dc = topFolders.get(node)
+            if dc is not None:
+                dcName = dc.properties['name']
+                stack.append(self._escapeFolderName(morProps['name']))
+                break
+
+            childTypes = morProps['childType'].get_element_string()
+            if 'VirtualMachine' not in childTypes:
+                # Got to a non-VM folder
+                break
+            stack.append(self._escapeFolderName(morProps['name']))
+            node = morProps['parent']
+        stack.reverse()
+        return dcName, '/'.join(stack)
+
+    @classmethod
+    def _escapeFolderName(cls, folderName):
+        return folderName.replace('/', '%2f')
+
 class Error(Exception):
     pass
 
-class ProgressUpdate(object):
-    def __init__(self, vmclient, httpNfcLease):
+class LeaseProgressUpdate(object):
+    def __init__(self, vmclient, httpNfcLease, callback=None):
         self.vmclient = vmclient
         self.httpNfcLease = httpNfcLease
-        self.totalSize = 0
-        self.prevFilesSize = 0
+        self.callback = callback
 
-    def progress(self, bytes, rate=0):
-        pct = self._percent(bytes)
+    def progress(self, percent):
         req = HttpNfcLeaseProgressRequestMsg()
         req.set_element__this(self.httpNfcLease)
-        req.set_element_percent(pct)
+        req.set_element_percent(percent)
 
         self.vmclient._service.HttpNfcLeaseProgress(req)
-
-    def _percent(self, bytes):
-        return int((self.prevFilesSize + bytes) * 100.0 / self.totalSize)
-
-    def updateSize(self, size):
-        self.prevFilesSize = size
+        if self.callback:
+            self.callback(percent)
 
 class VimService(object):
     def __init__(self, host, username, password, locale='en_US', debug=False,
@@ -369,12 +412,10 @@ class VimService(object):
     def _getDatastoreRef(self, configTarget, datastoreName):
         # determine the data store to use
         datastoreRef = None
-        found = False
         for vdsInfo in configTarget.get_element_datastore():
             dsSummary = vdsInfo.get_element_datastore()
             if (dsSummary.get_element_name() == datastoreName
                 or not datastoreName):
-                found = True
                 if dsSummary.get_element_accessible():
                     datastoreName = dsSummary.get_element_name()
                     datastoreRef = dsSummary.get_element_datastore()
@@ -710,7 +751,8 @@ class VimService(object):
                     else:
                         vals[idx] = None
 
-    def waitForValues(self, objmor, filterProps, endWaitProps, expectedVals):
+    def waitForValues(self, objmor, filterProps, endWaitProps, expectedVals,
+            callback=None):
         """
         Handle Updates for a single object.
         waits till expected values of properties to check are reached
@@ -720,20 +762,22 @@ class VimService(object):
         @param endWaitProps Properties list to check for expected values
         these be properties of a property in the filter properties list
         @param expectedVals values for properties to end the wait
+        @param callback A callback to be called with values of the
+            properties specified in filterProps
         @return true indicating expected values were met, and false otherwise
         """
 
         # Sometimes we're seeing BadStatusLine messages coming from vsphere
-        import time
         for i in range(10):
             try:
                 return self._waitForValues(objmor, filterProps, endWaitProps,
-                    expectedVals)
+                    expectedVals, callback=callback)
             except ZSI.client.httplib.BadStatusLine:
                 time.sleep(1)
         raise
 
-    def _waitForValues(self, objmor, filterProps, endWaitProps, expectedVals):
+    def _waitForValues(self, objmor, filterProps, endWaitProps, expectedVals,
+            callback=None):
         version = ''
         endVals = [ None ] * len(endWaitProps)
         filterVals = [ None ] * len(filterProps)
@@ -800,6 +844,9 @@ class VimService(object):
                         if endVal == expectedVal:
                             done = True
                             break
+                    else: #for; expected values not found
+                        if callback:
+                            callback(filterVals)
         finally:
             try:
                 req = DestroyPropertyFilterRequestMsg()
@@ -811,11 +858,12 @@ class VimService(object):
 
         return filterVals
 
-    def waitForTask(self, task):
+    def waitForTask(self, task, callback=None):
         result = self.waitForValues(task,
-                                    [ 'info.state', 'info.error' ],
+                                    [ 'info.state', 'info.progress', 'info.error' ],
                                     [ 'state' ],
-                                    [ [ 'success', 'error' ] ])
+                                    [ [ 'success', 'error' ] ],
+                                    callback=callback)
         if result[0] == 'success':
             return 'success'
         else:
@@ -893,7 +941,7 @@ class VimService(object):
         task = ret.get_element_returnval()
 
         result = self.waitForValues(task,
-                                    [ 'info.state', 'info.error' ],
+                                    [ 'info.state', 'info.progress', 'info.error' ],
                                     [ 'state' ],
                                     [ [ 'success', 'error' ] ])
         if result[0] == 'success':
@@ -920,13 +968,13 @@ class VimService(object):
             setter(value)
         return self._reconfigVM(vm, spec)
 
-    def _reconfigVM(self, vm, spec):
+    def _reconfigVM(self, vm, spec, callback=None):
         req = ReconfigVM_TaskRequestMsg()
         req.set_element__this(_strToMor(vm, 'VirtualMachine'))
         req.set_element_spec(spec)
         ret = self._service.ReconfigVM_Task(req)
         task = ret.get_element_returnval()
-        return self.waitForTask(task)
+        return self.waitForTask(task, callback=callback)
 
     def leaseComplete(self, httpNfcLease):
         req = HttpNfcLeaseCompleteRequestMsg()
@@ -970,6 +1018,88 @@ class VimService(object):
         # nodes
         ovf = OVF(ovfContents)
         return ovf.sanitize()
+
+    def destroyVM(self, vmMor, callback=None):
+        req = Destroy_TaskRequestMsg()
+        req.set_element__this(vmMor)
+
+        ret = self._service.Destroy_Task(req)
+        task = ret.get_element_returnval()
+        ret = self.waitForTask(task, callback=callback)
+        if ret != 'success':
+            raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
+
+    def ovfExport(self, vmMor, vmName, destinationPath, httpNfcLease, progressUpdate):
+        self.waitForLeaseReady(httpNfcLease)
+        try:
+            ovfFiles = self._ovfExport(httpNfcLease, destinationPath,
+                progressUpdate)
+        finally:
+            self.leaseComplete(httpNfcLease)
+
+        descr = self.createOvfDescriptor(vmMor, vmName, vmName, ovfFiles)
+        # Write OVF descriptor to disk
+        xmlData = descr.get_element_ovfDescriptor()
+        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
+        file(ovfFilePath, "w").write(xmlData)
+
+        ovfFileNames = [ os.path.basename(ovfFilePath) ]
+        ovfFileNames.extend(x.get_element_path() for x in ovfFiles)
+        return ovfFileNames
+
+    def _ovfExport(self, httpNfcLease, destinationPath, progressUpdate):
+        httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
+        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
+        ovfFiles = []
+
+        progressUpdate.totalSize = totalSize
+        progressUpdate.progress(0, 0)
+
+        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
+            url = deviceUrl.get_element_url()
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
+
+            fileName = os.path.basename(url)
+            destFile = os.path.join(destinationPath, fileName)
+
+            # If there are any exceptions, let them pass, we'll close
+            # the lease regardless
+            vmutils._getFile(destFile, url, callback = progressUpdate)
+
+            fileSize = os.stat(destFile).st_size
+
+            ovfFile = ns0.OvfFile_Def('').pyclass()
+            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
+            ovfFile.set_element_size(fileSize)
+            ovfFile.set_element_path(fileName)
+            ovfFiles.append(ovfFile)
+
+            progressUpdate.updateSize(fileSize)
+
+        progressUpdate.progress(100, 0)
+        return ovfFiles
+
+    def createOvfDescriptor(self, vmMor, name, description, ovfFiles):
+        req = CreateDescriptorRequestMsg()
+        req.set_element__this(self.getOvfManager())
+        req.set_element_obj(vmMor)
+        req.set_element_cdp(self.createOvfCreateDescriptorParams(
+            name, description, ovfFiles))
+
+        resp = self._service.CreateDescriptor(req)
+        createDescriptorResult = resp.get_element_returnval()
+        return createDescriptorResult
+
+    def createOvfCreateDescriptorParams(self, name, description, ovfFiles,
+            includeImageFiles=False):
+        params = ns0.OvfCreateDescriptorParams_Def('').pyclass()
+        params.set_element_name(name)
+        params.set_element_description(description)
+        params.set_element_ovfFiles(ovfFiles)
+        #params.set_element_includeImageFiles(includeImageFiles)
+
+        return params
 
     def ovfImportStart(self, ovfFileObj, vmName,
             vmFolder, resourcePool, dataStore, network):
@@ -1041,6 +1171,7 @@ class VimService(object):
 
         return vmMor
 
+
     def waitForLeaseReady(self, lease):
         ret = self.waitForValues(lease, ['state'],
             [ 'state' ], [ ['ready', 'error'] ])
@@ -1065,6 +1196,7 @@ class VimService(object):
         createImportSpecResult = resp.get_element_returnval()
         return createImportSpecResult
 
+
     def createOvfImportParams(self, parseDescriptorResult, vmName, network):
         params = ns0.OvfCreateImportSpecParams_Def('').pyclass()
         params.set_element_locale('')
@@ -1082,6 +1214,7 @@ class VimService(object):
             params.set_element_networkMapping([ nm ])
         return params
 
+
     def getOvfImportLease(self, resourcePool, vmFolder, importSpec):
         req = ImportVAppRequestMsg()
         req.set_element__this(resourcePool)
@@ -1092,6 +1225,20 @@ class VimService(object):
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 
+    def getOvfExportLease(self, vmMor):
+        req = ExportVmRequestMsg()
+        req.set_element__this(vmMor)
+        resp = self._service.ExportVm(req)
+        httpNfcLease = resp.get_element_returnval()
+        return httpNfcLease
+
+    def getLeaseManifest(self, lease):
+        # XXX Not working yet, we need 4.1
+        req = HttpNfcLeaseGetManifestRequestMsg()
+        req.set_element__this(lease)
+        resp = self._service.HttpNfcLeaseGetManifest(req)
+        manifest = resp.get_element_returnval()
+        return manifest
 
     def markAsTemplate(self, vm=None, uuid=None):
         mor = self._getVM(mor=vm, uuid=uuid)
@@ -1107,7 +1254,7 @@ class VimService(object):
                                                     'vmFolder',
                                                     'datastore',
                                                     'network' ],
-                                    'Folder': ['name'],
+                                    'Folder': ['name', 'parent', 'childType', ],
                                     'HostSystem': [ 'name',
                                                     'datastore',
                                                     'network' ],
@@ -1134,6 +1281,8 @@ class VimService(object):
                        for x in props.iteritems())
 
         networkTypes = set(['Network', 'DistributedVirtualPortgroup'])
+        vmFolders = {}
+        vmFolderTree = {}
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1162,6 +1311,12 @@ class VimService(object):
                     incompleteNetworks.add(mor)
                     continue
                 networks[mor] = morProps
+            elif objType == 'Folder':
+                childTypes = morProps['childType'].get_element_string()
+                if 'VirtualMachine' in childTypes:
+                    vmFolders[mor] = morProps
+                    parent = morProps['parent']
+                    vmFolderTree.setdefault(parent, []).append(mor)
 
         networksNotInFolder = [ x for (x, y) in networks.items()
             if y is None and x not in incompleteNetworks ]
@@ -1183,10 +1338,18 @@ class VimService(object):
                 networks[network] = nwprops
             nameMap.update((mor, p['name']) for (mor, p) in networks.items())
 
-        ret = []
-
         vicfg = VIConfig()
+        vicfg.vmFolders = vmFolders
+        vicfg.vmFolderTree = vmFolderTree
         for cr in crs:
+            # grab the previously retreived properties for this
+            # compute resource
+            crProps = props[cr]
+            dataCenter = hostFolderToDataCenter.get(crProps['parent'])
+            if dataCenter is None:
+                # The CR's parent (host folder) is not discoverable under one
+                # of the data centers, so skip this compute resource
+                continue
             # for each compute resource, we need to get the config
             # target.  This lets us build up the options for deploying
             # VMs
@@ -1203,14 +1366,6 @@ class VimService(object):
                 # their names.
                 ds = ds.get_element_datastore()
                 nameMap[ds.get_element_datastore()] = ds.get_element_name()
-            # grab the previously retreived properties for this
-            # compute resource
-            crProps = props[cr]
-            dc = hostFolderToDataCenter.get(crProps['parent'], None)
-            if dc is None:
-                # Probably a compute resource not attached to a host
-                # folder? Or lack of visibility to the parent folder?
-                continue
             # get the top level resource pool for the compute resource
             crRp = crProps['resourcePool']
 
@@ -1226,7 +1381,7 @@ class VimService(object):
             crRps = dict(x for x in props.iteritems() if x[0] in crRpMors)
             # nowe we can create some objects that are easier to deal with
             cr = ComputeResource(cr, crProps, configTarget, crRps)
-            dc.addComputeResource(cr)
+            dataCenter.addComputeResource(cr)
 
         for dc in hostFolderToDataCenter.values():
             vicfg.addDatacenter(dc)
@@ -1254,7 +1409,8 @@ class VimService(object):
         return mor
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
-                dc=None, cr=None, ds=None, rp=None, newuuid=None):
+                dc=None, ds=None, rp=None, newuuid=None, template=False,
+                vmFolder=None, callback=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1268,8 +1424,12 @@ class VimService(object):
                     break
             if not mor:
                 raise RuntimeError('No template with UUID %s' %uuid)
-        hostFolder = self.getMoRefProp(dc, 'hostFolder')
-        vmFolder = self.getMoRefProp(dc, 'vmFolder')
+        if vmFolder is None:
+            if dc is not None:
+                vmFolder = self.getMoRefProp(dc, 'vmFolder')
+            else:
+                # Copy the parent (folder) from the source vm
+                vmFolder = self.getMoRefProp(mor, 'parent')
 
         req = CloneVM_TaskRequestMsg()
         req.set_element__this(mor)
@@ -1277,14 +1437,16 @@ class VimService(object):
         req.set_element_name(name)
 
         cloneSpec = req.new_spec()
-        cloneSpec.set_element_template(False)
+        cloneSpec.set_element_template(template)
         # We do not want to power on the clone just yet, we need to attach its
         # credentials disk
         cloneSpec.set_element_powerOn(False)
         # set up the data relocation
         loc = cloneSpec.new_location()
-        #loc.set_element_datastore(ds)
-        loc.set_element_pool(rp)
+        if ds:
+            loc.set_element_datastore(ds)
+        if rp:
+            loc.set_element_pool(rp)
         cloneSpec.set_element_location(loc)
         # set up the vm config (uuid)
         config = cloneSpec.new_config()
@@ -1296,7 +1458,7 @@ class VimService(object):
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()
-        ret = self.waitForTask(task)
+        ret = self.waitForTask(task, callback=callback)
         if ret != 'success':
             # FIXME: better exception
             raise RuntimeError("Unable to clone template: %s" % ret)
@@ -1304,7 +1466,7 @@ class VimService(object):
         vm = tinfo.get_element_result()
         return vm
 
-    def shutdownVM(self, mor=None, uuid=None):
+    def shutdownVM(self, mor=None, uuid=None, callback=None):
         mor = self._getVM(mor=mor, uuid=uuid)
         req = ShutdownGuestRequestMsg()
         req.set_element__this(mor)
@@ -1321,17 +1483,17 @@ class VimService(object):
                 req.set_element__this(mor)
                 ret = self._service.PowerOffVM_Task(req)
                 task = ret.get_element_returnval()
-                res = self.waitForTask(task)
+                res = self.waitForTask(task, callback=callback)
                 if res.lower() != 'success':
                     raise RuntimeError(res)
 
-    def startVM(self, mor=None, uuid=None):
+    def startVM(self, mor=None, uuid=None, callback=None):
         mor = self._getVM(mor=mor, uuid=uuid)
         req = PowerOnVM_TaskRequestMsg()
         req.set_element__this(mor)
         ret = self._service.PowerOnVM_Task(req)
         task = ret.get_element_returnval()
-        res = self.waitForTask(task)
+        res = self.waitForTask(task, callback=callback)
         if res.lower() != 'success':
             raise RuntimeError(res)
 
@@ -1343,263 +1505,4 @@ class VimService(object):
     def __del__(self):
         if self._loggedIn:
             self.logout()
-
-class OVF(object):
-    class _OVFFlavor(object):
-        xsiNs = 'http://www.w3.org/2001/XMLSchema-instance'
-        rasdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData'
-        vssdNs = 'http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_VirtualSystemSettingData'
-        ovfNs = None
-        def __init__(self, doc):
-            self.doc = doc
-            self.xmlns = doc.nsmap.get(None, None)
-
-        @classmethod
-        def addNode(cls, item, name, value, ns=None):
-            if ns is None:
-                ns = cls.rasdNs
-            OVF._text(item, name, value, ns=ns)
-
-        def tostring(self):
-            return etree.tostring(self.doc, encoding = "UTF-8")
-
-        def getNetworkNames(self):
-            sections = self.getNetworkSections() or []
-            ret = []
-            for section in sections:
-                for network in OVF._getNodeByName(section, 'Network',
-                        [self.ovfNs, None]):
-                    name = OVF._getNodeAttribute(network, 'name', self.ovfNs)
-                    if name:
-                        ret.append(name)
-            return ret
-
-        def getNodeText(self, node, name):
-            return OVF._getNodeText(node, name, ns=self.rasdNs)
-
-        def getInstanceId(self, node):
-            return OVF._getNodeText(node, self.instanceIdTag, self.rasdNs)
-
-        def addNewHardwareItem(self, hardwareSection):
-            item = hardwareSection.makeelement("{%s}Item" % self.ovfNs)
-            # We need to add the item at the end of the section
-            allItems = list(hardwareSection.iterfind(item.tag))
-            if not allItems:
-                hardwareSection.insert(0, item)
-            else:
-                allItems[-1].addnext(item)
-            return item
-
-        def addHardwareItems(self, hardwareSection, nextInstanceId):
-            networkNames = self.getNetworkNames()
-            # Add back ethernet0 as E1000
-            item = self.addNewHardwareItem(hardwareSection)
-            if networkNames:
-                networkName = networkNames[0]
-            else:
-                networkName = None
-            self._addNetworkFields(item, nextInstanceId, networkName)
-
-        def hasSystemNode(self, hardwareSection):
-            tags = set([OVF._xmltag('System', self.ovfNs)])
-            if self.xmlns is None:
-                # Need to look for an item in the default namespace too
-                tags.add(OVF._xmltag('System', None))
-            for tag in tags:
-                if hardwareSection.find(tag) is not None:
-                    return True
-            return False
-
-        def addSystemNode(self, hardwareSection):
-            name = self.getNameFromOvfId()
-            system = hardwareSection.makeelement(
-                OVF._xmltag("System", self.ovfNs))
-            hardwareSection.insert(1, system)
-            self.addNode(system, "InstanceId", "0", ns=self.vssdNs)
-            self.addNode(system, "VirtualSystemIdentifier", name,
-                ns=self.vssdNs)
-            self.addNode(system, "VirtualSystemType", 'vmx-04', ns=self.vssdNs)
-
-    class _OVF_09(_OVFFlavor):
-        ovfNs = 'http://www.vmware.com/schema/ovf/1/envelope'
-        instanceIdTag = "InstanceId"
-        elementNameTag = "Caption"
-
-        def getNameFromOvfId(self):
-            contentNode = self.doc.find(OVF._xmltag('Content', self.xmlns))
-            return OVF._getNodeAttribute(contentNode, 'id', self.ovfNs)
-
-        def getNetworkSections(self):
-            return OVF._getSectionsByType(self.doc, 'NetworkSection_Type',
-                self.ovfNs, self.xsiNs)
-
-        def getHardwareSections(self):
-            contentNode = self.doc.find(OVF._xmltag('Content', self.xmlns))
-            return OVF._getSectionsByType(contentNode,
-                'VirtualHardwareSection_Type', self.ovfNs, self.xsiNs)
-
-        def addNewHardwareItem(self, hardwareSection):
-            item = hardwareSection.makeelement("{%s}Item" % self.ovfNs)
-            hardwareSection.append(item)
-            return item
-
-        def _addNetworkFields(self, item, nextInstanceId, networkName):
-            self.addNode(item, self.elementNameTag, "ethernet0")
-            self.addNode(item, "Description", "E1000 ethernet adapter")
-            self.addNode(item, self.instanceIdTag, str(nextInstanceId))
-            self.addNode(item, "ResourceType", "10")
-            self.addNode(item, "ResourceSubType", "E1000")
-            self.addNode(item, "AutomaticAllocation", "true")
-            if networkName:
-                self.addNode(item, "Connection", networkName)
-
-    class _OVF_10(_OVFFlavor):
-        ovfNs = 'http://schemas.dmtf.org/ovf/envelope/1'
-        instanceIdTag = "InstanceID"
-        elementNameTag = "ElementName"
-
-        def getNameFromOvfId(self):
-            vsys = self.doc.find(OVF._xmltag('VirtualSystem', self.ovfNs))
-            return OVF._getNodeAttribute(vsys, 'id', self.ovfNs)
-
-        def getNetworkSections(self):
-            return self.doc.findall(OVF._xmltag('NetworkSection', self.ovfNs))
-
-        def getHardwareSections(self):
-            vsys = self.doc.find(OVF._xmltag('VirtualSystem', self.ovfNs))
-            return vsys.findall(OVF._xmltag('VirtualHardwareSection', self.ovfNs))
-
-        def _addNetworkFields(self, item, nextInstanceId, networkName):
-            self.addNode(item, "AddressOnParent", "7")
-            self.addNode(item, "AutomaticAllocation", "true")
-            if networkName:
-                self.addNode(item, "Connection", networkName)
-            self.addNode(item, "Description", "E1000 ethernet adapter")
-            self.addNode(item, self.elementNameTag, "ethernet0")
-            self.addNode(item, self.instanceIdTag, str(nextInstanceId))
-            self.addNode(item, "ResourceSubType", "E1000")
-            self.addNode(item, "ResourceType", "10")
-
-    OvfVersions = [ _OVF_10, _OVF_09 ]
-
-    def __init__(self, string):
-        self._ovfContents = string
-        doc = etree.fromstring(string)
-        for cls in self.OvfVersions:
-            if self._getNsPrefix(doc, cls.ovfNs):
-                # In case the default ns is None, set it to the proper one
-                if None not in doc.nsmap:
-                    doc.nsmap[None] = cls.ovfNs
-                self.ovf = cls(doc)
-                break
-        else: # for
-            raise RuntimeError("Unsupported OVF")
-
-        self.maxInstanceId = 0
-
-
-    def sanitize(self):
-        hardwareSection = self.ovf.getHardwareSections()
-        if hardwareSection is None:
-            return self._ovfContents
-
-        hardwareSection = hardwareSection[0]
-        if not self.ovf.hasSystemNode(hardwareSection):
-            self.ovf.addSystemNode(hardwareSection)
-
-        # Iterate through all items
-        todelete = []
-        # instanceId is supposed to be unique, so compute the max; we'll add
-        # our new devices starting with this max
-        maxInstanceId = 0
-        itemTags = set([ self._xmltag('Item', self.ovf.ovfNs)])
-        if self.ovf.xmlns is None:
-            # Need to look for an item in the default namespace too
-            itemTags.add(self._xmltag('Item', None))
-        for i, node in enumerate(hardwareSection.iterchildren()):
-            if node.tag not in itemTags:
-                continue
-
-            resourceTypeText = self.ovf.getNodeText(node, "ResourceType")
-            # We are creating cdroms and networks as part of the deployment,
-            # so remove these sections
-            if resourceTypeText in [ '10', '15' ]: # [ 'cdrom', 'ethernet' ]
-                todelete.append(i)
-                continue
-            instanceId = self.ovf.getInstanceId(node)
-            try:
-                instanceId = int(instanceId or 0)
-            except ValueError:
-                # In case the instance id is not a number
-                instanceId = 0
-            maxInstanceId = max(maxInstanceId, instanceId)
-
-        # Remove items to be deleted, in reverse order
-        while todelete:
-            i = todelete.pop()
-            del hardwareSection[i]
-
-        self.ovf.addHardwareItems(hardwareSection, maxInstanceId + 1)
-        return self.ovf.tostring()
-
-
-    @classmethod
-    def _getNsPrefix(cls, node, namespace):
-        ret = [ prefix for (prefix, ns) in node.nsmap.iteritems()
-            if ns == namespace ]
-        ret.sort()
-        ret.reverse()
-        return ret
-
-    @classmethod
-    def _getNodeByName(cls, node, name, xmlnsList):
-        if not isinstance(xmlnsList, (list, tuple)):
-            xmlnsList = [ xmlnsList ]
-        for xmlns in xmlnsList:
-            ret = node.findall(cls._xmltag(name, xmlns))
-            if ret:
-                return ret
-        return []
-
-    @classmethod
-    def _getSectionsByType(cls, node, xstype, xmlns, xsins):
-        # XXX Technically, if they chose to use a different namespace prefix
-        # than ovf:, this would stop working.
-        xstype = "ovf:" + xstype
-        typeAttrib = cls._xmltag("type", xsins)
-        if xmlns is not None:
-            # Look for the node in the default namespace too
-            xmlns = (xmlns, None)
-        sections = cls._getNodeByName(node, 'Section', xmlns)
-        return [ x for x in sections if x.get(typeAttrib) == xstype ]
-
-    @classmethod
-    def _getNodeAttribute(cls, element, attribute, ns=None):
-        if ns is not None:
-            attribute = "{%s}%s" % (ns, attribute)
-        return element.attrib.get(attribute)
-
-    @classmethod
-    def _getNodeText(cls, element, tag, ns=None):
-        if ns is not None:
-            tag = "{%s}%s" % (ns, tag)
-        node = element.find(tag)
-        if node is None:
-            return None
-        return node.text
-
-    @classmethod
-    def _text(cls, element, tag, text, ns=None):
-        if ns is not None:
-            tag = "{%s}%s" % (ns, tag)
-        item = element.makeelement(tag)
-        item.text = text
-        element.append(item)
-        return item
-
-    @classmethod
-    def _xmltag(cls, name, namespace):
-        if namespace is None:
-            return name
-        return "{%s}%s" % (namespace, name)
 

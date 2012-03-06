@@ -46,6 +46,11 @@ class _BaseNode(xmlNode.BaseNode):
                 slotTypeMap[elementName] = element
         return slots, slotAttributes, slotTypeMap
 
+class ParamsType(_BaseNode):
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['name'],
+        elements=['Description'])
+
 class _ReferenceType(_BaseNode):
     __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
         attributes=['type', 'name', 'href', ])
@@ -94,8 +99,9 @@ class Files(xmlNode.BaseNodeCollection):
 
 class Error(_BaseNode):
     tag = 'Error'
-    __slots__ = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
-    _slotAttributes = [ 'minorErrorCode', 'majorErrorCode', 'message', ]
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=[ 'minorErrorCode', 'majorErrorCode', 'message',
+            'vendorSpecificErrorCode', 'stackTrace', ])
 
 class Owner(_ReferenceType):
     tag = 'Owner'
@@ -224,6 +230,11 @@ class Source(_ReferenceType):
 class VAppParent(_ReferenceType):
     tag = 'VAppParent'
 
+class MediaInsertOrEjectParams(_BaseNode):
+    tag = 'MediaInsertOrEjectParams'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(ParamsType,
+        elements=[Media])
+
 class InstantiateVAppTemplateParams(_BaseNode):
     tag = 'InstantiateVAppTemplateParams'
     __slots__ = [ 'name', 'Description', 'deploy', 'powerOn',
@@ -234,6 +245,11 @@ class InstantiateVAppTemplateParams(_BaseNode):
         InstantiationParams=InstantiationParams,
         linkedClone=bool, IsSourceDelete=bool, Source=Source)
 
+class CaptureVAppParams(ParamsType):
+    tag = 'CaptureVAppParams'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(ParamsType,
+        elements=[Source])
+
 class Children(_BaseNode):
     tag = 'Children'
     __slots__ = ['VApp', 'Vm', ]
@@ -242,9 +258,23 @@ class Children(_BaseNode):
 # Resolve circular reference
 VAppTemplate._slotTypeMap.update(Children=Children)
 
+class NetworkConnection(_BaseNode):
+    tag = 'NetworkConnection'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['network', ],
+        elements=["NetworkConnectionIndex", "IpAddress", "ExternalIpAddress",
+            ("IsConnected", bool), "MACAddress", "IpAddressAllocationMode",
+    ])
+
+class NetworkConnectionSection(_BaseNode):
+    tag = 'NetworkConnectionSection'
+    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_BaseNode,
+        attributes=['type', 'href', ],
+        elements=["PrimaryNetworkConnectionIndex", NetworkConnection, Link])
+
 class AbstractVApp(_ResourceEntityType):
     __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(_ResourceEntityType,
-        elements=['VAppParent', 'NetworkSection', ('deployed', bool)])
+        elements=['VAppParent', 'NetworkSection', NetworkConnectionSection, ('deployed', bool)])
 
 class VApp(AbstractVApp):
     tag = 'VApp'

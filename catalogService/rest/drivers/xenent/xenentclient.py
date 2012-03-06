@@ -270,25 +270,18 @@ class XenEntClient(baseDriver.BaseDriver):
         self._uuidToRefMap[uuid] = ref
         return ref
 
-    def drvVerifyCloudConfiguration(self, config):
-        return
-
     def terminateInstances(self, instanceIds):
         client = self.client
 
         instIdSet = set(os.path.basename(x) for x in instanceIds)
         runningInsts = self.getInstances(instanceIds)
 
-        synthesizedInstIds = [ x.getInstanceId() for x in runningInsts
-            if len(x.getInstanceId()) != 36 ]
         realInstIds =  [ x.getInstanceId() for x in runningInsts
             if len(x.getInstanceId()) == 36 ]
 
         for instId in realInstIds:
             instRef = self._cachedGet(instId, client.xenapi.VM.get_by_uuid)
             client.xenapi.VM.clean_shutdown(instRef)
-
-        self._killRunningProcessesForInstances(synthesizedInstIds)
 
         insts = instances.BaseInstances()
         insts.extend(runningInsts)
@@ -338,7 +331,7 @@ class XenEntClient(baseDriver.BaseDriver):
             return None
         return startTime
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         client = self.client
         instMap  = client.xenapi.VM.get_all_records()
         cloudAlias = self.getCloudAlias()
@@ -520,24 +513,22 @@ class XenEntClient(baseDriver.BaseDriver):
         raise errors.CatalogError("Task has finished unexpectedly: %s" % status)
 
     def _importImage(self, image, vmFile, srUuid):
-        checksum = image.getImageId()
+        checksum = image.getChecksum() or image.getImageId()
         taskRef = self.client.xenapi.task.create("Import of %s" % checksum,
             "Import of %s" % checksum)
         vmRef, vmUuid = self._putVmImage(vmFile, srUuid, taskRef)
         self._setVmMetadata(vmRef, checksum = checksum)
+        vmName = self.client.xenapi.VM.get_name_label(vmRef)
+        image.setShortName(vmName)
         return vmRef, vmUuid
 
-    def _deployImage(self, job, image, auth, srUuid):
-        tmpDir = tempfile.mkdtemp(prefix="xenent-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth, extension='.xva')
-        try:
-            job.addHistoryEntry('Importing image')
-            templRef, templUuid = self._importImage(image, path, srUuid)
+    def _deployImageFromFile(self, job, image, filePath, srUuid):
+        self._msg(job, 'Importing image')
+        templRef, templUuid = self._importImage(image, filePath, srUuid)
+        return templRef
 
-            image.setImageId(templUuid)
-            image.setInternalTargetId(templUuid)
-        finally:
-            util.rmtree(tmpDir, ignore_errors = True)
+    def getImageIdFromTargetImageRef(self, vmRef):
+        return self.client.xenapi.VM.get_uuid(vmRef)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
         params = baseDriver.BaseDriver.getLaunchInstanceParameters(self,
@@ -562,35 +553,30 @@ class XenEntClient(baseDriver.BaseDriver):
 
         imageId = image.getInternalTargetId()
 
-        job.addHistoryEntry('Cloning template')
+        self._msg(job, 'Cloning template')
         realId = self.cloneTemplate(job, imageId, instanceName,
             instanceDescription)
-        job.addHistoryEntry('Attaching credentials')
+        self._msg(job, 'Attaching credentials')
         try:
             self._attachCredentials(realId, srUuid)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
-        job.addHistoryEntry('Launching')
+        self._msg(job, 'Launching')
         self.startVm(realId)
-        return self.client.xenapi.VM.get_uuid(realId)
+        return self.getImageIdFromTargetImageRef(realId)
 
     def getImagesFromTarget(self, imageIdsFilter):
         cloudAlias = self.getCloudAlias()
         instMap  = self.client.xenapi.VM.get_all_records()
 
-        imageList = images.BaseImages()
+        imageList = []
 
         for vmRef, vm in instMap.items():
             if not vm['is_a_template']:
                 continue
 
-            imgChecksum = vm['other_config'].get('cloud-catalog-checksum')
-            if imgChecksum:
-                is_rBuilderImage = True
-                imageId = imgChecksum
-            else:
-                is_rBuilderImage = False
-                imageId = vm['uuid']
+            is_rBuilderImage = False
+            imageId = vm['uuid']
 
             if imageIdsFilter is not None and imageId not in imageIdsFilter:
                 continue
@@ -604,22 +590,7 @@ class XenEntClient(baseDriver.BaseDriver):
                     internalTargetId = vm['uuid'],
                     cloudAlias = cloudAlias)
             imageList.append(image)
-        return imageList
-
-    def _killRunningProcessesForInstances(self, synthesizedInstIds):
-        # For synthesized instances, try to kill the pid
-        for instId in synthesizedInstIds:
-            pid = self._instanceStore.getPid(instId)
-            if pid is not None:
-                # try to kill the child process
-                pid = int(pid)
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except OSError, e:
-                    if e.errno != 3: # no such process
-                        raise
-            # At this point the instance doesn't exist anymore
-            self._instanceStore.delete(instId)
+        return self.filterImages(imageIdsFilter, imageList)
 
     def cloneTemplate(self, job, imageId, instanceName, instanceDescription):
         client = self.client
@@ -737,15 +708,14 @@ class XenEntClient(baseDriver.BaseDriver):
 
     def _setVmMetadata(self, vmRef, checksum = None,
             templateUuid = None):
-        if checksum:
-            self._wrapper_add_to_other_config(vmRef,
-                'cloud-catalog-checksum', checksum)
-
-        if templateUuid:
-            self._wrapper_add_to_other_config(vmRef,
-                'cloud-catalog-template-uuid', templateUuid)
+        self._wrapper_add_to_other_config(vmRef,
+            'cloud-catalog-checksum', checksum)
+        self._wrapper_add_to_other_config(vmRef,
+            'cloud-catalog-template-uuid', templateUuid)
 
     def _wrapper_add_to_other_config(self, vmRef, key, data):
+        if data is None:
+            return
         try:
             self.client.xenapi.VM.add_to_other_config(vmRef, key, data)
         except XenAPI.Failure, e:

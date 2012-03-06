@@ -3,7 +3,6 @@
 #
 
 import os
-import socket
 import tempfile
 import time
 
@@ -13,6 +12,7 @@ from conary.lib import util
 from restlib import client as restclient
 
 from catalogService import errors
+from catalogService.libs.ovf import OVF
 from catalogService.rest import baseDriver
 from catalogService.rest.models import instances
 
@@ -119,7 +119,76 @@ class VCloudClient(baseDriver.BaseDriver):
   </dataFields>
 </descriptor>
 """
+
+    systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
+<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
+  <metadata>
+    <displayName>vCloud vApp Capture</displayName>
+    <descriptions>
+      <desc>Capturing a vApp</desc>
+    </descriptions>
+  </metadata>
+  <dataFields>
+    <field>
+      <name>instanceId</name>
+      <descriptions>
+        <desc>System ID</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must contain between 1 and 36 characters</desc>
+        </descriptions>
+        <length>36</length>
+      </constraints>
+      <required>true</required>
+      <hidden>true</hidden>
+    </field>
+    <field>
+      <name>imageTitle</name>
+      <descriptions>
+        <desc>Image Title</desc>
+      </descriptions>
+      <type>str</type>
+      <constraints>
+        <descriptions>
+          <desc>Field must be between 1 and 64 characters</desc>
+        </descriptions>
+        <length>64</length>
+      </constraints>
+      <required>true</required>
+    </field>
+    <field>
+      <name>architecture</name>
+      <descriptions>
+        <desc>Architecture</desc>
+      </descriptions>
+      <help lang="en_US" href="@Help_import_image_arch@"/>
+      <enumeratedType>
+        <describedValue>
+          <descriptions>
+            <desc>x86</desc>
+          </descriptions>
+          <key>x86</key>
+        </describedValue>
+        <describedValue>
+          <descriptions>
+            <desc>x86_64</desc>
+          </descriptions>
+          <key>x86_64</key>
+        </describedValue>
+      </enumeratedType>
+      <required>true</required>
+    </field>
+  </dataFields>
+</descriptor>
+"""
+
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
+    PENDING_STATES = set([
+        Models.Status.Text.state[Models.Status.Code.POWERED_OFF],
+        Models.Status.Text.state[Models.Status.Code.NOT_CREATED],
+    ])
     OVF_PREFERRENCE_LIST = [ '.ova', ]
 
     @classmethod
@@ -134,7 +203,7 @@ class VCloudClient(baseDriver.BaseDriver):
         if port == 443:
             url = "https://%s/api/v1.0/login" % serverName
         else:
-            url = "https://%s:%s/api/1.0/login" % (serverName, port)
+            url = "https://%s:%s/api/v1.0/login" % (serverName, port)
         rcli = RestClient(url)
         return rcli
 
@@ -145,10 +214,11 @@ class VCloudClient(baseDriver.BaseDriver):
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
         rcli = self._getVCloudClient(cloudConfig)
-        rcli.setCredentials(cloudConfig['organization'],
+        org = cloudConfig['organization']
+        rcli.setCredentials(org,
             credentials['username'], credentials['password'])
         # Do the actual login
-        rcli.login()
+        rcli.login(org)
         return rcli
 
     @classmethod
@@ -156,10 +226,10 @@ class VCloudClient(baseDriver.BaseDriver):
         return "%s-%s" % (prefix, os.path.basename(href))
 
     def drvPopulateImageDeploymentDescriptor(self, descr):
-        descr.setDisplayName('VMware vCloud Image Deployment Parameters')
-        descr.addDescription('VMware vCloud Image Deployment Parameters')
+        descr.setDisplayName('VMware vCloud Image Upload Parameters')
+        descr.addDescription('VMware vCloud Image Upload Parameters')
         self.drvImageDeploymentDescriptorCommonFields(descr)
-        return self._drvPopulateDescriptorFromTarget(descr)
+        return self._drvPopulateDescriptorFromTarget(descr, withNetwork=False)
 
     def drvPopulateLaunchDescriptor(self, descr):
         descr.setDisplayName("VMware vCloud Launch Parameters")
@@ -167,7 +237,7 @@ class VCloudClient(baseDriver.BaseDriver):
         self.drvLaunchDescriptorCommonFields(descr)
         return self._drvPopulateDescriptorFromTarget(descr)
 
-    def _drvPopulateDescriptorFromTarget(self, descr):
+    def _drvPopulateDescriptorFromTarget(self, descr, withNetwork=True):
         client = self.client
         vdcs = list(client.iterVdcs())
         dataCenters = []
@@ -186,7 +256,7 @@ class VCloudClient(baseDriver.BaseDriver):
         catalogs = [
             descr.ValueWithDescription(item[1], descriptions=item[0])
                 for item in sorted((x.name, self._id(x.href, 'catalog'))
-                    for x in client.iterCatalogs()) ]
+                    for x in client.iterWritableCatalogs()) ]
         descr.addDataField('catalog',
                            descriptions = 'Catalog',
                            required = True,
@@ -195,7 +265,6 @@ class VCloudClient(baseDriver.BaseDriver):
                            ],
                            type = descr.EnumeratedType(catalogs),
                            default=catalogs[0].key,
-                           readonly=True,
                            )
         descr.addDataField('dataCenter',
                            descriptions = 'Data Center',
@@ -205,30 +274,28 @@ class VCloudClient(baseDriver.BaseDriver):
                            ],
                            type = descr.EnumeratedType(dataCenters),
                            default=dataCenters[0].key,
-                           readonly=True,
                            )
-        for vdcKey, networks in networksMap.items():
-            networkKey = 'network-' + vdcKey
-            descr.addDataField(networkKey,
-                               descriptions = 'Network',
-                               required = True,
-                               help = [
-                                   ('launch/network.html', None)
-                               ],
-                               type = descr.EnumeratedType(networks),
-                               default=networks[0].key,
-                               readonly=True,
-                               conditional = descr.Conditional(
-                                    fieldName='dataCenter',
-                                    operator='eq',
-                                    fieldValue=vdcKey)
-                               )
+        if withNetwork:
+            for vdcKey, networks in networksMap.items():
+                networkKey = 'network-' + vdcKey
+                descr.addDataField(networkKey,
+                                   descriptions = 'Network',
+                                   required = True,
+                                   help = [
+                                       ('launch/network.html', None)
+                                   ],
+                                   type = descr.EnumeratedType(networks),
+                                   default=networks[0].key,
+                                   conditional = descr.Conditional(
+                                        fieldName='dataCenter',
+                                        operator='eq',
+                                        fieldValue=vdcKey)
+                                   )
         return descr
 
     def getImagesFromTarget(self, imageIds):
         cloudAlias = self.getCloudAlias()
-        imagesMap = dict(
-            self._iterResourceEntities(RestClient.TYPES.vAppTemplate))
+        imagesMap = dict(self._iterVappTemplates())
         ret = []
         for imageId, image in imagesMap.iteritems():
             imageName = image.name
@@ -244,7 +311,7 @@ class VCloudClient(baseDriver.BaseDriver):
                 cloudAlias = cloudAlias)
             img.opaqueId = image.href
             ret.append(img)
-        return ret
+        return self.filterImages(imageIds, ret)
 
     def drvGetInstance(self, instanceId):
         ret = self.drvGetInstances([instanceId])
@@ -252,7 +319,7 @@ class VCloudClient(baseDriver.BaseDriver):
             raise errors.HttpNotFound()
         return ret[0]
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         cloudAlias = self.getCloudAlias()
         if instanceIds:
             idFilter = set(instanceIds)
@@ -271,25 +338,22 @@ class VCloudClient(baseDriver.BaseDriver):
             return image.getImageId()
 
         ppop = launchParams.pop
-        imageId = ppop('imageId')
+        ppop('imageId')
         imageName = ppop('imageName')
         imageDescription = ppop('imageDescription', imageName)
         dataCenterRef = ppop('dataCenter')
         catalogRef = ppop('catalog')
-        networkRef = ppop('network-%s' % dataCenterRef)
 
         dataCenter = self._getVdc(dataCenterRef)
         catalog = self._getCatalog(catalogRef)
-        network = self._getNetworkFromVdc(dataCenter, networkRef)
 
-        vappTemplateRef = self._deployImage(job, image, auth,
+        self._deployImage(job, image, auth,
             imageName, imageDescription, dataCenter, catalog)
-
-        return [ self._idFromHref(vappTemplateRef) ]
+        return image.getImageId()
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
-        imageId = ppop('imageId')
+        ppop('imageId')
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
         dataCenterRef = ppop('dataCenter')
@@ -304,8 +368,9 @@ class VCloudClient(baseDriver.BaseDriver):
         network = self._getNetworkFromVdc(dataCenter, networkRef)
 
         if not image.getIsDeployed():
-            vappTemplateRef = self._deployImage(job, image, auth,
+            vappTemplate = self._deployImage(job, image, auth,
                 vappTemplateName, vappTemplateDescription, dataCenter, catalog)
+            vappTemplateRef = vappTemplate.href
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the
             # images should be marked as deployed for ESX targets
@@ -321,8 +386,7 @@ class VCloudClient(baseDriver.BaseDriver):
                 catalog)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
-        self._msg(job, 'Launching')
-        vapp = self._startVApp(vapp)
+        vapp = self._startVApp(job, vapp)
         self._msg(job, 'Instance launched')
         vmList = [ x[0] for x in self._iterVmsInVapp(vapp) ]
         return vmList
@@ -341,7 +405,9 @@ class VCloudClient(baseDriver.BaseDriver):
             return vapp
         vm = vmList[0]
         self._msg(job, 'Renaming vm: %s -> %s' % (vm.name, instanceName))
-        self.client.renameVm(vm, instanceName, instanceDescription)
+        callback = lambda: self._msg(job, "Waiting for rename task to finish")
+        self.client.renameVm(vm, instanceName, instanceDescription,
+            callback=callback)
         return vapp
 
     def _getMintImagesByType(self, imageType):
@@ -380,40 +446,35 @@ class VCloudClient(baseDriver.BaseDriver):
 
     def _getResourceRef(self, longRef, resourceIter):
         # Take out the leading vdc- or catalog- part
-        ref = longRef.split('-', 1)[1]
+        ref = longRef.split('-', 1)[-1]
+
         for res in resourceIter:
             if os.path.basename(res.href) == ref:
                 return res
         raise RuntimeError("Unable to find resource %s" % longRef)
 
+    def getImageIdFromTargetImageRef(self, vappTemplate):
+        return self._idFromHref(vappTemplate.href)
 
-    def _deployImage(self, job, image, auth, vappTemplateName,
+    def _deployImageFromFile(self, job, image, imagePath, vappTemplateName,
             vappTemplateDescription, dataCenter, catalog):
 
         logger = lambda *x: self._msg(job, *x)
-
-        tmpDir = tempfile.mkdtemp(prefix="vcloud-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth)
 
         vappTemplateName = self._findUniqueName(catalog, vappTemplateName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        archive = self.Archive(path, logger)
+        archive = self.Archive(imagePath, logger)
         archive.extract()
         self._msg(job, 'Uploading image to VMware vCloud')
         try:
             vapp = self.uploadVAppTemplate(job, vappTemplateName,
                 vappTemplateDescription, archive, dataCenter, catalog)
-
-            self.db.targetMgr.linkTargetImageToImage(self.cloudType,
-                self.cloudName, image._fileId, self._idFromHref(vapp.href))
-            return vapp.href
+            image.setShortName(vapp.name)
+            return vapp
         finally:
-            # clean up our mess
-            util.rmtree(tmpDir, ignore_errors=True)
-
-        pass
+            pass
 
     def _findUniqueName(self, catalog, vappTemplateName):
         return vappTemplateName
@@ -428,11 +489,32 @@ class VCloudClient(baseDriver.BaseDriver):
             vdc.href, vappTemplateRef, network.href, callback=callback)
         return vappRef
 
-    def _startVApp(self, vappRef):
+    def _startVApp(self, job, vappRef):
         vapp = self.client.refreshResource(vappRef)
+        self.powerOnVapp(job, vapp)
         return vapp
 
-    def _attachCredentials(self, job, instanceName, vapp, dataCenter, catalog):
+    def _attachCredentials(self, job, instanceName, vapp, vdc, catalog):
+        filename = self.getCredentialsIsoFile()
+        try:
+            self._msg(job, 'Uploading initial configuration')
+            fileobj = baseDriver.Archive.CommandArchive.File(
+                os.path.basename(filename), os.path.dirname(filename))
+            mediaName = 'Credentials for %s' % instanceName
+            media = self.uploadMedia(job, vdc, catalog, mediaName, fileobj)
+        finally:
+            # We use filename below only for the actual name; no need to keep
+            # this file around now
+            os.unlink(filename)
+
+        try:
+            for _, vm in self._iterVmsInVapp(vapp):
+                self.insertMedia(job, vm, media)
+        except Exception, e:
+            # We will not fail the request if we could not attach credentials
+            # to the instance
+            self.log_exception("Exception trying to attach credentials: %s", e)
+
         return vapp
 
     def _iterResourceEntities(self, resourceEntityType):
@@ -445,9 +527,16 @@ class VCloudClient(baseDriver.BaseDriver):
                 id_ = self._idFromHref(entity.href)
                 yield id_, entity
 
+    def _iterVappTemplates(self):
+        return self._iterResourceEntities(RestClient.TYPES.vAppTemplate)
+
+    def _iterVApps(self):
+        cli = self.client
+        return self._iterResourceEntities(RestClient.TYPES.vApp)
+
     def _iterVms(self, idFilter=None):
         cli = self.client
-        for _, vapp in self._iterResourceEntities(RestClient.TYPES.vApp):
+        for _, vapp in self._iterVApps():
             vapp = cli.refreshResource(vapp)
             for id_, vm in self._iterVmsInVapp(vapp, idFilter=idFilter):
                 yield id_, (vapp, vm)
@@ -462,10 +551,14 @@ class VCloudClient(baseDriver.BaseDriver):
             if idFilter is None or id_ in idFilter:
                 yield id_, vm
 
+    def _iterMedia(self):
+        return self._iterResourceEntities(RestClient.TYPES.media)
+
     def _newInstance(self, instanceId, instance, cloudAlias):
         instanceName = instance.name
         instanceDescription = instance.getDescription()
         state = Models.Status.Text.state[instance.getStatus()]
+        publicDnsName = instance.NetworkConnectionSection.NetworkConnection.getIpAddress()
         return self._nodeFactory.newInstance(
                 id = instanceId,
                 instanceName = instanceName,
@@ -474,7 +567,9 @@ class VCloudClient(baseDriver.BaseDriver):
                 reservationId = instanceId,
                 cloudName = self.cloudName,
                 cloudAlias = cloudAlias,
-                state = state,)
+                state = state,
+                publicDnsName=publicDnsName,
+        )
 
     @classmethod
     def _idFromHref(cls, href):
@@ -519,6 +614,83 @@ class VCloudClient(baseDriver.BaseDriver):
             name, description, vapp.href, catalogItemsHref)
         return vapp
 
+    def uploadMedia(self, job, vdc, catalog, mediaName, mediaFile):
+        cli = self.client
+        self._refreshLastCalled = 0
+        media = cli.uploadMedia(vdc, job, mediaName, mediaFile,
+            callbackFactory=self._callbackFactory,
+            statusCallback=self._statusCallback)
+        catalogItemsHref = catalog.href + '/catalogItems'
+        name = mediaName
+        description = mediaName
+        cli.addVappTemplateToCatalog(self._loggerFactory(job),
+            name, description, media.href, catalogItemsHref)
+        return media
+
+    def insertMedia(self, job, vapp, media):
+        self._msg(job, "Attaching media '%s' to '%s'" % (media.name, vapp.name))
+        callback = lambda: self._msg(job, "Waiting for media to be attached")
+        self.client.insertMedia(vapp, media, callback=callback)
+
+    def powerOnVapp(self, job, vapp):
+        self._msg(job, "Powering on '%s'" % (vapp.name, ))
+        callback = lambda: self._msg(job, "Waiting for vapp to power on")
+        self.client.powerOnVapp(vapp, callback=callback)
+
+    def drvCaptureSystem(self, job, instance, params):
+        cli = self.client
+        instanceId = instance.getInstanceId()
+        vmName = instance.getInstanceName()
+        tmpVappTemplateName = self._getCaptureTmpName(vmName)
+        vapp = cli.getVAppForVm(instanceId)
+        destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
+        vappTemplate = None
+        try:
+            self._msg(job, "Starting vApp capture '%s'" % tmpVappTemplateName)
+            callback = lambda: self._msg(job, "Waiting for capture task to finish")
+            vappTemplate = cli.captureVApp(vapp, tmpVappTemplateName,
+                callback=callback)
+            name = description = tmpVappTemplateName
+            # XXX FIXME we may have to let the user pick a catalog
+            # Also, if there are no writable catalogs, this will explode spectacularily
+            for catalog in cli.iterWritableCatalogs():
+                l = cli._findLink(catalog, 'add')
+                if l is None:
+                    # This is a writable catalog, we should have a
+                    # link here; but just in case
+                    continue
+                catalogItemsHref = l.href
+                try:
+                    cli.addVappTemplateToCatalog(self._loggerFactory(job),
+                        name, description, vappTemplate.href, catalogItemsHref)
+                except errors.CatalogError, e:
+                    if e.status == 403:
+                        # Try another "writable" catalog
+                        continue
+                    raise
+                else:
+                    break
+            else: # for; we've run out of catalogs to try
+                raise
+            vappTemplate = cli.refreshResource(vappTemplate)
+            self._msg(job, "Enabling vApp template for download")
+            callback = lambda: self._msg(job, "Waiting for download enablement task to finish")
+            vappTemplate = cli.enableVappTemplateForDownload(vappTemplate, callback=callback)
+
+            self._msg(job, "Downloading vApp template")
+            downloadProgressUpdate = self.IntervalCallback(0,
+                lambda x: self._msg(job, "Downloaded %d%%" % x))
+            vmFiles = cli.exportVappTemplate(vappTemplate, destDir,
+                downloadProgressUpdate)
+            archive = self._buildExportArchive(job, destDir, vmFiles)
+            return archive
+        finally:
+            util.rmtree(destDir, ignore_errors=True)
+            if vappTemplate is not None:
+                self._msg(job, "Destroying VM %s" % tmpVappTemplateName)
+                callback = lambda: self._msg(job, "Waiting for vApp template removal task to finish")
+                cli.removeVappTemplate(vappTemplate, callback=callback)
+
     def _loggerFactory(self, job):
         return lambda *args: self._msg(job, *args)
 
@@ -557,15 +729,20 @@ class VCloudClient(baseDriver.BaseDriver):
 
 class RestClient(restclient.Client):
     _nsmap = dict(vc='http://www.vmware.com/vcloud/v1')
+    _ovfNs = dict(ovf="http://schemas.dmtf.org/ovf/envelope/1")
     class TYPES(object):
         vdc = "application/vnd.vmware.vcloud.vdc+xml"
         catalog = "application/vnd.vmware.vcloud.catalog+xml"
+        error = 'application/vnd.vmware.vcloud.error+xml'
         vApp = "application/vnd.vmware.vcloud.vApp+xml"
         vAppTemplate = "application/vnd.vmware.vcloud.vAppTemplate+xml"
+        media = "application/vnd.vmware.vcloud.media+xml"
+        mediaInsertOrEjectParams = "application/vnd.vmware.vcloud.mediaInsertOrEjectParams+xml"
         catalogItem = "application/vnd.vmware.vcloud.catalogItem+xml"
         uploadVAppTemplateParams = "application/vnd.vmware.vcloud.uploadVAppTemplateParams+xml"
         instantiateVAppTemplateParams = "application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml"
         network = "application/vnd.vmware.vcloud.network+xml"
+        captureVAppParams = "application/vnd.vmware.vcloud.captureVAppParams+xml"
 
     TIMEOUT_VAPP_INSTANTIATED = 2
     TIMEOUT_OVF_DESCRIPTOR_PROCESSED = 2
@@ -574,9 +751,43 @@ class RestClient(restclient.Client):
     def connect(self):
         try:
             return restclient.Client.connect(self)
-        except socket.error:
-            # XXX need to raise a meaningful exception
-            raise
+        except restclient.ConnectionError, e:
+            msg = "%s (%s://%s%s)" % (e, self.scheme, self.hostport, self.path)
+            raise errors.ParameterError(msg)
+
+    def makeRequest(self, *args, **kwargs):
+        expectedStatusCodes = kwargs.pop('expectedStatusCodes', None)
+        # Sanitize error codes a bit
+        if expectedStatusCodes is not None:
+            if not isinstance(expectedStatusCodes, set):
+                expectedStatusCodes = set(expectedStatusCodes)
+        try:
+            resp = self.request(*args, **kwargs)
+        except restclient.ResponseError, e:
+            if expectedStatusCodes and e.status in expectedStatusCodes:
+                return e
+            # XXX Munge exception here
+            if self.getContentTypeFromHeaders(e.headers) == self.TYPES.error:
+                try:
+                    error = Models.handler.parseString(e.contents)
+                    message = "vCloud error: %s" % error.message
+                except:
+                    error = message = e.contents
+                raise errors.CatalogError(status=e.status, message=message,
+                    error=error)
+            raise errors.CatalogError("Unknown error: %s" % e)
+        if expectedStatusCodes:
+            raise errors.ParameterError("vCloud error: expected codes %s, got %s"
+                % (expectedStatusCodes, e.status))
+        return resp
+
+    @classmethod
+    def getContentTypeFromHeaders(cls, headers):
+        data = headers.get('Content-Type')
+        if data is None:
+            return None
+        # Take out any additional params
+        return data.split(';', 1)[0]
 
     def verify(self):
         self.path = '/api/versions'
@@ -584,7 +795,7 @@ class RestClient(restclient.Client):
             self.connect()
         except restclient.ConnectionError:
             return False
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         tree = etree.parse(resp)
         paths = tree.xpath('/v:SupportedVersions/v:VersionInfo/v:LoginUrl',
             namespaces=dict(v="http://www.vmware.com/vcloud/versions"))
@@ -592,29 +803,32 @@ class RestClient(restclient.Client):
             return False
         return self._pathFromUrl(paths[0].text)
 
-    def login(self):
+    def login(self, org):
         # We only support 1.0
         self.path = '/api/v1.0/login'
         self.connect()
         self.setUserPassword("%s@%s" % (self._username, self._organization),
             self._password)
-        resp = self.request("POST")
+        resp = self.makeRequest("POST")
         auth = resp.getheader('x-vcloud-authorization')
         self.headers.update({'x-vcloud-authorization' : auth})
         self.setUserPassword(None, None)
 
         tree = etree.parse(resp)
         # Find href for this org
-        paths = tree.xpath('/vc:OrgList/vc:Org/@href',
+        orgNodes = tree.xpath('/vc:OrgList/vc:Org',
             namespaces = self._nsmap)
+        orgNodes = [  (x.attrib['name'], x.attrib['href']) for x in orgNodes ]
+        paths = [ x[1] for x in orgNodes if x[0] == org ]
         self._orgPath = self._pathFromUrl(paths)
         # Browse the org
         self.path = self._orgPath
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         org = Models.handler.parseString(data)
         self._catalogs = set(x for x in org.Link
             if x.getType() == self.TYPES.catalog)
+        self._writableCatalogs = None
         # Some of the VDCs may be disabled, so we ignore those
         self._vdcs = []
         vdcLinks = [ x for x in org.Link if x.getType() == self.TYPES.vdc ]
@@ -661,6 +875,8 @@ class RestClient(restclient.Client):
         self.path = '/api/v1.0/logout'
         self.connect()
         try:
+            # We really don't want to fail on the way out, so swollow
+            # all exceptions
             self.request("POST")
         except restclient.ResponseError:
             pass
@@ -668,6 +884,19 @@ class RestClient(restclient.Client):
 
     def iterCatalogs(self):
         return iter(self._catalogs)
+
+    def iterWritableCatalogs(self):
+        if self._writableCatalogs is not None:
+            return iter(self._writableCatalogs)
+        ret = []
+        for link in sorted(self._catalogs):
+            catalog = self.refreshResource(link)
+            l = self._findLink(catalog, 'add')
+            if l is None:
+                continue
+            ret.append(catalog)
+        self._writableCatalogs = ret
+        return iter(ret)
 
     def iterVdcs(self):
         return iter(self._vdcs)
@@ -697,14 +926,14 @@ class RestClient(restclient.Client):
     def browseCatalog(self, link):
         self.path = self._pathFromUrl(link.href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
     def browseVdc(self, link):
         self.path = self._pathFromUrl(link.href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
@@ -718,18 +947,69 @@ class RestClient(restclient.Client):
         self.connect()
         headers = { 'Content-Type' : self.TYPES.uploadVAppTemplateParams }
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        vapp = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        vapp = Models.handler.parseString(resp.contents)
         return vapp
+
+    def uploadMedia(self, vdc, job, mediaName, mediaFile,
+            callbackFactory=None,
+            statusCallback=None):
+        mediaFile.seek(0, 2)
+        fileSize = mediaFile.tell()
+        mediaFile.seek(0)
+
+        link = self._getLinkByRel(vdc, 'add', type=self.TYPES.media)
+        self.path = self._pathFromUrl(link.href)
+
+        media = Models.Media()
+        media.setSize(fileSize)
+
+        media.name = mediaName
+        media.imageType = "iso"
+        body = Models.handler.toXml(media)
+        headers = { 'Content-Type' : self.TYPES.media}
+        self.connect()
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        media = Models.handler.parseString(resp.contents)
+        link = self._getLinkByRel(media.Files[0], 'upload:default')
+
+        callback = callbackFactory(media, job, link.href, fileSize)
+        self.uploadVAppFile(media, job, link.href, mediaFile, callback=callback,
+            statusCallback=statusCallback)
+        return media
+
+    def insertMedia(self, vm, media, callback=None):
+        link = self._getLinkByRel(vm, 'media:insertMedia')
+        self.path = self._pathFromUrl(link.href)
+
+        headers = { 'Content-Type' : self.TYPES.mediaInsertOrEjectParams}
+        m = Models.Media(href=media.href)
+        rsc = Models.MediaInsertOrEjectParams(Media=m)
+        body = Models.handler.toXml(rsc)
+
+        self.connect()
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        return self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+
+    def powerOnVapp(self, vapp, callback=None):
+        link = self._getLinkByRel(vapp, 'power:powerOn')
+        if link is None:
+            return
+        self.path = self._pathFromUrl(link.href)
+
+        self.connect()
+        resp = self.makeRequest("POST", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        return self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
 
     def uploadOvfDescriptor(self, vapp, ovfFileObj):
         self.path = self._pathFromUrl(vapp.Files[0].Link[0].href)
         self.connect()
-        self.request("PUT", body=ovfFileObj.read())
+        self.makeRequest("PUT", body=ovfFileObj.read())
 
     def waitForOvfDescriptorUpload(self, job, vapp, _msg):
         for i in range(10):
@@ -747,9 +1027,13 @@ class RestClient(restclient.Client):
             raise RuntimeError("Timeout waiting for OVF descriptor to be processed")
 
     def refreshResource(self, vapp):
-        self.path = self._pathFromUrl(vapp.href)
+        if isinstance(vapp, basestring):
+            href = vapp
+        else:
+            href = vapp.href
+        self.path = self._pathFromUrl(href)
         self.connect()
-        resp = self.request("GET")
+        resp = self.makeRequest("GET")
         data = resp.read()
         return Models.handler.parseString(data)
 
@@ -770,24 +1054,23 @@ class RestClient(restclient.Client):
                 callback=callbackFactory(vapp, job, url, fobj.getSize()),
                 statusCallback=statusCallback)
 
-    def renameVm(self, vm, vmName, vmDescription):
+    def renameVm(self, vm, vmName, vmDescription, callback=None):
         # Find upload link
-        links = [ x for x in vm.Link if x.rel == 'edit' ]
-        if not links:
+        link = self._getLinkByRel(vm, 'edit')
+        if link is None:
             return
-        url = links[0].href
+        url = link.href
         self.path = self._pathFromUrl(url)
         self.connect()
         resource = Models.Vm(description=vmDescription)
         resource.name = vmName
 
         body = Models.handler.toXml(resource)
-        headers = { 'Content-Type' : links[0].type}
-        try:
-            self.request("PUT", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
+        headers = { 'Content-Type' : link.type}
+        resp = self.makeRequest("PUT", body=body, headers=headers,
+            expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
 
     def uploadVAppFile(self, vapp, job, url, fobj, callback, statusCallback):
         while 1:
@@ -809,7 +1092,7 @@ class RestClient(restclient.Client):
     def _uploadVAppFile(self, job, url, fobj, callback):
         self.path = self._pathFromUrl(url)
         self.connect()
-        self.request("PUT", body=fobj, callback=callback)
+        self.makeRequest("PUT", body=fobj, callback=callback)
 
     def _retryForUniqueness(self, logger, suggestedName, function, *args, **kwargs):
         """
@@ -831,10 +1114,12 @@ class RestClient(restclient.Client):
                 ret = function(resourceName, *args, **kwargs)
                 logger("Resource name: %s" % resourceName)
                 return ret
-            except restclient.ResponseError, e:
+            except errors.CatalogError, e:
                 if e.status == 400:
-                    error = Models.handler.parseString(e.contents)
-                    if error.minorErrorCode == 'DUPLICATE_NAME':
+                    minorErrorCode = None
+                    if e.error:
+                        minorErrorCode = getattr(e.error, 'minorErrorCode')
+                    if e.error.minorErrorCode == 'DUPLICATE_NAME':
                         # Naming conflict. Try again with a different name
                         logger("Duplicate name %s" % resourceName)
                         continue
@@ -859,12 +1144,9 @@ class RestClient(restclient.Client):
         self.connect()
         headers = { 'Content-Type' : self.TYPES.catalogItem }
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        catalogItem = Models.handler.parseString(e.contents)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        catalogItem = Models.handler.parseString(resp.contents)
         return catalogItem
 
     def instantiateVAppTemplate(self, logger, name, description,
@@ -872,6 +1154,11 @@ class RestClient(restclient.Client):
         return self._retryForUniqueness(logger, name,
             self._instantiateVAppTemplate, description,
             vdcRef, vappTemplateRef, networkRef, callback=callback)
+
+    def _getNetworksForVappTemplate(self, vappTemplateRef):
+        ovfString = self.getOvfDescriptorForVappTemplate(vappTemplateRef)
+        ovf = OVF(ovfString)
+        return ovf.networkNames
 
     def _instantiateVAppTemplate(self, name, description,
             vdcRef, vappTemplateRef, networkRef, callback=None):
@@ -892,31 +1179,36 @@ class RestClient(restclient.Client):
         info = Models.OVFInfo("Configuration parameters for logical networks")
         nwsect.setInfo(info)
 
-        nwconf = Models.NetworkConfig(networkName='Network Name')
-        nwsect.setNetworkConfig(nwconf)
-
-        nwc = Models.NetworkConfiguration()
-        nwconf.setConfiguration(nwc)
-
         pnet = Models.ParentNetwork(href=networkRef)
-        nwc.setParentNetwork(pnet)
-        nwc.setFenceMode('bridged')
+
+        for networkName in self._getNetworksForVappTemplate(vappTemplateRef):
+            nwconf = Models.NetworkConfig(networkName=networkName)
+            nwsect.setNetworkConfig(nwconf)
+
+            nwc = Models.NetworkConfiguration()
+            nwconf.setConfiguration(nwc)
+            nwc.setParentNetwork(pnet)
+            nwc.setFenceMode('bridged')
 
         body = Models.handler.toXml(m)
         self.path = "%s/action/instantiateVAppTemplate" % self._pathFromUrl(vdcRef)
         self.connect()
         headers = { 'Content-Type' : self.TYPES.instantiateVAppTemplateParams}
 
-        try:
-            self.request("POST", body=body, headers=headers)
-        except restclient.ResponseError, e:
-            if e.status != 201:
-                raise
-        vapp = Models.handler.parseString(e.contents)
-        vapp = self.waitForTask(vapp, [ 'queued', 'running' ], callback=callback)
+        resp = self.makeRequest("POST", body=body, headers=headers,
+            expectedStatusCodes=[201])
+        vapp = Models.handler.parseString(resp.contents)
+        vapp = self.waitForResourceTask(vapp, [ 'queued', 'running' ], callback=callback)
         return vapp
 
-    def waitForTask(self, vapp, inProgressStates, callback=None):
+    def _getVmById(self, vmId):
+        self.path = "/api/v1.0/vApp/%s" % os.path.basename(vmId)
+        resp = self.makeRequest("GET")
+        data = resp.read()
+        vm = Models.handler.parseString(data)
+        return vm
+
+    def waitForResourceTask(self, vapp, inProgressStates, callback=None):
         while 1:
             tasks = vapp.getTasks()
             if not tasks or tasks[0].status not in inProgressStates:
@@ -926,10 +1218,136 @@ class RestClient(restclient.Client):
             time.sleep(2)
             vapp = self.refreshResource(vapp)
 
+    def waitForTask(self, task,  inProgressStates, callback=None):
+        while 1:
+            task = self.refreshResource(task)
+            if task.status not in inProgressStates:
+                return task
+            if callback:
+                callback()
+            time.sleep(2)
+
     def deleteEntity(self, entity):
         self.path = self._pathFromUrl(entity.href)
-        try:
-            self.request("DELETE")
-        except restclient.ResponseError, e:
-            if e.status != 202:
-                raise
+        self.makeRequest("DELETE", expectedStatusCodes=[202])
+
+    def _getLinkByRel(self, obj, rel, type=None):
+        obj = self.refreshIfNeeded(obj)
+        ret = self._findLink(obj, rel, type=type)
+        if ret is not None:
+            return ret
+        # Maybe we need to refresh the resource
+        obj = self.refreshResource(obj)
+        return self._findLink(obj, rel, type=type)
+
+    def _findLink(self, obj, rel, type=None):
+        if obj.Link is None:
+            return None
+        for link in obj.Link:
+            if link.rel != rel:
+                continue
+            if type is not None and link.type != type:
+                continue
+            return link
+        return None
+
+    def refreshIfNeeded(self, obj):
+        if hasattr(obj, 'Link'):
+            return obj
+        return self.refreshResource(obj)
+
+    def getVAppForVm(self, vm):
+        if isinstance(vm, str):
+            vm = self._getVmById(vm)
+        return self._getLinkByRel(vm, 'up')
+
+    def getVdcForVApp(self, vapp):
+        return self._getLinkByRel(vapp, 'up')
+
+    def getOvfDescriptorForVappTemplate(self, vappTemplate):
+        ovfLink = self._getLinkByRel(vappTemplate, 'ovf')
+        if ovfLink is None:
+            return None
+        self.path = self._pathFromUrl(ovfLink.href)
+        self.connect()
+        resp = self.makeRequest("GET")
+        return resp.read()
+
+    def captureVApp(self, vapp, tmpVappTemplateName, vdc=None,
+            callback=None):
+        vapp = self.refreshIfNeeded(vapp)
+        if vdc is None:
+            vdc = self.getVdcForVApp(vapp)
+        vdc = self.refreshIfNeeded(vdc)
+        # Find link
+        self.path = [ x.href for x in vdc.Link
+            if x.getType() == self.TYPES.captureVAppParams
+                and x.getRel() == 'add' ][0]
+        self.connect()
+        m = Models.CaptureVAppParams()
+        m.Source = Models.Source(href=vapp.href)
+        m.name = tmpVappTemplateName
+        body = Models.handler.toXml(m)
+        resp = self.makeRequest("POST", body=body, expectedStatusCodes=[201])
+        vappTemplate = Models.handler.parseString(resp.contents)
+        self.waitForResourceTask(vappTemplate, [ 'queued', 'running' ], callback=callback)
+        return vappTemplate
+
+    def enableVappTemplateForDownload(self, vappTemplate, callback=None):
+        link = self._getLinkByRel(vappTemplate, "enable")
+        self.path = link.href
+        self.connect()
+        resp = self.makeRequest("POST", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+        return self.refreshResource(vappTemplate)
+
+    def exportVappTemplate(self, vappTemplate, destDir, downloadProgressUpdate):
+        vappTemplate = self.refreshResource(vappTemplate)
+        # Grab download URL
+        link = self._getLinkByRel(vappTemplate, "download:default")
+        if link is None:
+            raise errors.DownloadError("Unable to download template")
+        self.path = link.href
+        self.connect()
+        resp = self.makeRequest("GET")
+        ovf = resp.read()
+        ovfFname = os.path.join(destDir, os.path.basename(link.href))
+        file(ovfFname, "w").write(ovf)
+        # XXX There are definitely better ways to parse the OVF
+        tree = etree.fromstring(ovf)
+        files = tree.xpath("/ovf:Envelope/ovf:References/ovf:File",
+            namespaces=self._ovfNs)
+        files = [ self._getFileAttrs(x) for x in files ]
+        downloadProgressUpdate.totalSize = sum(x[1] for x in files)
+        cb = downloadProgressUpdate.progress
+        baseUrl = os.path.dirname(self.path)
+        ret = [ os.path.basename(ovfFname) ]
+        for fileName, fileSize in files:
+            outPath = os.path.join(destDir, fileName)
+            self.path = "%s/%s" % (baseUrl, fileName)
+            resp = self.makeRequest("GET")
+            util.copyfileobj(resp, file(outPath, "w"), callback=cb)
+            downloadProgressUpdate.updateSize(fileSize)
+            ret.append(fileName)
+        return ret
+
+    def removeVappTemplate(self, vappTemplate, callback=None):
+        vappTemplate = self.refreshResource(vappTemplate)
+        removePath = self._getLinkByRel(vappTemplate, "remove")
+        if removePath is None:
+            return
+        self.path = removePath.href
+        self.connect()
+
+        resp = self.makeRequest("DELETE", expectedStatusCodes=[202])
+        task = Models.handler.parseString(resp.contents)
+        self.waitForTask(task, [ 'queued', 'running' ], callback=callback)
+
+    @classmethod
+    def _getFileAttrs(cls, fileElement):
+        ovfNs = cls._ovfNs['ovf']
+        return (
+            fileElement.attrib.get('{%s}%s' % (ovfNs, 'href')),
+            int(fileElement.attrib.get('{%s}%s' % (ovfNs, 'size'))),
+        )

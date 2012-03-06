@@ -15,3 +15,6 @@ class CredentialsDescriptor(descriptor.BaseDescriptor):
 class LaunchDescriptor(descriptor.BaseDescriptor):
     "Class for representing the launch descriptor definition"
 
+class DeployDescriptor(descriptor.BaseDescriptor):
+    "Class for representing the deploy descriptor definition"
+

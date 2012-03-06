@@ -96,7 +96,7 @@ class JobTypeController(base.BaseController):
             systemHref = jobmodels.System(
                 href=urlparse.urlunparse(
                     (scheme, netloc, 
-                     '/api/inventory/systems/%s' % job.system, 
+                     '/api/v1/inventory/systems/%s' % job.system, 
                      '', '', '')))
             jobm.set_system(systemHref)
         if hist:
@@ -114,6 +114,10 @@ class JobTypeController(base.BaseController):
         self._fillErrorResponse(jobm, job.errorResponse)
         nf = nodeFactory.NodeFactory(baseUrl = request.baseUrl,
             cloudType = job.cloudType)
+        # XXX this is a hack, we shouldn't have to define which kind of
+        # resource to use
+        if jobType == 'image-deployment':
+            return nf.newImageDeploymentJob(jobm)
         return nf.newInstanceLaunchJob(jobm)
 
     def _fillErrorResponse(self, job, errorResponse):

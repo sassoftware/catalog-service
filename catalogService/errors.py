@@ -57,6 +57,7 @@ class CatalogError(Exception):
         self.msg = message
         self.tracebackData = kw.get('tracebackData', None)
         self.productCodeData = kw.get('productCodeData', None)
+        self.error = kw.get('error', None)
 
     def __str__(self):
         return self.msg
@@ -78,6 +79,9 @@ class ParameterError(CatalogError):
     status = http_codes.HTTP_BAD_REQUEST
     def __init__(self, message = None):
         CatalogError.__init__(self, message = message)
+
+class MethodNotImplemented(ParameterError):
+    "The requested method is not implmemented"
 
 class ResponseError(CatalogError):
     """Response error from remote cloud service"""

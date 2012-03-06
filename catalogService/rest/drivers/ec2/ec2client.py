@@ -109,7 +109,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <hidden>true</hidden>
     </field>
     <field>
-      <name>cloudAlias</name>
+      <name>alias</name>
       <descriptions>
         <desc>Name</desc>
       </descriptions>
@@ -118,9 +118,9 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <hidden>true</hidden>
     </field>
     <field>
-      <name>fullDescription</name>
+      <name>description</name>
       <descriptions>
-        <desc>Full Description</desc>
+        <desc>Description</desc>
       </descriptions>
       <type>str</type>
       <default>Amazon Elastic Compute Cloud</default>
@@ -305,6 +305,15 @@ class EC2Client(baseDriver.BaseDriver):
                 state = 'state',
     )
 
+    _configNameMap = [
+        ('accountId', 'ec2AccountId'),
+        ('certificateData', 'ec2Certificate'),
+        ('certificateKeyData', 'ec2CertificateKey'),
+        ('publicAccessKeyId', 'ec2PublicKey'),
+        ('s3Bucket', 'ec2S3Bucket'),
+        ('secretAccessKey', 'ec2PrivateKey'),
+    ]
+
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
@@ -384,34 +393,6 @@ class EC2Client(baseDriver.BaseDriver):
     def _getS3ConnectionInfo(self, credentials):
         return S3Connection.DefaultHost, None, None, True, None
 
-    def drvGetTargetConfiguration(self, targetData, isAdmin = False):
-        if 'ec2PublicKey' not in targetData:
-            # Not configured
-            return {}
-        ret = dict(name = self.DefaultCloudName,
-            alias = targetData.get('alias', EC2_ALIAS),
-            cloudAlias = targetData.get('alias', EC2_ALIAS),
-            fullDescription = targetData.get('description', EC2_DESCRIPTION),
-            description = targetData.get('description', EC2_DESCRIPTION),
-            accountId = targetData.get('ec2AccountId', ''),
-            )
-        if isAdmin:
-            ret.update(dict(
-                publicAccessKeyId = targetData.get('ec2PublicKey', ''),
-                secretAccessKey = targetData.get('ec2PrivateKey', ''),
-                certificateData = fixPEM(targetData.get('ec2Certificate', ''),
-                    error=False),
-                certificateKeyData = fixPEM(targetData.get('ec2CertificateKey',
-                    ''), error=False),
-                s3Bucket = targetData.get('ec2S3Bucket', '')))
-        return ret
-
-    @classmethod
-    def _strip(cls, obj):
-        if not isinstance(obj, basestring):
-            return obj
-        return obj.strip()
-
     def _getS3Connection(self, credentials):
         publicAccessKeyId = credentials['publicAccessKeyId']
         secretAccessKey = credentials['secretAccessKey']
@@ -489,50 +470,36 @@ class EC2Client(baseDriver.BaseDriver):
             return False
         return True
 
-    def drvCreateCloud(self, descriptorData):
-        self.cloudName = self.DefaultCloudName
-        clouds = self.listClouds()
-        if clouds:
-            raise errors.CloudExists()
+    @classmethod
+    def getCloudNameFromDescriptorData(cls, descriptorData):
+        return cls.DefaultCloudName
 
-        getField = descriptorData.getField
+    @classmethod
+    def getTargetConfigFromDescriptorData(cls, descriptorData):
+        config = super(EC2Client, cls).getTargetConfigFromDescriptorData(descriptorData)
+        # Strip whitespaces that could cause problems
+        config = dict((x, cls._strip(y)) for (x, y) in config.items())
 
-        ec2PublicKey = str(self._strip(getField('publicAccessKeyId')))
-        ec2PrivateKey = str(self._strip(getField('secretAccessKey')))
-        ec2S3Bucket = self._strip(getField('s3Bucket'))
+        # Fix PEM fields
+        for field in ['ec2Certificate', 'ec2CertificateKey']:
+            config[field] = fixPEM(config[field])
+        config.update(name=cls.DefaultCloudName, alias=EC2_ALIAS,
+            description=EC2_DESCRIPTION)
+        return config
+
+    def drvVerifyCloudConfiguration(self, dataDict):
+        ec2PublicKey = dataDict['ec2PublicKey']
+        ec2PrivateKey = dataDict['ec2PrivateKey']
+        ec2S3Bucket = dataDict['ec2S3Bucket']
         self._validateS3Bucket(ec2PublicKey, ec2PrivateKey, ec2S3Bucket)
-
-        # Nothing fancy, just reenable the cloud
-        launchUsers = getField('launchUsers')
-        if launchUsers:
-            launchUsers = [ x.strip() for x in launchUsers.split(',') ]
-        launchGroups = getField('launchGroups')
-        if launchGroups:
-            launchGroups = [ x.strip() for x in launchGroups.split(',') ]
-        dataDict = dict(
-            alias = getField('cloudAlias') or EC2_ALIAS,
-            description = getField('fullDescription') or EC2_DESCRIPTION,
-            ec2AccountId = getField('accountId'),
-            ec2PublicKey = ec2PublicKey,
-            ec2PrivateKey = ec2PrivateKey,
-            ec2S3Bucket = ec2S3Bucket,
-            ec2Certificate = fixPEM(getField('certificateData')),
-            ec2CertificateKey = fixPEM(getField('certificateKeyData')),
-            ec2LaunchUsers = launchUsers,
-            ec2LaunchGroups = launchGroups)
-        dataDict = dict((x, self._strip(y)) for (x, y) in dataDict.items())
         # Validate credentials
-        creds = {
-           'publicAccessKeyId' : dataDict['ec2PublicKey'],
-           'secretAccessKey' : dataDict['ec2PrivateKey']}
-        cli = self.drvCreateCloudClient(creds)
+        cli = self.drvCreateCloudClient(dict(publicAccessKeyId=ec2PublicKey,
+            secretAccessKey=ec2PrivateKey))
         # Do a call to force cred validation
         try:
             cli.get_all_regions()
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
-        self.saveTarget(dataDict)
-        return self.listClouds()[0]
 
     @classmethod
     def _getErrorCode(cls, err):
@@ -643,7 +610,7 @@ boot-uuid=%s
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])[0]
 
-    def drvGetInstances(self, instanceIds):
+    def drvGetInstances(self, instanceIds, force=False):
         try:
             resultSet = self.client.get_all_instances(instance_ids = instanceIds)
         except EC2ResponseError, e:
