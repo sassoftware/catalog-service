@@ -1283,6 +1283,7 @@ class VimService(object):
         networkTypes = set(['Network', 'DistributedVirtualPortgroup'])
         vmFolders = {}
         vmFolderTree = {}
+        crFolders = {}
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1317,6 +1318,8 @@ class VimService(object):
                     vmFolders[mor] = morProps
                     parent = morProps['parent']
                     vmFolderTree.setdefault(parent, []).append(mor)
+                elif 'ComputeResource' in childTypes:
+                    crFolders[mor] = morProps
 
         networksNotInFolder = [ x for (x, y) in networks.items()
             if y is None and x not in incompleteNetworks ]
@@ -1345,7 +1348,18 @@ class VimService(object):
             # grab the previously retreived properties for this
             # compute resource
             crProps = props[cr]
-            dataCenter = hostFolderToDataCenter.get(crProps['parent'])
+            nodeProps = crProps
+            while 1:
+                parent = nodeProps['parent']
+                dataCenter = hostFolderToDataCenter.get(parent)
+                if dataCenter is not None:
+                    break
+                # Walk to the parent folder
+                nodeProps = crFolders.get(parent)
+                if nodeProps is None:
+                    # We should find this parent in the discovered CR
+                    # folders; this is strange
+                    break
             if dataCenter is None:
                 # The CR's parent (host folder) is not discoverable under one
                 # of the data centers, so skip this compute resource
