@@ -382,10 +382,26 @@ class BaseDriver(object):
         """
         if self._cloudCredentials is None:
             self._checkAuth()
-            self._cloudCredentials = self._getCloudCredentialsForUser()
+            self._cloudCredentials = self.protectCredentials(
+                self._getCloudCredentialsForUser())
         return self._cloudCredentials
 
     credentials = property(drvGetCloudCredentialsForUser)
+
+    def protectCredentials(self, credentials):
+        cm = dict(self._credNameMap)
+        ret = {}
+        for field in self.getCredentialsDescriptor().getDataFields():
+            fieldName = field.name
+            key = cm.get(fieldName, fieldName)
+            if key not in credentials:
+                continue
+            value = credentials[key]
+            if not field.password or value is None:
+                ret[key] = value
+            else:
+                ret[key] = descriptor.ProtectedUnicode(value)
+        return ret
 
     def _getCloudCredentialsForUser(self):
         return self.db.targetMgr.getTargetCredentialsForUser(self.cloudType,
