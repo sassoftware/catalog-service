@@ -257,6 +257,9 @@ class VCloudClient(baseDriver.BaseDriver):
             descr.ValueWithDescription(item[1], descriptions=item[0])
                 for item in sorted((x.name, self._id(x.href, 'catalog'))
                     for x in client.iterWritableCatalogs()) ]
+        if not catalogs:
+            raise errors.ParameterError("Unable to find writable catalogs for user %s" %
+                self.credentials['username'])
         descr.addDataField('catalog',
                            descriptions = 'Catalog',
                            required = True,
