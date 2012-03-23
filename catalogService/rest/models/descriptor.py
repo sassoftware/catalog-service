@@ -8,6 +8,7 @@ from smartform import descriptor
 errors = descriptor.errors
 ConfigurationDescriptor = descriptor.ConfigurationDescriptor
 DescriptorData = descriptor.DescriptorData
+ProtectedUnicode = descriptor.ProtectedUnicode
 
 class CredentialsDescriptor(descriptor.BaseDescriptor):
     "Class for representing the credentials descriptor definition"
