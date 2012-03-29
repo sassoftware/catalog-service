@@ -40,7 +40,7 @@ class CatalogService(PackageRecipe):
             r'drivers/vws/globuslib\.py.*')
         r.Requires('sun-jre:runtime',
             r'drivers/vws/globuslib\.py.*')
-        r.Requires('mkisofs:runtime', r'rest/baseDriver\.py.*')
+        r.Requires('cdrkit:runtime', r'rest/baseDriver\.py.*')
         r.Requires('unzip:runtime', r'rest/baseDriver\.py.*')
         r.Requires('ec2-ami-tools:runtime',
             r'rest/drivers/eucalyptus/eucaclient\.py.*')
