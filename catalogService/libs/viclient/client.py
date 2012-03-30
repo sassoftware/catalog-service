@@ -502,6 +502,34 @@ class VimService(object):
         cdSpec.set_element_device(cdrom)
         self.reconfigVM(vmmor, dict(deviceChange = [ cdSpec ]))
 
+    def browseDatastore(self, datastore):
+        browser = self.getDynamicProperty(datastore, 'browser')
+        if browser is None:
+            return []
+        dsInfo = self.getDynamicProperty(datastore, 'info')
+        dsPath = "[%s]" % dsInfo.get_element_name()
+
+        req = SearchDatastoreSubFolders_TaskRequestMsg()
+        req.set_element__this(browser)
+        req.set_element_datastorePath(dsPath)
+
+        ret = self._service.SearchDatastoreSubFolders_Task(req)
+        task = ret.get_element_returnval()
+        res = self.waitForTask(task)
+        if res.lower() != 'success':
+            raise RuntimeError(res)
+        tinfo = self.getDynamicProperty(task, 'info')
+
+        paths = []
+
+        taskRes = tinfo.get_element_result()
+        browseResults = taskRes.get_element_HostDatastoreBrowserSearchResults()
+        for br in browseResults:
+            dirname = br.get_element_folderPath()
+            for fobj in br.get_element_file():
+                paths.append("%s%s" %  (dirname, fobj.get_element_path()))
+        return paths
+
     def buildFullTraversal(self):
         """
         This method creates a SelectionSpec[] to traverses the entire
