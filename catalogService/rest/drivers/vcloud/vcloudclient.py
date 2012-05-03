@@ -137,9 +137,9 @@ class VCloudClient(baseDriver.BaseDriver):
       <type>str</type>
       <constraints>
         <descriptions>
-          <desc>Field must contain between 1 and 36 characters</desc>
+          <desc>Field must contain between 1 and 39 characters</desc>
         </descriptions>
-        <length>36</length>
+        <length>39</length>
       </constraints>
       <required>true</required>
       <hidden>true</hidden>
