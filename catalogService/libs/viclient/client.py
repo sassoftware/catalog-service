@@ -6,6 +6,7 @@
 import os
 import sys
 import time
+from collections import namedtuple
 
 from catalogService.libs.ovf import OVF
 
@@ -501,6 +502,46 @@ class VimService(object):
         cdSpec.set_element_operation(operation)
         cdSpec.set_element_device(cdrom)
         self.reconfigVM(vmmor, dict(deviceChange = [ cdSpec ]))
+
+    def browseDatastore(self, datastore):
+        ftup = namedtuple("FileObject", "path size modification")
+        browser = self.getDynamicProperty(datastore, 'browser')
+        if browser is None:
+            return []
+        dsInfo = self.getDynamicProperty(datastore, 'info')
+        dsPath = "[%s]" % dsInfo.get_element_name()
+
+        queryFlags = ns0.FileQueryFlags_Def('').pyclass()
+        queryFlags.set_element_fileSize(True)
+        queryFlags.set_element_modification(True)
+        queryFlags.set_element_fileType(False)
+        queryFlags.set_element_fileOwner(False)
+        specs = ns0.HostDatastoreBrowserSearchSpec_Def('').pyclass()
+        specs.set_element_details(queryFlags)
+
+        req = SearchDatastoreSubFolders_TaskRequestMsg()
+        req.set_element__this(browser)
+        req.set_element_datastorePath(dsPath)
+        req.set_element_searchSpec(specs)
+
+        ret = self._service.SearchDatastoreSubFolders_Task(req)
+        task = ret.get_element_returnval()
+        res = self.waitForTask(task)
+        if res.lower() != 'success':
+            raise RuntimeError(res)
+        tinfo = self.getDynamicProperty(task, 'info')
+
+        paths = []
+
+        taskRes = tinfo.get_element_result()
+        browseResults = taskRes.get_element_HostDatastoreBrowserSearchResults()
+        for br in browseResults:
+            dirname = br.get_element_folderPath()
+            for fobj in br.get_element_file():
+                paths.append(ftup(
+                    "%s%s" %  (dirname, fobj.get_element_path()),
+                    fobj.get_element_fileSize(), fobj.get_element_modification()))
+        return paths
 
     def buildFullTraversal(self):
         """
