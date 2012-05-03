@@ -246,13 +246,17 @@ class VCloudClient(baseDriver.BaseDriver):
         # but we need to map networks based on it too
         for vdc in vdcs:
             vdcKey = self._id(vdc.href, 'vdc')
-            dataCenters.append(
-                descr.ValueWithDescription(vdcKey, descriptions=vdc.name))
             nm = networksMap[vdcKey] = []
             for network in client.iterNetworksForVdc(vdc):
                 nwKey = self._id(network.href, 'network')
                 nm.append(descr.ValueWithDescription(nwKey,
                     descriptions=network.name))
+            if withNetwork and nm:
+                dataCenters.append(
+                    descr.ValueWithDescription(vdcKey, descriptions=vdc.name))
+        if not dataCenters:
+            raise errors.ParameterError("Unable to find a functional datacenter for user %s" %
+                self.credentials['username'])
         catalogs = [
             descr.ValueWithDescription(item[1], descriptions=item[0])
                 for item in sorted((x.name, self._id(x.href, 'catalog'))
