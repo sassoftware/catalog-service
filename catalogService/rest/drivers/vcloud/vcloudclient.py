@@ -251,9 +251,11 @@ class VCloudClient(baseDriver.BaseDriver):
                 nwKey = self._id(network.href, 'network')
                 nm.append(descr.ValueWithDescription(nwKey,
                     descriptions=network.name))
-            if withNetwork and nm:
-                dataCenters.append(
-                    descr.ValueWithDescription(vdcKey, descriptions=vdc.name))
+            if withNetwork and not nm:
+                # No networks found for this data center, so skip it
+                continue
+            dataCenters.append(
+                descr.ValueWithDescription(vdcKey, descriptions=vdc.name))
         if not dataCenters:
             raise errors.ParameterError("Unable to find a functional datacenter for user %s" %
                 self.credentials['username'])
