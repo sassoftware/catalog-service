@@ -610,13 +610,13 @@ class VMwareClient(baseDriver.BaseDriver):
         currently we return the templates as available images
         """
         useTemplate = not self.client.isESX()
+        imageList = images.BaseImages()
         if not useTemplate:
             # ESX does not support templates, so don't bother to search
             # for them
-            return []
+            return imageList
         cloudAlias = self.getCloudAlias()
         instMap = self.getVirtualMachines()
-        imageList = images.BaseImages()
         for opaqueId, vminfo in instMap.items():
             if not vminfo.get('config.template', False):
                 continue
