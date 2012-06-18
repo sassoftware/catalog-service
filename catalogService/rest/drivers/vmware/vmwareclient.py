@@ -18,6 +18,26 @@ from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.libs.viclient.VimService_client import *  # pyflakes=ignore
 
+diskProvisioningOptions = [
+    ('sparse', 'Monolithic Sparse or Thin'),
+    ('flat', 'Monolithic Flat or Thick'),
+    ('thin', 'Thin (Allocated on demand)'),
+    ('thick', 'Thick (Preallocated)'),
+    ('monolithicSparse', 'Monolithic Sparse (Allocated on demand)'),
+    ('monolithicFlat', 'Monolithic Flat (Preallocated)'),
+    ('twoGbMaxExtentSparse', 'Sparse 2G Maximum Extent'),
+    ('twoGbMaxExtentFlat', 'Flat 2G Maximum Extent'),
+]
+
+_diskProvisioningOptionTemplate = """\
+        <describedValue>
+          <descriptions>
+            <desc>%s</desc>
+          </descriptions>
+          <key>%s</key>
+        </describedValue>
+"""
+
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
   <metadata>
@@ -54,8 +74,21 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <help href='configuration/description.html'/>
     </field>
+    <field>
+      <name>defaultDiskProvisioning</name>
+      <descriptions>
+        <desc>Default Disk Provisioning</desc>
+      </descriptions>
+      <enumeratedType>
+        %s
+      </enumeratedType>
+      <default>flat</default>
+      <required>true</required>
+      <help href='configuration/defaultDiskProvisioning.html'/>
+    </field>
   </dataFields>
-</descriptor>"""
+</descriptor>""" % '\n'.join(_diskProvisioningOptionTemplate % (y, x)
+    for (x, y) in diskProvisioningOptions)
 
 _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
@@ -275,16 +308,6 @@ class VMwareClient(baseDriver.BaseDriver):
     def _drvPopulateDescriptorFromTarget(self, descr):
         targetConfig = self.getTargetConfiguration()
         if self.client.vmwareVersion >= (5, 0, 0):
-            diskProvisioning = [
-                ('sparse', 'Monolithic Sparse or Thin'),
-                ('flat', 'Monolithic Flat or Thick'),
-                ('thin', 'Thin (Allocated on demand)'),
-                ('thick', 'Thick (Preallocated)'),
-                ('monolithicSparse', 'Monolithic Sparse (Allocated on demand)'),
-                ('monolithicFlat', 'Monolithic Flat (Preallocated)'),
-                ('twoGbMaxExtentSparse', 'Sparse 2G Maximum Extent'),
-                ('twoGbMaxExtentFlat', 'Flat 2G Maximum Extent'),
-            ]
             # Default to flat if the target was not configured
             defaultDiskProvisioning = targetConfig.get(
                 'defaultDiskProvisioning', 'flat')
@@ -298,7 +321,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 ],
                 type = descr.EnumeratedType(
                     descr.ValueWithDescription(x[0], descriptions=x[1])
-                    for x in diskProvisioning),
+                    for x in diskProvisioningOptions),
                 default = defaultDiskProvisioning)
 
         vicfg = self.vicfg
