@@ -273,6 +273,34 @@ class VMwareClient(baseDriver.BaseDriver):
         return self._drvPopulateDescriptorFromTarget(descr)
 
     def _drvPopulateDescriptorFromTarget(self, descr):
+        targetConfig = self.getTargetConfiguration()
+        if self.client.vmwareVersion >= (5, 0, 0):
+            diskProvisioning = [
+                ('sparse', 'Monolithic Sparse or Thin'),
+                ('flat', 'Monolithic Flat or Thick'),
+                ('thin', 'Thin (Allocated on demand)'),
+                ('thick', 'Thick (Preallocated)'),
+                ('monolithicSparse', 'Monolithic Sparse (Allocated on demand)'),
+                ('monolithicFlat', 'Monolithic Flat (Preallocated)'),
+                ('twoGbMaxExtentSparse', 'Sparse 2G Maximum Extent'),
+                ('twoGbMaxExtentFlat', 'Flat 2G Maximum Extent'),
+            ]
+            # Default to flat if the target was not configured
+            defaultDiskProvisioning = targetConfig.get(
+                'defaultDiskProvisioning', 'flat')
+
+            descr.addDataField(
+                'diskProvisioning',
+                descriptions = 'Disk Provisioning',
+                required = True,
+                help = [
+                    ('launch/diskProvisioning.html', None)
+                ],
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x[0], descriptions=x[1])
+                    for x in diskProvisioning),
+                default = defaultDiskProvisioning)
+
         vicfg = self.vicfg
         dataCenters = [ x for x in vicfg.getDatacenters()
             if x.getComputeResources() ]
@@ -698,7 +726,7 @@ class VMwareClient(baseDriver.BaseDriver):
         return testName
 
     def _deployOvf(self, job, vmName, uuid, archive, dataCenter,
-                     dataStore, host, resourcePool, network,
+                     dataStore, host, resourcePool, network, diskProvisioning,
                      vmFolder=None,
                      asTemplate = False):
         # Grab ovf file
@@ -720,7 +748,7 @@ class VMwareClient(baseDriver.BaseDriver):
         for i in range(5):
             try:
                 return self._uploadOvf_1(job, ovfFileObj, archive, vmName,
-                    vmFolder, resourcePool, dataStore, network)
+                    vmFolder, resourcePool, dataStore, network, diskProvisioning)
             except FaultException, e:
                 if e.fault.string != msg:
                     raise
@@ -730,10 +758,11 @@ class VMwareClient(baseDriver.BaseDriver):
             raise
 
     def _uploadOvf_1(self, job, ovfFileObj, archive, vmName, vmFolder,
-                     resourcePool, dataStore, network):
+                     resourcePool, dataStore, network, diskProvisioning):
         fileItems, httpNfcLease = self.client.ovfImportStart(ovfFileObj,
             vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
-            dataStore = dataStore, network = network)
+            dataStore = dataStore, network = network,
+            diskProvisioning = diskProvisioning)
         self.client.waitForLeaseReady(httpNfcLease)
 
         callback = lambda x: self._msg(job, "Importing OVF: %d%% complete" % x)
@@ -770,7 +799,8 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _deployImageFromFile(self, job, image, filePath, dataCenter,
                              dataStore, computeResource, resourcePool, vmName,
-                             uuid, network, vmFolder=None, asTemplate=False):
+                             uuid, network, diskProvisioning,
+                             vmFolder=None, asTemplate=False):
 
         logger = lambda *x: self._msg(job, *x)
         dc = self.vicfg.getDatacenter(dataCenter)
@@ -815,6 +845,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 vmMor = self._deployOvf(job, vmName, uuid,
                     archive, dc, dataStore=ds,
                     host = host, resourcePool=rp, network = network,
+                    diskProvisioning = diskProvisioning,
                     vmFolder=vmFolderMor,
                     asTemplate = asTemplate)
             else:
@@ -868,6 +899,7 @@ class VMwareClient(baseDriver.BaseDriver):
         imageName = ppop('imageName')
         network = ppop('network')
         vmFolder = ppop('vmFolder')
+        diskProvisioning = ppop('diskProvisioning', None)
 
         newImageId = self.instanceStorageClass._generateString(32)
         useTemplate = not self.client.isESX()
@@ -886,6 +918,7 @@ class VMwareClient(baseDriver.BaseDriver):
         vm = self._deployImage(job, image, auth, dataCenter,
                                dataStore, computeResource,
                                resourcePool, vmName, uuid, network,
+                               diskProvisioning,
                                vmFolder=vmFolder, asTemplate = useTemplate)
         self._msg(job, 'Image deployed')
         return image.getImageId()
@@ -903,7 +936,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def LeaseProgressUpdate(self, lease, callback):
         from catalogService.libs.viclient import client
-        progress = client.LeaseProgressUpdate(self.client._service, lease, callback)
+        progress = client.LeaseProgressUpdate(self.client, lease, callback)
         return self.ProgressUpdate(totalSize=0, callback=progress.progress)
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
@@ -917,6 +950,7 @@ class VMwareClient(baseDriver.BaseDriver):
         instanceDescription = ppop('instanceDescription')
         network = ppop('network')
         vmFolder = ppop('vmFolder')
+        diskProvisioning = ppop('diskProvisioning', None)
 
         vm = None
 
@@ -937,6 +971,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                    dataStore, computeResource,
                                    resourcePool, vmName, uuid,
                                    network, vmFolder=vmFolder,
+                                   diskProvisioning=diskProvisioning,
                                    asTemplate = useTemplate)
         else:
             # Since we're bypassing _getTemplatesFromInventory, none of the

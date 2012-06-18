@@ -1143,11 +1143,11 @@ class VimService(object):
         return params
 
     def ovfImportStart(self, ovfFileObj, vmName,
-            vmFolder, resourcePool, dataStore, network):
+            vmFolder, resourcePool, dataStore, network, diskProvisioning):
         ovfContents = ovfFileObj.read()
         ovfContents = self.sanitizeOvfDescriptor(ovfContents)
         createImportSpecResult = self.createOvfImportSpec(ovfContents, vmName,
-            resourcePool, dataStore, network)
+            resourcePool, dataStore, network, diskProvisioning)
 
         hostErrorMessage = 'Host did not have any virtual network defined.'
         if hasattr(createImportSpecResult, '_error'):
@@ -1220,11 +1220,11 @@ class VimService(object):
             raise Exception("Error getting lease")
 
     def createOvfImportSpec(self, ovfContents, vmName, resourcePool,
-                            dataStore, network):
+                            dataStore, network, diskProvisioning):
 
         parseDescriptorResult = self.parseOvfDescriptor(ovfContents)
         params = self.createOvfImportParams(parseDescriptorResult, vmName,
-            network)
+            network, diskProvisioning)
 
         req = CreateImportSpecRequestMsg()
         req.set_element__this(self.getOvfManager())
@@ -1238,7 +1238,8 @@ class VimService(object):
         return createImportSpecResult
 
 
-    def createOvfImportParams(self, parseDescriptorResult, vmName, network):
+    def createOvfImportParams(self, parseDescriptorResult, vmName, network,
+            diskProvisioning):
         params = ns0.OvfCreateImportSpecParams_Def('').pyclass()
         params.set_element_locale('')
         params.set_element_deploymentOption(
@@ -1253,6 +1254,8 @@ class VimService(object):
             nm.set_element_name(networkLabels[0])
             nm.set_element_network(network)
             params.set_element_networkMapping([ nm ])
+        if diskProvisioning is not None and hasattr(params, 'set_element_diskProvisioning'):
+            params.set_element_diskProvisioning(diskProvisioning)
         return params
 
 
