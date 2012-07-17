@@ -1337,7 +1337,7 @@ class VimService(object):
                 # build a map from host folder -> data center
                 dc = Datacenter(mor, morProps)
                 hostFolderToDataCenter[morProps['hostFolder']] = dc
-                for network in dc.properties['network']:
+                for network in dc.properties.get('network', []):
                     if network not in networks:
                         networks[network] = None
             elif objType == 'ResourcePool':
