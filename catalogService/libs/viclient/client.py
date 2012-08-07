@@ -432,15 +432,13 @@ class VimService(object):
                 return dev
         return None
 
-    def createNicConfigSpec(self, networkMor, vicfg):
+    def createNicConfigSpec(self, networkMor, nic=None):
         # Add a NIC.
-        nwProps = vicfg.getNetwork(networkMor).props
         if networkMor.get_attribute_type() == 'DistributedVirtualPortgroup':
             # We don't fetch the full config upfront, it's too large
             dvsMor = self.getMoRefProp(networkMor,
                 'config.distributedVirtualSwitch')
-            dvs = vicfg.getDistributedVirtualSwitch(dvsMor)
-            switchUuid = dvs.get_element_switchUuid()
+            switchUuid = self.getMoRefProp(dvsMor, 'uuid')
             nicBacking = ns0.VirtualEthernetCardDistributedVirtualPortBackingInfo_Def('').pyclass()
             port = nicBacking.new_port()
             port.set_element_switchUuid(switchUuid)
@@ -448,19 +446,22 @@ class VimService(object):
             nicBacking.set_element_port(port)
         else:
             # Plain network. NIC is bound by network name (very lame)
-            deviceName = nwProps['name']
+            deviceName = self.getMoRefProp(networkMor, 'name')
             nicBacking = ns0.VirtualEthernetCardNetworkBackingInfo_Def('').pyclass()
             nicBacking.set_element_deviceName(deviceName)
 
         nicSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
-        nicSpec.set_element_operation('add')
+        if nic is None:
+            nicSpec.set_element_operation('add')
 
-        nic = ns0.VirtualPCNet32_Def('').pyclass()
-
-        nic.set_element_addressType('generated')
+            nic = ns0.VirtualPCNet32_Def('').pyclass()
+            nic.set_element_key(-1)
+            nic.set_element_addressType('generated')
+        else:
+            nicSpec.set_element_operation('edit')
         nic.set_element_backing(nicBacking)
-        nic.set_element_key(-1)
         nicSpec.set_element_device(nic)
+
         return nicSpec
 
     def createCdromConfigSpec(self, filename, vmmor, controller, datastoreRef,
@@ -1468,7 +1469,7 @@ class VimService(object):
 
     def cloneVM(self, mor=None, uuid=None, name=None, annotation=None,
                 dc=None, ds=None, rp=None, newuuid=None, template=False,
-                vmFolder=None, callback=None):
+                vmFolder=None, network=None, callback=None):
         if uuid:
             # ugh, findVMByUUID does not return templates
             # See the release notes:
@@ -1488,6 +1489,12 @@ class VimService(object):
             else:
                 # Copy the parent (folder) from the source vm
                 vmFolder = self.getMoRefProp(mor, 'parent')
+
+        templateVm = self.getVirtualMachines(
+            ['config.hardware.device'], root = mor)
+        templateNetworkDevices = [ x
+            for x in templateVm[mor]['config.hardware.device'].VirtualDevice
+                if hasattr(x, '_macAddress') and x.get_element_macAddress() ]
 
         req = CloneVM_TaskRequestMsg()
         req.set_element__this(mor)
@@ -1513,6 +1520,13 @@ class VimService(object):
         config.set_element_annotation(annotation)
         cloneSpec.set_element_config(config)
         req.set_element_spec(cloneSpec)
+
+        if not templateNetworkDevices:
+            nicSpec = self.createNicConfigSpec(network)
+        else:
+            nic = templateNetworkDevices[0]
+            nicSpec = self.createNicConfigSpec(network, nic)
+        config.set_element_deviceChange([nicSpec])
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()

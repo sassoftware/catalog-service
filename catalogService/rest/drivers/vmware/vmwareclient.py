@@ -715,7 +715,8 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _cloneTemplate(self, job, imageId, instanceName, instanceDescription,
                        dataCenter, computeResource, dataStore,
-                       resourcePool, vm=None, vmFolder=None, callback=None):
+                       resourcePool, vm=None, vmFolder=None,
+                       network=None, callback=None):
         templateUuid = None
         if not vm:
             templateUuid = os.path.basename(imageId)
@@ -728,6 +729,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                         ds=self.vicfg.getMOR(dataStore),
                                         rp=self.vicfg.getMOR(resourcePool),
                                         vmFolder=self.vicfg.getMOR(vmFolder),
+                                        network=self.vicfg.getMOR(network),
                                         callback=callback)
             return vmMor
         except Exception, e:
@@ -881,7 +883,7 @@ class VMwareClient(baseDriver.BaseDriver):
             reconfigVmParams = dict()
             if not nwobj.get_element_ManagedObjectReference():
                 # add NIC
-                nicSpec = self.client.createNicConfigSpec(network, self._vicfg)
+                nicSpec = self.client.createNicConfigSpec(network)
                 deviceChange = [ nicSpec ]
                 reconfigVmParams['deviceChange'] = deviceChange
 
@@ -1011,6 +1013,7 @@ class VMwareClient(baseDriver.BaseDriver):
                                         dataCenter, computeResource,
                                         dataStore, resourcePool, vm=vm,
                                         vmFolder=vmFolder,
+                                        network=network,
                                         callback=cloneCallback)
         else:
             vmMor = self.client._getVM(mor=vm)
