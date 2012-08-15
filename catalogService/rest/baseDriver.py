@@ -1439,9 +1439,12 @@ class BaseDriver(object):
                 directMethodFile.write(tmpl % za)
             directMethodFile.flush()
             conaryProxyFile = tempfile.NamedTemporaryFile()
+            # zone addresses may have the port embedded, need to strip
+            # that out
             conaryProxyFile.write(
                 "proxyMap * %s\n" % " ".join(
-                    "conarys://" + x for x in self.zoneAddresses))
+                    "conarys://" + x.split(':', 1)[0]
+                        for x in self.zoneAddresses))
             conaryProxyFile.flush()
 
         graftList = [
