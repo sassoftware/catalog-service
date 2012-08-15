@@ -1430,6 +1430,7 @@ class BaseDriver(object):
         bootUuidFile.flush()
 
         directMethodFile = None
+        conaryProxyFile = None
         if self.zoneAddresses:
             directMethodFile = tempfile.NamedTemporaryFile()
             tmpl = "directMethod %s\n"
@@ -1437,6 +1438,11 @@ class BaseDriver(object):
             for za in self.zoneAddresses:
                 directMethodFile.write(tmpl % za)
             directMethodFile.flush()
+            conaryProxyFile = tempfile.NamedTemporaryFile()
+            conaryProxyFile.write(
+                "proxyMap * %s\n" % " ".join(
+                    "conarys://" + x for x in self.zoneAddresses))
+            conaryProxyFile.flush()
 
         graftList = [
             "SECURITY-CONTEXT-BOOTSTRAP=%s" % empty,
@@ -1447,6 +1453,9 @@ class BaseDriver(object):
         if directMethodFile:
             graftList.append("etc/conary/rpath-tools/config.d/directMethod=%s"
                 % directMethodFile.name)
+        if conaryProxyFile:
+            graftList.append("etc/conary/config.d/rpath-tools-conaryProxy=%s"
+                % conaryProxyFile.name)
 
         # Make ISO, if it doesn't exist already
         cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",
