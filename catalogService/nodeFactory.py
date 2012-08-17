@@ -167,13 +167,13 @@ class NodeFactory(object):
         return node
 
     def newLaunchDescriptor(self, descriptor):
-        cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
+        prefix = self._getTargetTypeHelpUrl(self.cloudType)
 
         for field in descriptor.getDataFields():
             for helpNode in field.help:
                 href = helpNode.href
                 if '://' not in href:
-                    helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
+                    helpNode.href = self.join(prefix, href)
         return descriptor
 
     def newSecurityGroup(self, instanceId, secGroup):
@@ -237,6 +237,9 @@ class NodeFactory(object):
     def _getCloudUrl(self, cloudType, cloudName):
         return self.join(self._getCloudTypeUrl(cloudType), 'instances',
             cloudName)
+
+    def _getTargetTypeHelpUrl(self, cloudType):
+        return self.join(self.baseUrl, 'help/targets/drivers', cloudType)
 
     def _getCloudUrlFromParams(self):
         return self._getCloudUrl(self.cloudType,
