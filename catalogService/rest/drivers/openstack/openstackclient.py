@@ -60,7 +60,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <descriptions>
         <desc>Nova Port</desc>
       </descriptions>
-      <type>str</type>
+      <type>int</type>
       <required>true</required>
       <default>%(nova_port)s</default>
       <help href='configuration/novaPortNumber.html'/>
@@ -79,7 +79,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <descriptions>
         <desc>Glance Port</desc>
       </descriptions>
-      <type>str</type>
+      <type>int</type>
       <required>true</required>
       <default>%(glance_port)s</default>
       <help href='configuration/glancePortNumber.html'/>
