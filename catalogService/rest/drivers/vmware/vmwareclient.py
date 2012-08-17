@@ -54,7 +54,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <required>true</required>
-      <help href='configuration/serverName.html'/>
+      <help href='clouds/vmware/help/configuration/serverName.html'/>
     </field>
     <field>
       <name>alias</name>
@@ -77,13 +77,13 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
     <field>
       <name>defaultDiskProvisioning</name>
       <descriptions>
-        <desc>Default Disk Provisioning</desc>
+        <desc>Default Disk Provisioning (ESX 5.x+)</desc>
       </descriptions>
       <enumeratedType>
         %s
       </enumeratedType>
       <default>flat</default>
-      <required>true</required>
+      <required>false</required>
       <help href='configuration/defaultDiskProvisioning.html'/>
     </field>
   </dataFields>
