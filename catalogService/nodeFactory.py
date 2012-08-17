@@ -61,14 +61,7 @@ class NodeFactory(object):
         return node
 
     def newCloudConfigurationDescriptor(self, descr):
-        cloudTypeUrl = self._getCloudTypeUrl(self.cloudType)
-
-        for field in descr.getDataFields():
-            for helpNode in (field.help or []):
-                href = helpNode.href
-                if '://' not in href:
-                    helpNode.href = "%s/help/%s" % (cloudTypeUrl, href)
-        return descr
+        return self.newLaunchDescriptor(descr)
 
     def newCredentialsDescriptor(self, *args, **kwargs):
         node = self.credentialsDescriptorFactory(*args, **kwargs)
