@@ -112,6 +112,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <length>32</length>
       </constraints>
       <required>true</required>
+      <help href='credentials/username.html'/>
     </field>
     <field>
       <name>password</name>
@@ -127,6 +128,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </constraints>
       <required>true</required>
       <password>true</password>
+      <help href='credentials/password.html'/>
     </field>
   </dataFields>
 </descriptor>
