@@ -82,10 +82,12 @@ class BaseDriver(object):
     WAIT_RUNNING_STATE_SLEEP = 2
     WAIT_NETWORK_SLEEP = 10
 
-    def __init__(self, cfg, driverName, cloudName=None,
+    def __init__(self, cfg, driverName=None, cloudName=None,
                  nodeFactory=None, userId = None, db = None,
                  inventoryHandler=None,
                  zoneAddresses=None):
+        if driverName is None:
+            driverName = self.__class__.__module__.rsplit('.', 2)[-2]
         self.userId = userId
         self.cloudName = cloudName
         self.driverName = driverName
@@ -224,6 +226,7 @@ class BaseDriver(object):
             instanceTypeFactory = self.InstanceType,
             keyPairFactory = self.KeyPair,
             securityGroupFactory = self.SecurityGroup,
+            baseUrl = '',
         )
         return factory
 
@@ -517,6 +520,7 @@ class BaseDriver(object):
     def getCredentialsDescriptor(self):
         descr = descriptor.ConfigurationDescriptor(
             fromStream = self.credentialsDescriptorXmlData)
+        descr = self._nodeFactory.newCloudConfigurationDescriptor(descr)
         return descr
 
     def getCloudConfigurationDescriptor(self):
