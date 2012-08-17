@@ -83,7 +83,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         %s
       </enumeratedType>
       <default>flat</default>
-      <required>false</required>
+      <required>true</required>
       <help href='configuration/defaultDiskProvisioning.html'/>
     </field>
   </dataFields>
