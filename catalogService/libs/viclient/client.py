@@ -1521,12 +1521,13 @@ class VimService(object):
         cloneSpec.set_element_config(config)
         req.set_element_spec(cloneSpec)
 
-        if not templateNetworkDevices:
-            nicSpec = self.createNicConfigSpec(network)
-        else:
-            nic = templateNetworkDevices[0]
-            nicSpec = self.createNicConfigSpec(network, nic)
-        config.set_element_deviceChange([nicSpec])
+        if network is not None:
+            if not templateNetworkDevices:
+                nicSpec = self.createNicConfigSpec(network)
+            else:
+                nic = templateNetworkDevices[0]
+                nicSpec = self.createNicConfigSpec(network, nic)
+            config.set_element_deviceChange([nicSpec])
 
         ret = self._service.CloneVM_Task(req)
         task = ret.get_element_returnval()
