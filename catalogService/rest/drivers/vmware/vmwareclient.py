@@ -929,15 +929,15 @@ class VMwareClient(baseDriver.BaseDriver):
         newImageId = self.instanceStorageClass._generateString(32)
         useTemplate = not self.client.isESX()
 
+        # RCE-796
+        vmName = imageName
         if useTemplate:
             # if we can use a template, deploy the image
             # as a template with the imageId as the uuid
-            vmName = 'template-' + image.getBaseFileName()
             uuid = image.getImageId()
         else:
-            # otherwise, we'll use the instance name and
+            # otherwise, we'll use
             # a random instance uuid for deployment
-            vmName = imageName
             uuid = newImageId
 
         vm = self._deployImage(job, image, auth, dataCenter,
