@@ -342,6 +342,10 @@ class VMwareClient(baseDriver.BaseDriver):
         crToDc = {}
         validDatacenters = []
         for dc in dataCenters:
+            dcNetworks = dc.properties.get('network')
+            if not dcNetworks:
+                # SUP-4625
+                continue
             crs = dc.getComputeResources()
             validCrs = {}
             for cr in crs:
