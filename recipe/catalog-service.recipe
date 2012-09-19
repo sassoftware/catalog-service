@@ -36,13 +36,11 @@ class CatalogService(PackageRecipe):
         r.addMercurialSnapshot()
         r.MakeInstall()
 
-        r.Requires('workspace-cloud-client:runtime',
-            r'drivers/vws/globuslib\.py.*')
-        r.Requires('sun-jre:runtime',
-            r'drivers/vws/globuslib\.py.*')
-        r.Requires('cdrkit:runtime', r'rest/baseDriver\.py.*')
-        r.Requires('unzip:runtime', r'rest/baseDriver\.py.*')
+        # mkisofs is what actually gets called, but two packages provide that.
+        # only cdrkit provides genisoimage.
+        r.Requires('/usr/bin/genisoimage', r'rest/baseDriver\.py.*')
+        r.Requires('/usr/bin/unzip', r'rest/baseDriver\.py.*')
         r.Requires('ec2-ami-tools:runtime',
             r'rest/drivers/eucalyptus/eucaclient\.py.*')
-        r.CompilePython('/usr/lib/python2.4/site-packages/catalogService/')
+        r.CompilePython('/usr/lib/python.*/site-packages/catalogService/')
         r.PackageSpec('catalog-service-sources', '.*\.py$')
