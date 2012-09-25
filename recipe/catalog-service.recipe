@@ -40,4 +40,4 @@ class CatalogService(PackageRecipe):
         r.Requires('ec2-ami-tools:runtime',
             r'rest/drivers/eucalyptus/eucaclient\.py.*')
         r.CompilePython('/usr/lib/python.*/site-packages/catalogService/')
-        r.PackageSpec('catalog-service-sources', '.*\.py$')
+        r.PackageSpec('catalog-service-sources', '%(libdir)s/python.*\.py$')
