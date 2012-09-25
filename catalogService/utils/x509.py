@@ -1,10 +1,10 @@
 #
-# Copyright (c) 2008-2009 rPath, Inc.  All Rights Reserved.
+# Copyright (c) rPath, Inc.
 #
 "Simple module for generating x509 certificates"
 
 import os
-from rmake.lib import gencert
+from rmake3.lib import gencert
 
 class X509(object):
 

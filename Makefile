@@ -20,7 +20,7 @@ export DISTDIR = $(TOPDIR)/catalog-service-$(VERSION)
 all-subdirs:
 	for d in $(MAKEALLSUBDIRS); do make -C $$d DIR=$$d || exit 1; done
 
-SUBDIRS = catalogService pylint xsd
+SUBDIRS = catalogService pylint rmake_plugins xsd
 MAKEALLSUBDIRS=catalogService
 
 dist_files = $(extra_files)

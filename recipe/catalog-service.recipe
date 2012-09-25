@@ -1,7 +1,5 @@
 #
-# Copyright (c) 2008 rPath, Inc.
-# This file is distributed under the terms of the MIT License.
-# A copy is available at http://www.rpath.com/permanent/mit-license.html
+# Copyright (c) rPath, Inc.
 #
 
 class CatalogService(PackageRecipe):
@@ -19,12 +17,11 @@ class CatalogService(PackageRecipe):
         'python:devel',
         'python:lib',
         'python-novaclient:python',
-        # Should we decide to no longer use rmake's gencert.py, we should
-        # remove this
-        'rmake:python',
+        'rmake3:python',
         'rpath-common:python',
         'rpath-job:python',
         'rpath-models:python',
+        'rpath-repeater:python',
         'rpath-storage:python',
         'rpath-xmllib:python',
         'smartform:python',
