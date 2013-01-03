@@ -215,11 +215,11 @@ class EucalyptusClient(ec2client.EC2Client):
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
     class Cloud(ec2client.EC2_Cloud):
-        _constructorOverrides = {}
+        pass
     class Image(ec2client.EC2_Image):
-        _constructorOverrides = {}
+        pass
     class Instance(ec2client.EC2_Instance):
-        _constructorOverrides = {}
+        pass
 
     class _ImageMap(ec2client.EC2Client._ImageMap):
         def __init__(self, imageList):

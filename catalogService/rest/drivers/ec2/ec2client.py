@@ -39,9 +39,6 @@ CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS = (
         ('tcp',  5989,       5989),
 )
 
-EC2_ALIAS = 'ec2'
-EC2_DESCRIPTION = "Amazon Elastic Compute Cloud"
-
 EC2_DEVPAY_OFFERING_BASE_URL = "https://aws-portal.amazon.com/gp/aws/user/subscription/index.html?productCode=%s"
 
 class EC2_IPRange(instances.xmlNode.BaseMultiNode):
@@ -61,23 +58,17 @@ class EC2_SecurityGroup(securityGroups.BaseSecurityGroup):
 class EC2_Image(images.BaseImage):
     "EC2 Image"
 
-    _constructorOverrides = dict(cloudName = 'aws', cloudAlias = 'ec2')
-
 class EC2_Instance(instances.BaseInstance):
     "EC2 Instance"
 
     __slots__ = instances.BaseInstance.__slots__ + [
                 'keyName', 'securityGroup', ]
 
-    _constructorOverrides = EC2_Image._constructorOverrides.copy()
     _slotTypeMap = instances.BaseInstance._slotTypeMap.copy()
     _slotTypeMap['securityGroup'] = EC2_SecurityGroup
 
 class EC2_Cloud(clouds.BaseCloud):
     "EC2 Cloud"
-
-    _constructorOverrides = EC2_Image._constructorOverrides.copy()
-    _constructorOverrides['description'] = EC2_DESCRIPTION
 
 class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
@@ -106,16 +97,14 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       </descriptions>
       <type>str</type>
       <default>aws</default>
-      <hidden>true</hidden>
     </field>
     <field>
       <name>alias</name>
       <descriptions>
-        <desc>Name</desc>
+        <desc>Alias</desc>
       </descriptions>
       <type>str</type>
-      <default>ec2</default>
-      <hidden>true</hidden>
+      <required>true</required>
     </field>
     <field>
       <name>description</name>
@@ -123,8 +112,66 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Description</desc>
       </descriptions>
       <type>str</type>
-      <default>Amazon Elastic Compute Cloud</default>
-      <hidden>true</hidden>
+      <required>true</required>
+    </field>
+    <field>
+      <name>region</name>
+      <descriptions>
+        <desc>Region</desc>
+      </descriptions>
+      <type>enumeratedType</type>
+      <enumeratedType>
+          <describedValue>
+            <descriptions>
+              <desc>US East 1 (Northern Virginia) Region</desc>
+            </descriptions>
+            <key>us-east-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>US West 1 (Northern California)</desc>
+            </descriptions>
+            <key>us-west-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>US West 2 (Oregon)</desc>
+            </descriptions>
+            <key>us-west-2</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>EU (Ireland)</desc>
+            </descriptions>
+            <key>eu-west-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>South America (Sao Paulo)</desc>
+            </descriptions>
+            <key>sa-east-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>Asia Pacific NorthEast (Tokyo)</desc>
+            </descriptions>
+            <key>ap-northeast-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>Asia Pacific 1 (Singapore)</desc>
+            </descriptions>
+            <key>ap-southeast-1</key>
+          </describedValue>
+          <describedValue>
+            <descriptions>
+              <desc>Asia Pacific 2 (Sydney)</desc>
+            </descriptions>
+            <key>ap-southeast-2</key>
+          </describedValue>
+      </enumeratedType>
+      <default>us-east-1</default>
+      <required>true</required>
     </field>
     <field>
       <name>accountId</name>
@@ -324,7 +371,6 @@ class EC2Client(baseDriver.BaseDriver):
     class SecurityGroupHandler(securityGroups.Handler):
         securityGroupClass = EC2_SecurityGroup
 
-    DefaultCloudName = 'aws'
     ImagePrefix = 'ami-'
 
     def _getProxyInfo(self, https = True):
@@ -471,10 +517,6 @@ class EC2Client(baseDriver.BaseDriver):
         return True
 
     @classmethod
-    def getCloudNameFromDescriptorData(cls, descriptorData):
-        return cls.DefaultCloudName
-
-    @classmethod
     def getTargetConfigFromDescriptorData(cls, descriptorData):
         config = super(EC2Client, cls).getTargetConfigFromDescriptorData(descriptorData)
         # Strip whitespaces that could cause problems
@@ -483,8 +525,6 @@ class EC2Client(baseDriver.BaseDriver):
         # Fix PEM fields
         for field in ['ec2Certificate', 'ec2CertificateKey']:
             config[field] = fixPEM(config[field])
-        config.update(name=cls.DefaultCloudName, alias=EC2_ALIAS,
-            description=EC2_DESCRIPTION)
         return config
 
     def drvVerifyCloudConfiguration(self, dataDict):
