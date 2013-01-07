@@ -7,8 +7,8 @@ import sys
 import time
 import urllib
 import urllib2
-from boto.ec2.connection import EC2Connection
-from boto.s3.connection import S3Connection
+from boto.ec2.connection import EC2Connection, RegionInfo
+from boto.s3.connection import S3Connection, Location
 from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 
 from mint import helperfuncs
@@ -81,6 +81,66 @@ class EC2_InstanceTypes(instances.InstanceTypes):
         ('c1.xlarge', "High-CPU Extra Large"),
     ]
 
+class XRegionInfo(RegionInfo):
+    def __init__(self, name=None, endpoint=None, s3Endpoint=None,
+            s3Location=None, description=None):
+        super(XRegionInfo, self).__init__(name=name, endpoint=endpoint)
+        self.s3Endpoint = s3Endpoint
+        self.s3Location = s3Location
+        self.description = description
+
+class Regions(object):
+    """
+    A cache of the region info, with a more descriptive text.
+    Can be regenerated with data from boto's get_all_regions()
+    """
+    _regions = [
+        XRegionInfo(name="us-east-1", endpoint="ec2.us-east-1.amazonaws.com",
+            s3Endpoint="s3.amazonaws.com", s3Location=Location.DEFAULT,
+            description="US East 1 (Northern Virginia) Region"),
+        XRegionInfo(name="us-west-1", endpoint="ec2.us-west-1.amazonaws.com",
+            s3Endpoint="s3-us-west-1.amazonaws.com", s3Location='us-west-1',
+            description="US West 1 (Northern California)"),
+        XRegionInfo(name="us-west-2", endpoint="ec2.us-west-2.amazonaws.com",
+            s3Endpoint="s3-us-west-2.amazonaws.com", s3Location='us-west-2',
+            description="US West 2 (Oregon)"),
+        XRegionInfo(name="eu-west-1", endpoint="ec2.eu-west-1.amazonaws.com",
+            s3Endpoint="s3-eu-west-1.amazonaws.com", s3Location='EU',
+            description="EU (Ireland)"),
+        XRegionInfo(name="sa-east-1", endpoint="ec2.sa-east-1.amazonaws.com",
+            s3Endpoint="s3-sa-east-1.amazonaws.com", s3Location='sa-east-1',
+            description="South America (Sao Paulo)"),
+        XRegionInfo(name="ap-northeast-1", endpoint="ec2.ap-northeast-1.amazonaws.com",
+            s3Endpoint="s3-ap-northeast-1.amazonaws.com",
+            s3Location='ap-northeast-1',
+            description="Asia Pacific NorthEast (Tokyo)"),
+        XRegionInfo(name="ap-southeast-1", endpoint="ec2.ap-southeast-1.amazonaws.com",
+            s3Endpoint="s3-ap-southeast-1.amazonaws.com",
+            s3Location='ap-southeast-1',
+            description="Asia Pacific 1 (Singapore)"),
+        XRegionInfo(name="ap-southeast-2", endpoint="ec2.ap-southeast-2.amazonaws.com",
+            s3Endpoint="s3-ap-southeast-2.amazonaws.com",
+            s3Location='ap-southeast-2',
+            description="Asia Pacific 2 (Sydney)"),
+    ]
+
+    @classmethod
+    def get(cls, name):
+        if name is None:
+            return None
+        for region in cls._regions:
+            if region.name == name:
+                return region
+        raise KeyError(name)
+
+    @classmethod
+    def asEnumeratedType(cls):
+        tmpl = "<enumeratedType>%s</enumeratedType>"
+        tmpl2 = "<describedValue><descriptions><desc>%s</desc></descriptions><key>%s</key></describedValue>"
+        return tmpl % ''.join(
+            tmpl2 % (regInfo.description, regInfo.name)
+                for regInfo in cls._regions)
+
 _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
   <metadata>
@@ -120,56 +180,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Region</desc>
       </descriptions>
       <type>enumeratedType</type>
-      <enumeratedType>
-          <describedValue>
-            <descriptions>
-              <desc>US East 1 (Northern Virginia) Region</desc>
-            </descriptions>
-            <key>us-east-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>US West 1 (Northern California)</desc>
-            </descriptions>
-            <key>us-west-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>US West 2 (Oregon)</desc>
-            </descriptions>
-            <key>us-west-2</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>EU (Ireland)</desc>
-            </descriptions>
-            <key>eu-west-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>South America (Sao Paulo)</desc>
-            </descriptions>
-            <key>sa-east-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>Asia Pacific NorthEast (Tokyo)</desc>
-            </descriptions>
-            <key>ap-northeast-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>Asia Pacific 1 (Singapore)</desc>
-            </descriptions>
-            <key>ap-southeast-1</key>
-          </describedValue>
-          <describedValue>
-            <descriptions>
-              <desc>Asia Pacific 2 (Sydney)</desc>
-            </descriptions>
-            <key>ap-southeast-2</key>
-          </describedValue>
-      </enumeratedType>
+%s
       <default>us-east-1</default>
       <required>true</required>
     </field>
@@ -269,7 +280,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <help href='configuration/s3Bucket.html'/>
     </field>
   </dataFields>
-</descriptor>"""
+</descriptor>""" % Regions.asEnumeratedType()
 
 _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 <descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
@@ -434,16 +445,26 @@ class EC2Client(baseDriver.BaseDriver):
                              **kwargs)
 
     def _getEC2ConnectionInfo(self, credentials):
-        return None, None, None, True
+        cloudConfig = self.getTargetConfiguration()
+        regionName = cloudConfig.get('region')
+        region = Regions.get(regionName)
+        return region, None, None, True
 
     def _getS3ConnectionInfo(self, credentials):
-        return S3Connection.DefaultHost, None, None, True, None
+        cloudConfig = self.getTargetConfiguration()
+        regionName = cloudConfig.get('region')
+        region = Regions.get(regionName)
+        if region is None:
+            s3Endpoint, s3Location = S3Connection.DefaultHost, Location.DEFAULT
+        else:
+            s3Endpoint, s3Location = region.s3Endpoint, region.s3Location
+        return s3Endpoint, None, None, True, None, s3Location
 
     def _getS3Connection(self, credentials):
         publicAccessKeyId = credentials['publicAccessKeyId']
         secretAccessKey = credentials['secretAccessKey']
         proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo(https=True)
-        botoHost, botoPort, path, isSecure, callingFormat = self._getS3ConnectionInfo(credentials)
+        botoHost, botoPort, path, isSecure, callingFormat, location = self._getS3ConnectionInfo(credentials)
         kw = dict(
                             proxy_user = proxyUser,
                             proxy_pass = proxyPass,
@@ -458,7 +479,7 @@ class EC2Client(baseDriver.BaseDriver):
         kwargs = self._updateDict({}, kw)
         return S3Connection(self._strip(publicAccessKeyId),
                             self._strip(secretAccessKey),
-                            **kwargs)
+                            **kwargs), location
 
     @classmethod
     def _updateDict(cls, dst, src):
@@ -473,14 +494,14 @@ class EC2Client(baseDriver.BaseDriver):
         return base64.b64encode(file("/dev/urandom").read(8))
 
     def _validateS3Bucket(self, publicAccessKeyId, secretAccessKey, bucket):
-        conn = self._getS3Connection(credentials=dict(
+        conn, location = self._getS3Connection(credentials=dict(
             publicAccessKeyId=publicAccessKeyId,
             secretAccessKey=secretAccessKey))
         # boto 2.0 enforces that bucket names don't have upper case
         bucket = bucket.lower()
 
         try:
-            conn.create_bucket(bucket)
+            conn.create_bucket(bucket, location=location)
         except S3CreateError, e:
             # Bucket already exists
             pass

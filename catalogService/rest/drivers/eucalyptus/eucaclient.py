@@ -287,7 +287,7 @@ class EucalyptusClient(ec2client.EC2Client):
         targetConfiguration = self.getTargetConfiguration()
         port = targetConfiguration['port']
         return (self.cloudName, port, '/services/Walrus', False,
-            self.CallingFormat)
+            self.CallingFormat, None, '')
 
     getImageIdFromMintImage = ec2client.baseDriver.BaseDriver._getImageIdFromMintImage_local
 
@@ -431,7 +431,7 @@ class EucalyptusClient(ec2client.EC2Client):
         totalSize = sum(x[1] for x in bundleItemGen)
 
         cb = self.UploadCallback(job, self._msg).callback
-        s3conn = self._getS3Connection(targetConfiguration)
+        s3conn, location = self._getS3Connection(targetConfiguration)
         policy = None
         bucket = ec2.S3Wrapper.createBucketBackend(s3conn, bucketName,
             policy=policy)
