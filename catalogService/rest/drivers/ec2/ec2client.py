@@ -5,7 +5,6 @@ import os
 import re
 import sys
 import time
-import urllib
 import urllib2
 from boto.ec2.connection import EC2Connection, RegionInfo
 from boto.s3.connection import S3Connection, Location
