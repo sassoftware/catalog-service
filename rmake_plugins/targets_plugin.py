@@ -354,6 +354,8 @@ class TargetsImageDeployTask(JobProgressTaskHandler):
         return img
 
     def linkTargetImageToImage(self, rbuilderImageId, targetImageId):
+        if not self.image.getShortName():
+            self.image.setShortName(targetImageId)
         imageXml = etree.tostring(self.image.getElementTree(),
             xml_declaration=False)
 

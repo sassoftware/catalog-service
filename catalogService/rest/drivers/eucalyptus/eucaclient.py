@@ -5,13 +5,8 @@
 # vim: set fileencoding=utf-8 :
 
 import os
-import subprocess
-import tempfile
 from boto.s3 import connection as s3connection
 from boto.ec2.regioninfo import RegionInfo
-
-from conary.lib import util
-from mint import ec2
 
 from catalogService import errors
 from catalogService.rest.drivers.ec2 import ec2client
@@ -214,6 +209,8 @@ class EucalyptusClient(ec2client.EC2Client):
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
+    PermittedS3Users = None
+
     class Cloud(ec2client.EC2_Cloud):
         pass
     class Image(ec2client.EC2_Image):
@@ -280,6 +277,7 @@ class EucalyptusClient(ec2client.EC2Client):
     def _getEC2ConnectionInfo(self, credentials):
         targetConfiguration = self.getTargetConfiguration()
         port = targetConfiguration['port']
+        self.kernelMap = {}
         return (RegionInfo(name=self.cloudName, endpoint=self.cloudName),
             port, '/services/Eucalyptus', False)
 
@@ -340,127 +338,14 @@ class EucalyptusClient(ec2client.EC2Client):
         instanceIds = self._launchInstances(job, image, launchParams)
         return instanceIds
 
-    @classmethod
-    def _tempfile(self, contents):
-        f = tempfile.NamedTemporaryFile(dir="/dev/shm")
-        f.write(contents)
-        f.flush()
-        f.seek(0)
-        return f
-
-    def _deployImage(self, job, image, auth, launchParams):
-        tmpDir = tempfile.mkdtemp(prefix="euca-download-")
-        tconf = self.getTargetConfiguration(forceAdmin=True)
-        x509CertFile = self._tempfile(tconf['certificateData'])
-        x509KeyFile = self._tempfile(tconf['certificateKeyData'])
-        cloudX509CertFile = self._tempfile(tconf['cloudX509Cert'])
-        # The account does not matter for euca
-        accountId = '0' * 12
-        bucketName = tconf['s3Bucket']
-
-        dlpath = self.downloadImage(job, image, tmpDir, auth=auth)
-
+    def _getFilesystemImage(self, job, image, dlpath):
         fileExtensions = [ '.ext3' ]
-        try:
-            self._msg(job, "Uncompressing image")
-            workdir = self.extractImage(dlpath)
-            # XXX make this more robust
-            imageFileDir, imageFileName = self.findFile(workdir, fileExtensions)
-            if imageFileDir is None:
-                raise RuntimeError("No file(s) found: %s" %
-                    ', '.join("*%s" % x for x in fileExtensions))
-            imageFilePath = os.path.join(imageFileDir, imageFileName)
-            bundlePath = os.path.join(workdir, "bundled")
-            util.mkdirChain(bundlePath)
-            imagePrefix = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
-            architecture = image.getArchitecture() or "x86"
-            if architecture == 'x86':
-                architecture = 'i386'
-            self._msg(job, "Bundling image")
-            self._bundleImage(imageFilePath, accountId,
-                x509CertFile.name, x509KeyFile.name,
-                bundlePath, imagePrefix, architecture,
-                cloudX509CertFile=cloudX509CertFile.name)
-            manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
-            emiId = self._registerImage(job, bucketName, manifestName, tconf)
-            self._msg(job, "Associating image %s" % emiId)
-            self.db.targetMgr.linkTargetImageToImage(
-                self.cloudType, self.cloudName, image._fileId, emiId)
-            return emiId
-        finally:
-            # clean up our mess
-            util.rmtree(tmpDir, ignore_errors=True)
-            util.rmtree(dlpath, ignore_errors=True)
-
-    @classmethod
-    def _bundleImage(cls, inputFSImage, accountId, x509CertFile, x509KeyFile,
-            bundlePath, imagePrefix, architecture, kernelImage=None,
-            ramdiskImage=None, cloudX509CertFile=None):
-        cmd = [ '/usr/bin/ec2-bundle-image',
-            '-i', inputFSImage,
-            '-u', accountId,
-            '-c', x509CertFile,
-            '-k', x509KeyFile,
-            '-d', bundlePath,
-            '-p', imagePrefix,
-            '-r', architecture,
-        ]
-        if kernelImage:
-            cmd.extend(['--kernel', kernelImage,])
-        if ramdiskImage:
-            cmd.extend(['--ramdisk', ramdiskImage])
-        if cloudX509CertFile:
-            cmd.extend(['--ec2cert', cloudX509CertFile])
-        p = subprocess.Popen(cmd)
-        p.wait()
-
-    @classmethod
-    def _bundleItem(cls, bundlePath, fileName):
-        fpath = os.path.join(bundlePath, fileName)
-        fobj = file(fpath)
-        fobj.seek(0, 2)
-        fsize = fobj.tell()
-        fobj.seek(0, 0)
-        return fileName, fsize, fobj
-
-    def _uploadBundle(self, job, bundlePath, bucketName, targetConfiguration):
-        self._msg(job, "Uploading bundle")
-        bundleItemGen = [ self._bundleItem(bundlePath, x)
-            for x in os.listdir(bundlePath) ]
-        fileCount = len(bundleItemGen)
-        totalSize = sum(x[1] for x in bundleItemGen)
-
-        cb = self.UploadCallback(job, self._msg).callback
-        s3conn, location = self._getS3Connection(targetConfiguration)
-        policy = None
-        bucket = ec2.S3Wrapper.createBucketBackend(s3conn, bucketName,
-            policy=policy)
-        ec2.S3Wrapper.uploadBundleBackend(bundleItemGen, fileCount, totalSize,
-            bucket, callback=cb, policy=policy)
-        manifests = [ os.path.basename(x[0]) for x in bundleItemGen
-                            if x[0].endswith('.manifest.xml') ]
-
-        return manifests[0]
-
-    def _registerImage(self, job, bucketName, manifestName, targetConfiguration):
-        self._msg(job, "Registering image")
-        ec2conn = self._getEC2Connection(targetConfiguration)
-        loc = "%s/%s" % (bucketName, os.path.basename(manifestName))
-        emiId = ec2conn.register_image(image_location=loc)
-        self._msg(job, "Registered %s" % emiId)
-        return emiId
-
-    class UploadCallback(object):
-        def __init__(self, job, msg):
-            self.job = job
-            self.msg = msg
-
-        def callback(self, fileName, fileIdx, fileTotal,
-                currentFileBytes, totalFileBytes, sizeCurrent, sizeTotal):
-            # Nice percentages
-            if sizeTotal == 0:
-                sizeTotal = 1024
-            pct = sizeCurrent * 100.0 / sizeTotal
-            message = "Uploading bundle: %d%%" % (pct, )
-
-            self.msg(self.job, message)
+        self._msg(job, "Uncompressing image")
+        workdir = self.extractImage(dlpath)
+        # XXX make this more robust
+        imageFileDir, imageFileName = self.findFile(workdir, fileExtensions)
+        if imageFileDir is None:
+            raise RuntimeError("No file(s) found: %s" %
+                ', '.join("*%s" % x for x in fileExtensions))
+        imageFilePath = os.path.join(imageFileDir, imageFileName)
+        return imageFilePath

@@ -1,25 +1,25 @@
 # vim: set fileencoding=utf-8 :
 
 import base64
+import gzip
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import urllib2
 from boto.ec2.connection import EC2Connection, RegionInfo
 from boto.s3.connection import S3Connection, Location
 from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
+from conary.lib import util
 
-from mint import helperfuncs
-from mint.mint_error import EC2Exception as MintEC2Exception
-from mint.mint_error import TargetExists, TargetMissing, PermissionDenied
+from mint import ec2, helperfuncs
 
 from catalogService import errors
-from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-from catalogService.rest.models import keypairs
 from catalogService.rest.models import securityGroups
 
 CATALOG_DYN_SECURITY_GROUP = 'dynamic'
@@ -81,11 +81,12 @@ class EC2_InstanceTypes(instances.InstanceTypes):
 
 class XRegionInfo(RegionInfo):
     def __init__(self, name=None, endpoint=None, s3Endpoint=None,
-            s3Location=None, description=None):
+            s3Location=None, description=None, kernelMap=None):
         super(XRegionInfo, self).__init__(name=name, endpoint=endpoint)
         self.s3Endpoint = s3Endpoint
         self.s3Location = s3Location
         self.description = description
+        self.kernelMap = kernelMap
 
 class Regions(object):
     """
@@ -95,31 +96,39 @@ class Regions(object):
     _regions = [
         XRegionInfo(name="us-east-1", endpoint="ec2.us-east-1.amazonaws.com",
             s3Endpoint="s3.amazonaws.com", s3Location=Location.DEFAULT,
-            description="US East 1 (Northern Virginia) Region"),
+            description="US East 1 (Northern Virginia) Region",
+            kernelMap={'x86_64': 'aki-88aa75e1', 'i386': 'aki-b6aa75df'}),
         XRegionInfo(name="us-west-1", endpoint="ec2.us-west-1.amazonaws.com",
             s3Endpoint="s3-us-west-1.amazonaws.com", s3Location='us-west-1',
-            description="US West 1 (Northern California)"),
+            description="US West 1 (Northern California)",
+            kernelMap={'x86_64': 'aki-f77e26b2', 'i386': 'aki-f57e26b0'}),
         XRegionInfo(name="us-west-2", endpoint="ec2.us-west-2.amazonaws.com",
             s3Endpoint="s3-us-west-2.amazonaws.com", s3Location='us-west-2',
-            description="US West 2 (Oregon)"),
+            description="US West 2 (Oregon)",
+            kernelMap={'x86_64': 'aki-fc37bacc', 'i386': 'aki-fa37baca'}),
         XRegionInfo(name="eu-west-1", endpoint="ec2.eu-west-1.amazonaws.com",
             s3Endpoint="s3-eu-west-1.amazonaws.com", s3Location='EU',
-            description="EU (Ireland)"),
+            description="EU (Ireland)",
+            kernelMap={'x86_64': 'aki-71665e05', 'i386': 'aki-75665e01'}),
         XRegionInfo(name="sa-east-1", endpoint="ec2.sa-east-1.amazonaws.com",
             s3Endpoint="s3-sa-east-1.amazonaws.com", s3Location='sa-east-1',
-            description="South America (Sao Paulo)"),
+            description="South America (Sao Paulo)",
+            kernelMap={'x86_64': 'aki-c48f51d9', 'i386': 'aki-ca8f51d7'}),
         XRegionInfo(name="ap-northeast-1", endpoint="ec2.ap-northeast-1.amazonaws.com",
             s3Endpoint="s3-ap-northeast-1.amazonaws.com",
             s3Location='ap-northeast-1',
-            description="Asia Pacific NorthEast (Tokyo)"),
+            description="Asia Pacific NorthEast (Tokyo)",
+            kernelMap={'x86_64': 'aki-44992845', 'i386': 'aki-42992843'}),
         XRegionInfo(name="ap-southeast-1", endpoint="ec2.ap-southeast-1.amazonaws.com",
             s3Endpoint="s3-ap-southeast-1.amazonaws.com",
             s3Location='ap-southeast-1',
-            description="Asia Pacific 1 (Singapore)"),
+            description="Asia Pacific 1 (Singapore)",
+            kernelMap={'x86_64': 'aki-fe1354ac', 'i386': 'aki-f81354aa'}),
         XRegionInfo(name="ap-southeast-2", endpoint="ec2.ap-southeast-2.amazonaws.com",
             s3Endpoint="s3-ap-southeast-2.amazonaws.com",
             s3Location='ap-southeast-2',
-            description="Asia Pacific 2 (Sydney)"),
+            description="Asia Pacific 2 (Sydney)",
+            kernelMap={'x86_64': 'aki-31990e0b', 'i386': 'aki-33990e09'}),
     ]
 
     @classmethod
@@ -377,6 +386,8 @@ class EC2Client(baseDriver.BaseDriver):
 
     RBUILDER_BUILD_TYPE = 'AMI'
 
+    PermittedS3Users = [ ec2.S3Wrapper.amazonEC2UserId ]
+
     class SecurityGroupHandler(securityGroups.Handler):
         securityGroupClass = EC2_SecurityGroup
 
@@ -403,17 +414,13 @@ class EC2Client(baseDriver.BaseDriver):
         return ret
 
     def _getExternalIp(self):
-        url = "http://rpath.com/clientinfo/"
+        # RCE-1310
+        url = "http://automation.whatismyip.com/n09230945.asp"
         resp = self._openUrl(url)
-        return self._parseXml(resp.read())
-
-    def _parseXml(self, response):
-        from xml.dom import minidom
-        dom = minidom.parseString(response)
-        nodes = dom.getElementsByTagName('remoteIp')
-        if not nodes:
+        data = resp.read().strip()
+        if len(data) > 16:
             return None
-        return nodes[0].firstChild.wholeText
+        return data
 
     def drvCreateCloudClient(self, credentials):
         for key in ('publicAccessKeyId', 'secretAccessKey'):
@@ -446,6 +453,10 @@ class EC2Client(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         regionName = cloudConfig.get('region')
         region = Regions.get(regionName)
+        if region is not None:
+            self.kernelMap = region.kernelMap
+        else:
+            self.kernelMap = {}
         return region, None, None, True
 
     def _getS3ConnectionInfo(self, credentials):
@@ -570,11 +581,6 @@ class EC2Client(baseDriver.BaseDriver):
         fname = hasattr(err, 'error_message') and 'error_message' or 'message'
         return getattr(err, fname)
 
-    def isValidCloudName(self, cloudName):
-        if cloudName != 'aws':
-            return False
-        return baseDriver.BaseDriver.isValidCloudName(self, cloudName)
-
     def drvGetCredentialsFromDescriptor(self, fields):
         accountId = str(fields.getField('accountId'))
         publicAccessKeyId = str(fields.getField('publicAccessKeyId'))
@@ -582,10 +588,6 @@ class EC2Client(baseDriver.BaseDriver):
         return dict(accountId = accountId,
             publicAccessKeyId = publicAccessKeyId,
             secretAccessKey = secretAccessKey)
-
-    def updateCloud(self, parameters):
-        parameters = CloudParameters(parameters)
-        pass
 
     def createUserData(self, userData):
         templ = """\
@@ -625,6 +627,13 @@ boot-uuid=%s
         return params
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
+        if not image.getIsDeployed():
+            imageId = self._deployImage(job, image, auth)
+            launchParams.update(imageId=imageId)
+        elif image._targetImageId is not None:
+            imageId = image._targetImageId
+            launchParams.update(imageId=imageId)
+
         remoteIp = launchParams.pop('remoteIp')
         # If the UI did not send us an IP, don't try to guess, it's going to
         # be wrong anyway.
@@ -712,6 +721,8 @@ boot-uuid=%s
                                            cloudAlias=cloudAlias,
                                            cloudName=self.cloudName,
                                            cloudType=self.cloudType,
+                                           isDeployed = True,
+                                           is_rBuilderImage = False,
                                            )
             imageList.append(i)
         return imageList
@@ -1090,6 +1101,189 @@ boot-uuid=%s
                 permission = permissions))
         return ret
 
+    @classmethod
+    def _tempfile(cls, contents):
+        f = tempfile.NamedTemporaryFile(dir="/dev/shm")
+        f.write(contents)
+        f.flush()
+        f.seek(0)
+        return f
+
+    def _deployImageFromFile(self, job, image, filePath):
+        tconf = self.getTargetConfiguration(forceAdmin=True)
+        bucketName = tconf['s3Bucket']
+
+        tmpDir = os.path.dirname(filePath)
+
+        imageFilePath = self._getFilesystemImage(job, image, filePath)
+        bundlePath = os.path.join(tmpDir, "bundled")
+        util.mkdirChain(bundlePath)
+        imagePrefix = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
+        architecture = image.getArchitecture() or "x86"
+        if architecture == 'x86':
+            architecture = 'i386'
+        self._msg(job, "Bundling image")
+        aki = self.kernelMap.get(architecture)
+        self._bundleImage(imageFilePath, bundlePath, imagePrefix,
+                architecture, targetConfiguration=tconf, kernelImage=aki)
+        manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
+        emiId = self._registerImage(job, bucketName, manifestName, tconf)
+        return emiId
+
+    def _getFilesystemImage(self, job, image, dlpath):
+        self._msg(job, "Computing filesystem image size")
+        gf = gzip.open(dlpath)
+        fsSize = 0
+        blockSize = 1024 * 1024
+        while 1:
+            gf.seek(blockSize, 1)
+            pos = gf.tell()
+            if fsSize == pos:
+                break
+            fsSize = pos
+        gf.close()
+        imageFilePath = os.path.join(os.path.dirname(dlpath),
+            "%s.ext3" % image.getBaseFileName())
+
+        # XXX This should come from the image type
+        freeSpace = 1024 * 1024 * 1024
+        freeSpace = 256 * 1024 * 1024
+
+        # Round filesystem size to a multiple of FS_BLK_SIZE
+        FS_BLK_SIZE = 4096
+
+        # ((a + x - 1) % x + 1) is equal to a % x, except for the
+        # a == x case, where it is x instead of 0.
+        padding = FS_BLK_SIZE - (( fsSize + freeSpace + FS_BLK_SIZE - 1) % FS_BLK_SIZE) - 1
+        imageF = file(imageFilePath, "w")
+        imageF.seek(fsSize + freeSpace + padding - 1)
+        imageF.write('\0')
+        imageF.close()
+
+        self._msg(job, "Creating filesystem image")
+        self._writeFilesystemImage(imageFilePath, dlpath)
+
+        return imageFilePath
+
+    def _writeFilesystemImage(self, fsImage, tarFile):
+        from jobslave.generators import bootable_image
+        fs = bootable_image.Filesystem(fsImage, fsType='ext3', size=0, fsLabel='root')
+        fs.format()
+        mountPoint = os.path.join(os.path.dirname(fsImage), "mounted")
+        util.mkdirChain(mountPoint)
+        fs.mount(mountPoint)
+        cmd = [ 'tar', 'zxf', tarFile, '--directory', mountPoint, '--sparse', ]
+        p = subprocess.Popen(cmd)
+        p.wait()
+
+        self._fixGrub(mountPoint)
+        grubConfF = file(os.path.join(mountPoint, 'etc', 'grub.conf'), "r+")
+        grubData = grubConfF.read()
+        grubData = grubData.replace('(hd0,0)', '(hd0)')
+        grubData = grubData.replace('timeout=5', 'timeout=1')
+        grubConfF.seek(0)
+        grubConfF.truncate()
+        grubConfF.write(grubData)
+        grubConfF.close()
+
+        fs.umount()
+        util.rmtree(mountPoint)
+
+    def _fixGrub(self, mountPoint):
+        confFiles = [ 'grub.conf', 'menu.lst' ]
+        for fname in confFiles:
+            fpath = os.path.join(mountPoint, 'boot', fname)
+            if not os.path.exists(fpath):
+                continue
+            f = file(fpath, "r+")
+            grubData = f.read()
+            grubData = grubData.replace('(hd0,0)', '(hd0)')
+            grubData = grubData.replace('timeout=5', 'timeout=1')
+            f.seek(0)
+            f.truncate()
+            f.write(grubData)
+            f.close()
+
+    @classmethod
+    def _bundleImage(cls, inputFSImage, bundlePath, imagePrefix, architecture,
+            kernelImage=None, ramdiskImage=None, targetConfiguration=None):
+        tconf = targetConfiguration
+        x509CertFile = cls._tempfile(tconf['certificateData'])
+        x509KeyFile = cls._tempfile(tconf['certificateKeyData'])
+        cloudX509CertFile = tconf.get('cloudX509Cert')
+        if cloudX509CertFile is not None:
+            cloudX509CertFile = cls._tempfile(cloudX509CertFile)
+        # The account does not matter for euca
+        accountId = tconf.get('accountId', '0' * 12)
+        cmd = [ '/usr/bin/ec2-bundle-image',
+            '-i', inputFSImage,
+            '-u', accountId,
+            '-c', x509CertFile.name,
+            '-k', x509KeyFile.name,
+            '-d', bundlePath,
+            '-p', imagePrefix,
+            '-r', architecture,
+        ]
+        if kernelImage:
+            cmd.extend(['--kernel', kernelImage,])
+        if ramdiskImage:
+            cmd.extend(['--ramdisk', ramdiskImage])
+        if cloudX509CertFile:
+            cmd.extend(['--ec2cert', cloudX509CertFile.name])
+        p = subprocess.Popen(cmd)
+        p.wait()
+
+    @classmethod
+    def _bundleItem(cls, bundlePath, fileName):
+        fpath = os.path.join(bundlePath, fileName)
+        fobj = file(fpath)
+        fobj.seek(0, 2)
+        fsize = fobj.tell()
+        fobj.seek(0, 0)
+        return fileName, fsize, fobj
+
+    def _uploadBundle(self, job, bundlePath, bucketName, targetConfiguration):
+        self._msg(job, "Uploading bundle")
+        bundleItemGen = [ self._bundleItem(bundlePath, x)
+            for x in os.listdir(bundlePath) ]
+        fileCount = len(bundleItemGen)
+        totalSize = sum(x[1] for x in bundleItemGen)
+
+        cb = self.UploadCallback(job, self._msg).callback
+        s3conn, location = self._getS3Connection(targetConfiguration)
+        policy = None
+        bucket = ec2.S3Wrapper.createBucketBackend(s3conn, bucketName,
+            policy=policy)
+        ec2.S3Wrapper.uploadBundleBackend(bundleItemGen, fileCount, totalSize,
+            bucket, permittedUsers=self.PermittedS3Users,
+            callback=cb, policy=policy)
+        manifests = [ os.path.basename(x[0]) for x in bundleItemGen
+                            if x[0].endswith('.manifest.xml') ]
+
+        return manifests[0]
+
+    def _registerImage(self, job, bucketName, manifestName, targetConfiguration):
+        self._msg(job, "Registering image")
+        ec2conn = self._getEC2Connection(targetConfiguration)
+        loc = "%s/%s" % (bucketName, os.path.basename(manifestName))
+        emiId = ec2conn.register_image(image_location=loc)
+        self._msg(job, "Registered %s" % emiId)
+        return emiId
+
+    class UploadCallback(object):
+        def __init__(self, job, msg):
+            self.job = job
+            self.msg = msg
+
+        def callback(self, fileName, fileIdx, fileTotal,
+                currentFileBytes, totalFileBytes, sizeCurrent, sizeTotal):
+            # Nice percentages
+            if sizeTotal == 0:
+                sizeTotal = 1024
+            pct = sizeCurrent * 100.0 / sizeTotal
+            message = "Uploading bundle: %d%%" % (pct, )
+
+            self.msg(self.job, message)
 
 PEM_LINE = 76
 PEM_HEADER = '-{2,5}(BEGIN [A-Z0-9 ]+?\s*)-{2,5}'

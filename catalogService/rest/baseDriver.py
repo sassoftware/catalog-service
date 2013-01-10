@@ -735,6 +735,7 @@ class BaseDriver(object):
         imageId = imageFileInfo['fileId']
         image = self._nodeFactory.newImage(id=imageId,
             imageId=imageId, isDeployed=False,
+            buildId=imageId,
             is_rBuilderImage=True,
             cloudName=self.cloudName,
             downloadUrl=imageDownloadUrl)
