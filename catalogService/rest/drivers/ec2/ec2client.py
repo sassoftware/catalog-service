@@ -626,6 +626,14 @@ boot-uuid=%s
 
         return params
 
+    def deployImageProcess(self, job, image, auth, **params):
+        if image.getIsDeployed():
+            self._msg(job, "Image is already deployed")
+            return image.getImageId()
+        self._deployImage(job, image, auth)
+        return image.getImageId()
+
+
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         if not image.getIsDeployed():
             imageId = self._deployImage(job, image, auth)
@@ -731,12 +739,6 @@ boot-uuid=%s
         return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
             for x in image.product_codes ]
 
-    def getImageIdFromMintImage(self, imageData, targetImageIds):
-        return imageData.get('amiId')
-
-    def addExtraImagesFromMint(self, imageList, mintImages, cloudAlias):
-        pass
-
     def drvLaunchDescriptorCommonFields(self, descr):
         pass
 
@@ -823,6 +825,12 @@ boot-uuid=%s
             ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
+        return descr
+
+    def drvPopulateImageDeploymentDescriptor(self, descr):
+        descr.setDisplayName("Amazon EC2 Image Deployment Parameters")
+        descr.addDescription("Amazon EC2 Image Deployment Parameters")
+        self.drvImageDeploymentDescriptorCommonFields(descr)
         return descr
 
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress, dynamic = False):
