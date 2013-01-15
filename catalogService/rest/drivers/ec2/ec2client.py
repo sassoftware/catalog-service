@@ -1164,7 +1164,7 @@ boot-uuid=%s
         # ext3 hides 5% of the space for root's own usage. To avoid
         # having people come screaming they didn't get all their free
         # space, let's pad things a bit.
-        totalSize = int((fsSize + freeSpace) * 1.08)
+        totalSize = int((fsSize + freeSpace) * 1.09)
 
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
