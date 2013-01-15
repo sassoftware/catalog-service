@@ -1161,15 +1161,19 @@ boot-uuid=%s
             "%s.ext3" % image.getBaseFileName())
 
         freeSpace = image._imageData.get('freespace', 256) * 1024 * 1024
+        # ext3 hides 5% of the space for root's own usage. To avoid
+        # having people come screaming they didn't get all their free
+        # space, let's pad things a bit.
+        totalSize = int((fsSize + freeSpace) * 0.06)
 
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
 
         # ((a + x - 1) % x + 1) is equal to a % x, except for the
         # a == x case, where it is x instead of 0.
-        padding = FS_BLK_SIZE - (( fsSize + freeSpace + FS_BLK_SIZE - 1) % FS_BLK_SIZE) - 1
+        padding = FS_BLK_SIZE - (( totalSize + FS_BLK_SIZE - 1) % FS_BLK_SIZE) - 1
         imageF = file(imageFilePath, "w")
-        imageF.seek(fsSize + freeSpace + padding - 1)
+        imageF.seek(totalSize + padding - 1)
         imageF.write('\0')
         imageF.close()
 
