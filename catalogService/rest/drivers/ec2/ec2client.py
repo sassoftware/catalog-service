@@ -1160,7 +1160,7 @@ boot-uuid=%s
         imageFilePath = os.path.join(os.path.dirname(dlpath),
             "%s.ext3" % image.getBaseFileName())
 
-        freeSpace = image._imageData.get('freespace', 256 * 1024 * 1024)
+        freeSpace = image._imageData.get('freespace', 256) * 1024 * 1024
 
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
