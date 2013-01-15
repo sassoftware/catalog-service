@@ -1121,6 +1121,9 @@ boot-uuid=%s
         tconf = self.getTargetConfiguration(forceAdmin=True)
         bucketName = tconf['s3Bucket']
 
+        # Force creation of client
+        self._getEC2Connection(tconf)
+
         tmpDir = os.path.dirname(filePath)
 
         imageFilePath = self._getFilesystemImage(job, image, filePath)

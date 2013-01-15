@@ -364,7 +364,7 @@ class TargetsImageDeployTask(JobProgressTaskHandler):
 
     def _isImageDeployed(self):
         targetImageIdList = self.cmdArgs['params']['targetImageIdList']
-        if targetImageIdList is None:
+        if not targetImageIdList:
             return None
         images = self.driver.getImagesFromTarget(targetImageIdList)
         if images:
