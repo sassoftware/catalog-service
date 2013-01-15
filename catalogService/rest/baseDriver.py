@@ -1353,6 +1353,7 @@ class BaseDriver(object):
         image.setBuildPageUrl(mintImageData.get('buildPageUrl'))
         image.setBuildId(buildId)
         image._imageType = mintImageData['imageType']
+        image._imageData = mintImageData.get('imageData')
 
         for key, methodName in methodMap.iteritems():
             value = mintImageData.get(key)

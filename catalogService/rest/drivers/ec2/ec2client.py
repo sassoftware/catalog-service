@@ -1142,23 +1142,25 @@ boot-uuid=%s
         return emiId
 
     def _getFilesystemImage(self, job, image, dlpath):
-        self._msg(job, "Computing filesystem image size")
-        gf = gzip.open(dlpath)
-        fsSize = 0
-        blockSize = 1024 * 1024
-        while 1:
-            gf.seek(blockSize, 1)
-            pos = gf.tell()
-            if fsSize == pos:
-                break
-            fsSize = pos
-        gf.close()
+        imageData = image._imageData
+        fsSize = imageData.get('attributes.installed_size')
+        if fsSize is None:
+            # Hopefully we won't have to do this
+            self._msg(job, "Computing filesystem image size")
+            gf = gzip.open(dlpath)
+            fsSize = 0
+            blockSize = 1024 * 1024
+            while 1:
+                gf.seek(blockSize, 1)
+                pos = gf.tell()
+                if fsSize == pos:
+                    break
+                fsSize = pos
+            gf.close()
         imageFilePath = os.path.join(os.path.dirname(dlpath),
             "%s.ext3" % image.getBaseFileName())
 
-        # XXX This should come from the image type
-        freeSpace = 1024 * 1024 * 1024
-        freeSpace = 256 * 1024 * 1024
+        freeSpace = image._imageData.get('freeSpace', 256 * 1024 * 1024)
 
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
