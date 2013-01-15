@@ -335,23 +335,26 @@ class TargetsInstanceCaptureTask(JobProgressTaskHandler):
 
 class TargetsImageDeployTask(JobProgressTaskHandler):
     def _run(self):
-        img = self._deployImage()
+        job = self.Job(self.sendStatus)
+        img, descriptorData = self._getImageInfo()
+        img = self.driver.deployImageFromUrl(job, img, descriptorData)
         self.finishCall(img, "Image deployed")
 
-    def _deployImage(self):
+    def _getImageInfo(self):
         params = self.cmdArgs['params']
-        job = self.Job(self.sendStatus)
         imageFileInfo = params['imageFileInfo']
         descriptorData = params['descriptorData']
         imageDownloadUrl = params['imageDownloadUrl']
+        imageData = params['imageData']
         img = self._isImageDeployed()
         if img is None:
-            img = self.driver.imageFromFileInfo(imageFileInfo, imageDownloadUrl)
+            img = self.driver.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
+                    imageData=imageData)
         else:
-            self.driver.updateImageFromFileInfo(img, imageFileInfo)
+            self.driver.updateImageFromFileInfo(img, imageFileInfo,
+                    imageData=imageData)
         self.image = img
-        img = self.driver.deployImageFromUrl(job, img, descriptorData)
-        return img
+        return img, descriptorData
 
     def linkTargetImageToImage(self, rbuilderImageId, targetImageId):
         if not self.image.getShortName():
@@ -417,17 +420,8 @@ class InventoryHandler(object):
 
 class TargetsSystemLaunchTask(TargetsImageDeployTask):
     def _run(self):
-        params = self.cmdArgs['params']
         job = self.Job(self.sendStatus)
-        imageFileInfo = params['imageFileInfo']
-        descriptorData = params['descriptorData']
-        imageDownloadUrl = params['imageDownloadUrl']
-        img = self._isImageDeployed()
-        if img is None:
-            img = self.driver.imageFromFileInfo(imageFileInfo, imageDownloadUrl)
-        else:
-            self.driver.updateImageFromFileInfo(img, imageFileInfo)
-        self.image = img
+        img, descriptorData = self._getImageInfo()
         instanceIdList = self.driver.launchSystemSynchronously(job, img, descriptorData)
         io = XmlStringIO(xobj2.Document.serialize(self.driver.inventoryHandler.systems))
         self.finishCall(io, "Systems launched")

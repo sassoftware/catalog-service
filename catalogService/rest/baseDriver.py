@@ -731,7 +731,8 @@ class BaseDriver(object):
             descriptor = descr)
         return self.deployImageFromDescriptorData(descrData, auth, xmlString)
 
-    def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl):
+    def imageFromFileInfo(self, imageFileInfo, imageDownloadUrl,
+            imageData=None):
         imageId = imageFileInfo['fileId']
         image = self._nodeFactory.newImage(id=imageId,
             imageId=imageId, isDeployed=False,
@@ -739,14 +740,15 @@ class BaseDriver(object):
             is_rBuilderImage=True,
             cloudName=self.cloudName,
             downloadUrl=imageDownloadUrl)
-        self.updateImageFromFileInfo(image, imageFileInfo)
+        self.updateImageFromFileInfo(image, imageFileInfo, imageData=imageData)
         return image
 
-    def updateImageFromFileInfo(self, image, imageFileInfo):
+    def updateImageFromFileInfo(self, image, imageFileInfo, imageData=None):
         image.setBaseFileName(imageFileInfo['baseFileName'])
         image.setChecksum(imageFileInfo.get('sha1'))
         image.setSize(imageFileInfo.get('size'))
         image._fileId = imageFileInfo['fileId']
+        image._imageData = imageData
         return image
 
     def deployImageFromUrl(self, job, image, descriptorDataXml):
