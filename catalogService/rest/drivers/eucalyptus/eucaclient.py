@@ -253,7 +253,7 @@ class EucalyptusClient(ec2client.EC2Client):
     def _fixConfig(self, config):
         # Fix PEM fields
         for field in ['certificateData', 'certificateKeyData', 'cloudX509Cert']:
-            config[field] = ec2Client.fixPEM(config[field])
+            config[field] = ec2client.fixPEM(config[field])
         return config
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
