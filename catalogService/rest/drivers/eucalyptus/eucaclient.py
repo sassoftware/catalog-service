@@ -218,6 +218,8 @@ class EucalyptusClient(ec2client.EC2Client):
     class Instance(ec2client.EC2_Instance):
         pass
 
+    _configNameMap = []
+
     class _ImageMap(ec2client.EC2Client._ImageMap):
         def __init__(self, imageList):
             ec2client.EC2Client._ImageMap.__init__(self, imageList)
@@ -231,8 +233,8 @@ class EucalyptusClient(ec2client.EC2Client):
             descriptorData)
 
     def drvVerifyCloudConfiguration(self, config):
-        certificateData = ec2client.fixPEM(config.get('certificateData'))
-        certificateKeyData = ec2client.fixPEM(config.get('certificateKeyData'))
+        certificateData = config.get('certificateData')
+        certificateKeyData = config.get('certificateKeyData')
         config.update(certificateData=certificateData,
             certificateKeyData=certificateKeyData)
         config.update((k, self._strip(v)) for k, v in config.items())
@@ -247,6 +249,12 @@ class EucalyptusClient(ec2client.EC2Client):
         except ec2client.EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         self._targetConfig = None
+
+    def _fixConfig(self, config):
+        # Fix PEM fields
+        for field in ['certificateData', 'certificateKeyData', 'cloudX509Cert']:
+            config[field] = ec2Client.fixPEM(config[field])
+        return config
 
     def drvGetTargetConfiguration(self, targetData, isAdmin = False):
         publicAccessKeyId = targetData.get('publicAccessKeyId')
