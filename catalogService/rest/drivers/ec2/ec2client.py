@@ -552,10 +552,11 @@ class EC2Client(baseDriver.BaseDriver):
         # Strip whitespaces that could cause problems
         config = dict((x, cls._strip(y)) for (x, y) in config.items())
 
-        config = self._fixConfig(config)
+        config = cls._fixConfig(config)
         return config
 
-    def _fixConfig(self, config):
+    @classmethod
+    def _fixConfig(cls, config):
         # Fix PEM fields
         for field in ['ec2Certificate', 'ec2CertificateKey']:
             config[field] = fixPEM(config[field])

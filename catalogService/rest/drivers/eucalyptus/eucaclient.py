@@ -250,7 +250,8 @@ class EucalyptusClient(ec2client.EC2Client):
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         self._targetConfig = None
 
-    def _fixConfig(self, config):
+    @classmethod
+    def _fixConfig(cls, config):
         # Fix PEM fields
         for field in ['certificateData', 'certificateKeyData', 'cloudX509Cert']:
             config[field] = ec2client.fixPEM(config[field])
