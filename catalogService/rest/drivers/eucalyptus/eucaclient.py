@@ -285,7 +285,7 @@ class EucalyptusClient(ec2client.EC2Client):
         targetConfiguration = self.getTargetConfiguration()
         port = targetConfiguration['port']
         return (self.cloudName, port, '/services/Walrus', False,
-            self.CallingFormat, None, '')
+            self.CallingFormat, None)
 
     getImageIdFromMintImage = ec2client.baseDriver.BaseDriver._getImageIdFromMintImage_local
 
@@ -330,7 +330,7 @@ class EucalyptusClient(ec2client.EC2Client):
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         if not image.getIsDeployed():
-            imageId = self._deployImage(job, image, auth, launchParams)
+            imageId = self._deployImage(job, image, auth)
             launchParams.update(imageId=imageId)
         elif image._targetImageId is not None:
             imageId = image._targetImageId
