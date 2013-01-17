@@ -529,7 +529,7 @@ class BaseDriver(object):
         descr = self._nodeFactory.newCloudConfigurationDescriptor(descr)
         return descr
 
-    def getLaunchDescriptor(self):
+    def getLaunchDescriptor(self, extraArgs=None):
         cred = self.credentials
         if not cred:
             raise errors.HttpNotFound(message = "User has no credentials set")
@@ -542,11 +542,11 @@ class BaseDriver(object):
             constraints = dict(constraintName = 'range',
                                min = 1, max = 32))
 
-        self.drvPopulateLaunchDescriptor(descr)
+        self.drvPopulateLaunchDescriptor(descr, extraArgs=extraArgs)
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
-    def getImageDeploymentDescriptor(self):
+    def getImageDeploymentDescriptor(self, extraArgs=None):
         cred = self.credentials
         if not cred:
             raise errors.HttpNotFound(message = "User has no credentials set")
@@ -559,11 +559,11 @@ class BaseDriver(object):
             constraints = dict(constraintName = 'range',
                                min = 1, max = 32))
 
-        self.drvPopulateImageDeploymentDescriptor(descr)
+        self.drvPopulateImageDeploymentDescriptor(descr, extraArgs=extraArgs)
         descr = self._nodeFactory.newLaunchDescriptor(descr)
         return descr
 
-    def drvPopulateImageDeploymentDescriptor(self, descr):
+    def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
         # By default, image deployment does not work
         raise errors.HttpNotFound()
 
@@ -754,7 +754,8 @@ class BaseDriver(object):
     def deployImageFromUrl(self, job, image, descriptorDataXml):
         """Only invoked via rmake"""
         # Grab descriptor
-        descr = self.getImageDeploymentDescriptor()
+        descr = self.getImageDeploymentDescriptor(
+                extraArgs=dict(imageData=image._imageData))
         descr.setRootElement("descriptor_data")
         # Parse the XML string into descriptor data
         descriptorData = descriptor.DescriptorData(
@@ -767,7 +768,8 @@ class BaseDriver(object):
     def launchSystemSynchronously(self, job, image, descriptorDataXml):
         """Only invoked via rmake"""
         # Grab descriptor
-        descr = self.getLaunchDescriptor()
+        descr = self.getLaunchDescriptor(
+                extraArgs=dict(imageData=image._imageData))
         descr.setRootElement("descriptor_data")
         # Parse the XML string into descriptor data
         descriptorData = descriptor.DescriptorData(

@@ -225,7 +225,7 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     # This also takes optional "ipgroup", "meta", and "files", 
     # see novaclient/servers.py, ignoring for now.  TODO: really ignore?
-    def drvPopulateLaunchDescriptor(self, descr):
+    def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("OpenStack Launch Parameters")
         descr.addDescription("OpenStack Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)

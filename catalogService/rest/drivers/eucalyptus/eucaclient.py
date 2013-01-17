@@ -326,7 +326,7 @@ class EucalyptusClient(ec2client.EC2Client):
         sGroups = self._getUnfilteredSecurityGroups(groupNames = groupNames)
         return sGroups
 
-    def drvPopulateLaunchDescriptor(self, descr):
+    def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         ec2client.EC2Client.drvPopulateLaunchDescriptor(self, descr)
         descr.setDisplayName("Eucalyptus Launch Parameters")
         descr.addDescription("Eucalyptus Launch Parameters")

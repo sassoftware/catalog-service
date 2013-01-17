@@ -225,13 +225,13 @@ class VCloudClient(baseDriver.BaseDriver):
     def _id(cls, href, prefix):
         return "%s-%s" % (prefix, os.path.basename(href))
 
-    def drvPopulateImageDeploymentDescriptor(self, descr):
+    def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName('VMware vCloud Image Upload Parameters')
         descr.addDescription('VMware vCloud Image Upload Parameters')
         self.drvImageDeploymentDescriptorCommonFields(descr)
         return self._drvPopulateDescriptorFromTarget(descr, withNetwork=False)
 
-    def drvPopulateLaunchDescriptor(self, descr):
+    def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("VMware vCloud Launch Parameters")
         descr.addDescription("VMware vCloud Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)

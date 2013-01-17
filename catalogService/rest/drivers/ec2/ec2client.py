@@ -747,9 +747,15 @@ boot-uuid=%s
     def drvLaunchDescriptorCommonFields(self, descr):
         pass
 
-    def drvPopulateLaunchDescriptor(self, descr):
-        descr.setDisplayName("Amazon EC2 Launch Parameters")
-        descr.addDescription("Amazon EC2 Launch Parameters")
+    def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
+        imageData = self._getImageData(extraArgs)
+        title = "Amazon EC2 System Launch Parameters"
+        if imageData.ebsBacked:
+            title += " (EBS-backed)"
+        freeSpace = imageData.freespace or 256
+
+        descr.setDisplayName(title)
+        descr.addDescription(title)
         self.drvLaunchDescriptorCommonFields(descr)
         descr.addDataField("instanceType",
             descriptions = [
@@ -764,6 +770,12 @@ boot-uuid=%s
                     descriptions = y)
                   for (x, y) in EC2_InstanceTypes.idMap),
             default = EC2_InstanceTypes.idMap[0][0],
+            )
+        descr.addDataField("freeSpace",
+            descriptions = [ ("Free Space (Megabytes)", None) ],
+            required = True,
+            type = "int",
+            default = freeSpace,
             )
         descr.addDataField("availabilityZone",
             descriptions = [
@@ -832,11 +844,28 @@ boot-uuid=%s
             constraints = dict(constraintName = 'length', value = 256))
         return descr
 
-    def drvPopulateImageDeploymentDescriptor(self, descr):
-        descr.setDisplayName("Amazon EC2 Image Deployment Parameters")
-        descr.addDescription("Amazon EC2 Image Deployment Parameters")
+    def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
+        imageData = self._getImageData(extraArgs)
+        title = "Amazon EC2 Image Deployment Parameters"
+        if imageData.ebsBacked:
+            title += ' (EBS-backed)'
+        descr.setDisplayName(title)
+        descr.addDescription(title)
         self.drvImageDeploymentDescriptorCommonFields(descr)
         return descr
+
+    class ImageData(object):
+        __slots__ = [ 'ebsBacked', 'freespace', 'amiHugeDiskMountpoint', ]
+        def __init__(self, **kwargs):
+            for slot in self.__slots__:
+                setattr(self, slot, kwargs.get(slot))
+
+    def _getImageData(self, extraArgs):
+        if extraArgs is None:
+            imageDataDict = {}
+        else:
+            imageDataDict = extraArgs.get('imageData', {})
+        return self.ImageData(**imageDataDict)
 
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress, dynamic = False):
         # add the security group if it's not present already

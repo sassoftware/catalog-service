@@ -293,7 +293,7 @@ class XenEntClient(baseDriver.BaseDriver):
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])
 
-    def drvPopulateLaunchDescriptor(self, descr):
+    def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("Xen Enterprise Launch Parameters")
         descr.addDescription("Xen Enterprise Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)

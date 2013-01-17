@@ -435,7 +435,7 @@ class TargetsImageDeployDescriptorTask(BaseTaskHandler):
         """
         Fetch image deployment descriptor
         """
-        descr = self.driver.getImageDeploymentDescriptor()
+        descr = self.driver.getImageDeploymentDescriptor(extraArgs=self.cmdArgs)
         io = XmlStringIO(etree.tounicode(descr.getElementTree()))
         self.finishCall(io, "Descriptor generated")
 
@@ -444,7 +444,7 @@ class TargetsSystemLaunchDescriptorTask(BaseTaskHandler):
         """
         Fetch system launch descriptor
         """
-        descr = self.driver.getLaunchDescriptor()
+        descr = self.driver.getLaunchDescriptor(extraArgs=self.cmdArgs)
         io = XmlStringIO()
         descr.serialize(io)
         self.finishCall(io, "Descriptor generated")
