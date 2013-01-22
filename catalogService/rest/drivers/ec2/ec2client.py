@@ -7,8 +7,10 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib2
-from boto.ec2.connection import EC2Connection, RegionInfo
+from boto import ec2 as bec2
+from boto.ec2 import EC2Connection
 from boto.s3.connection import S3Connection, Location
 from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 from conary.lib import util
@@ -79,7 +81,7 @@ class EC2_InstanceTypes(instances.InstanceTypes):
         ('c1.xlarge', "High-CPU Extra Large"),
     ]
 
-class XRegionInfo(RegionInfo):
+class XRegionInfo(bec2.regioninfo.RegionInfo):
     def __init__(self, name=None, endpoint=None, s3Endpoint=None,
             s3Location=None, description=None, kernelMap=None):
         super(XRegionInfo, self).__init__(name=name, endpoint=endpoint)
@@ -392,6 +394,10 @@ class EC2Client(baseDriver.BaseDriver):
         securityGroupClass = EC2_SecurityGroup
 
     ImagePrefix = 'ami-'
+
+    TIMEOUT_BLOCKDEV = 1
+    TIMEOUT_SNAPSHOT = 2
+    TIMEOUT_VOLUME = 3
 
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
@@ -771,12 +777,13 @@ boot-uuid=%s
                   for (x, y) in EC2_InstanceTypes.idMap),
             default = EC2_InstanceTypes.idMap[0][0],
             )
-        descr.addDataField("freeSpace",
-            descriptions = [ ("Free Space (Megabytes)", None) ],
-            required = True,
-            type = "int",
-            default = freeSpace,
-            )
+        if imageData.ebsBacked:
+            descr.addDataField("freeSpace",
+                descriptions = [ ("Free Space (Megabytes)", None) ],
+                required = True,
+                type = "int",
+                default = freeSpace,
+                )
         descr.addDataField("availabilityZone",
             descriptions = [
                 ("Availability Zone", None),
@@ -1153,13 +1160,14 @@ boot-uuid=%s
 
     def _deployImageFromFile(self, job, image, filePath):
         tconf = self.getTargetConfiguration(forceAdmin=True)
-        bucketName = tconf['s3Bucket']
-
         # Force creation of client
         self._getEC2Connection(tconf)
 
-        tmpDir = os.path.dirname(filePath)
+        if image._imageData.get('ebsBacked'):
+            return self._deployImageFromFile_EBS(job, image, filePath)
 
+        bucketName = tconf['s3Bucket']
+        tmpDir = os.path.dirname(filePath)
         imageFilePath = self._getFilesystemImage(job, image, filePath)
         bundlePath = os.path.join(tmpDir, "bundled")
         util.mkdirChain(bundlePath)
@@ -1174,6 +1182,99 @@ boot-uuid=%s
         manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
         emiId = self._registerImage(job, bucketName, manifestName, tconf)
         return emiId
+
+    def _deployImageFromFile_EBS(self, job, image, filePath):
+        conn = self.client
+        myInstanceId = self._findMyInstanceId()
+        # Fetch my own instance
+        instances = conn.get_all_instances(instance_ids=[myInstanceId])
+        instance = instances[0].instances[0]
+
+        devName, internalDev = self._findOpenBlockDevice(instance)
+        self._msg(job, "Creating EBS volume")
+        vol = conn.create_volume(size=1, zone=instance.placement)
+        self._msg(job, "Created EBS volume %s" % vol.id)
+        try:
+            self._msg(job, "Attaching EBS volume")
+            vol.attach(instance.id, devName)
+
+            self._waitForBlockDevice(job, internalDev)
+            self._writeFilesystemImage(internalDev, filePath)
+            snapshot = self._createSnapshot(job, vol)
+            amiId = self._registerEBSBackedImage(job, image, snapshot)
+            return amiId
+        finally:
+            self._msg(job, 'Cleaning up')
+            self._detachVolume(job, vol)
+            conn.delete_volume(vol.id)
+
+    def _registerEBSBackedImage(self, job, image, snapshot):
+        self._msg(job, "Registering EBS-backed image")
+        conn = self.client
+        bdm = bec2.blockdevicemapping.BlockDeviceMapping()
+        devName = "/dev/sdf"
+        name = "ebs-%s" % snapshot.id
+        bdm[devName] = bec2.blockdevicemapping.BlockDeviceType(
+                snapshot_id=snapshot.id)
+        architecture = image.getArchitecture() or "x86"
+        if architecture == 'x86':
+            architecture = 'i386'
+        aki = self.kernelMap.get(architecture)
+        amiId = conn.register_image(name=name, description=name,
+                kernel_id=aki,  block_device_map=bdm,
+                root_device_name=devName, architecture=architecture)
+        self._msg(job, "Registered image %s" % amiId)
+        return amiId
+
+    def _waitForBlockDevice(self, job, internalDev):
+        for i in range(120):
+            if os.path.exists(internalDev):
+                return
+            self._msg(job, "Waiting for volume to become available")
+            time.sleep(self.TIMEOUT_BLOCKDEV)
+        raise RuntimeError("Block device unavailable")
+
+    def _createSnapshot(self, job, volume):
+        conn = self.client
+        snapshot = volume.create_snapshot()
+        snapshotId = snapshot.id
+        self._msg(job, "Created snapshot %s" % snapshotId)
+        for i in range(120):
+            if snapshot.status == 'completed':
+                return snapshot
+            self._msg(job, "Snapshot status: %s" % snapshot.status)
+            time.sleep(self.TIMEOUT_SNAPSHOT)
+            snapshot = conn.get_all_snapshots([snapshotId])[0]
+        conn.delete_snapshot(snapshotId)
+        raise RuntimeError("Timed out waiting for snapshot operation")
+
+    def _detachVolume(self, job, volume):
+        volumeId = volume.id
+        conn = self.client
+        self._msg(job, "Detaching volume %s" % volumeId)
+        conn.detach_volume(volumeId)
+        for i in range(120):
+            if volume.status == "available":
+                return True
+            self._msg(job, "Waiting for volume to be detached")
+            time.sleep(self.TIMEOUT_VOLUME)
+            volume = conn.get_all_volumes([volumeId])[0]
+        return None
+
+    def _findMyInstanceId(self):
+        from amiconfig import ami
+        ac = ami.AMIConfig()
+        instanceId = ac.id.getInstanceId()
+        return instanceId
+
+    @classmethod
+    def _findOpenBlockDevice(cls, instance):
+        bmap = instance.block_device_mapping
+        for i in range(15):
+            devName = "/dev/sd%s" % chr(ord('f') + i)
+            if devName not in bmap:
+                return devName, '/dev/xvd%s' % chr(ord('j') + i)
+        return None, None
 
     def _getFilesystemImage(self, job, image, dlpath):
         imageData = image._imageData
