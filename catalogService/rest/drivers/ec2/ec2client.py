@@ -1184,6 +1184,16 @@ boot-uuid=%s
         return emiId
 
     def _deployImageFromFile_EBS(self, job, image, filePath):
+        imageData = image._imageData
+        fsSize = imageData.get('attributes.installed_size')
+        # Moderate amount of free space necessary, we'll resize at
+        # launch time
+        totalSize = 64 * 1024 * 1024 + self._extFilesystemSize(fsSize)
+        # EBS volumes come in 1G increments
+        GiB = 1024 * 1024 * 1024
+        totalSize += self._computePadding(totalSize, GiB)
+        volumeSize = int(totalSize / GiB)
+
         conn = self.client
         myInstanceId = self._findMyInstanceId()
         # Fetch my own instance
@@ -1192,7 +1202,7 @@ boot-uuid=%s
 
         devName, internalDev = self._findOpenBlockDevice(instance)
         self._msg(job, "Creating EBS volume")
-        vol = conn.create_volume(size=1, zone=instance.placement)
+        vol = conn.create_volume(size=volumeSize, zone=instance.placement)
         self._msg(job, "Created EBS volume %s" % vol.id)
         try:
             self._msg(job, "Attaching EBS volume")
@@ -1296,6 +1306,8 @@ boot-uuid=%s
             "%s.ext3" % image.getBaseFileName())
 
         freeSpace = image._imageData.get('freespace', 256) * 1024 * 1024
+
+        totalSize = self._extFilesystemSize(fsSize + freeSpace)
         # ext3 hides 5% of the space for root's own usage. To avoid
         # having people come screaming they didn't get all their free
         # space, let's pad things a bit.
@@ -1304,9 +1316,7 @@ boot-uuid=%s
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
 
-        # ((a + x - 1) % x + 1) is equal to a % x, except for the
-        # a == x case, where it is x instead of 0.
-        padding = FS_BLK_SIZE - (( totalSize + FS_BLK_SIZE - 1) % FS_BLK_SIZE) - 1
+        padding = self._computePadding(totalSize, FS_BLK_SIZE)
         imageF = file(imageFilePath, "w")
         imageF.seek(totalSize + padding - 1)
         imageF.write('\0')
@@ -1316,6 +1326,21 @@ boot-uuid=%s
         self._writeFilesystemImage(imageFilePath, dlpath)
 
         return imageFilePath
+
+    @classmethod
+    def _extFilesystemSize(cls, fsSize):
+        # ext3 hides 5% of the space for root's own usage. To avoid
+        # having people come screaming they didn't get all their free
+        # space, let's pad things a bit.
+        totalSize = int(fsSize * 1.09)
+        return totalSize
+
+    @classmethod
+    def _computePadding(cls, actualSize, blockSize):
+        # ((a + x - 1) % x + 1) is equal to a % x, except for the
+        # a == x case, where it is x instead of 0.
+        padding = blockSize - (( actualSize + blockSize - 1) % blockSize) - 1
+        return padding
 
     def _writeFilesystemImage(self, fsImage, tarFile):
         from jobslave.generators import bootable_image
