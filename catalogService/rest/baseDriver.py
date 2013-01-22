@@ -82,6 +82,8 @@ class BaseDriver(object):
     WAIT_RUNNING_STATE_SLEEP = 2
     WAIT_NETWORK_SLEEP = 10
 
+    ImageDownloadUrlMapFile = "/srv/rbuilder/imageDownloadUrlMap"
+
     def __init__(self, cfg, driverName=None, cloudName=None,
                  nodeFactory=None, userId = None, db = None,
                  inventoryHandler=None,
@@ -1225,6 +1227,7 @@ class BaseDriver(object):
         imageId = image.getImageId()
 
         downloadUrl = image.getDownloadUrl()
+        downloadUrl = self._remapDownloadUrl(downloadUrl)
         imageId = os.path.basename(image.getId())
         downloadFilePath = os.path.join(tmpDir, '%s%s' % (imageId, extension))
 
@@ -1240,6 +1243,39 @@ class BaseDriver(object):
             # If we could not fetch the pysid, we'll still try to download
         self.downloadFile(downloadUrl, downloadFilePath, headers = headers)
         return downloadFilePath
+
+    def _remapDownloadUrl(self, downloadUrl):
+        if not os.path.exists(self.ImageDownloadUrlMapFile):
+            return downloadUrl
+        try:
+            f = file(self.ImageDownloadUrlMapFile)
+        except IOError:
+            return downloadUrl
+        splitUrl = util.urlSplit(downloadUrl)
+        for line in f:
+            line = line.strip()
+            if line.startswith('#'):
+                continue
+            arr = line.split()
+            if len(arr) != 2:
+                continue
+            if self._urlMatch(util.urlSplit(arr[0]), splitUrl):
+                return self._urlMap(splitUrl, util.urlSplit(arr[1]))
+        return downloadUrl
+
+    @classmethod
+    def _urlMatch(cls, url1, url2):
+        for idx in [0, 3, 4]:
+            if url1[idx] != url2[idx]:
+                return False
+        return True
+
+    @classmethod
+    def _urlMap(cls, urlOld, urlNew):
+        comps = list(urlOld)
+        for idx in [0, 3, 4]:
+            comps[idx] = urlNew[idx]
+        return util.urlUnsplit(comps)
 
     def getInstanceDescriptionFromImage(self, imageNode):
         if imageNode is None:
