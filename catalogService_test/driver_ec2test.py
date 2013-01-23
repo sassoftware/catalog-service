@@ -327,12 +327,14 @@ class EC2Test(testbase.TestCase):
     def testDeployImageEBS(self):
         drv = self._setupMocking()
         job = self.Job(list())
-        imageFileInfo = dict(fileId=5145, baseFileName="img-64bit")
+        imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
+            architecture='x86')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
         imageData['attributes.installed_size'] = 14554925
         img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
                                     imageData=imageData)
+        self.assertEquals(img.getArchitecture(), 'x86')
         descriptorDataXml = """\
 <descriptor_data>
   <imageId>5145</imageId>
