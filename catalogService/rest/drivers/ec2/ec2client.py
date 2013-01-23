@@ -1254,7 +1254,7 @@ boot-uuid=%s
                 return snapshot
             self._msg(job, "Snapshot status: %s" % snapshot.status)
             time.sleep(self.TIMEOUT_SNAPSHOT)
-            snapshot = conn.get_all_snapshots([snapshotId])[0]
+            snapshot.update(validate=True)
         conn.delete_snapshot(snapshotId)
         raise RuntimeError("Timed out waiting for snapshot operation")
 
@@ -1268,7 +1268,7 @@ boot-uuid=%s
                 return True
             self._msg(job, "Waiting for volume to be detached")
             time.sleep(self.TIMEOUT_VOLUME)
-            volume = conn.get_all_volumes([volumeId])[0]
+            volume.update(validate=True)
         return None
 
     def _findMyInstanceId(self):
