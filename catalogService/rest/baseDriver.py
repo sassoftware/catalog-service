@@ -749,6 +749,7 @@ class BaseDriver(object):
         image.setBaseFileName(imageFileInfo['baseFileName'])
         image.setChecksum(imageFileInfo.get('sha1'))
         image.setSize(imageFileInfo.get('size'))
+        image.setArchitecture(imageFileInfo.get('architecture'))
         image._fileId = imageFileInfo['fileId']
         image._imageData = imageData
         return image
