@@ -508,6 +508,155 @@ xml_ec2DeleteVolume = """\
     <return>true</return>
 </DeleteVolumeResponse>"""
 
+xml_ec2CreateTags = """\
+<CreateTagsResponse xmlns="http://ec2.amazonaws.com/doc/2012-08-15/">
+    <requestId>79935348-522f-4e2c-8c7f-c3d2b5b977a8</requestId>
+    <return>true</return>
+</CreateTagsResponse>"""
+
+xml_ec2RunInstances = """\
+<RunInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2012-08-15/">
+    <requestId>ed6cca5a-7169-4e6d-99e0-9c48b474d253</requestId>
+    <reservationId>r-09d55472</reservationId>
+    <ownerId>675450633870</ownerId>
+    <groupSet>
+        <item>
+            <groupId>sg-68f8c000</groupId>
+            <groupName>misa-test</groupName>
+        </item>
+    </groupSet>
+    <instancesSet>
+        <item>
+            <instanceId>i-decafbad0</instanceId>
+            <imageId>ami-decafbad0</imageId>
+            <instanceState>
+                <code>0</code>
+                <name>pending</name>
+            </instanceState>
+            <privateDnsName/>
+            <dnsName/>
+            <reason/>
+            <keyName>miiban</keyName>
+            <amiLaunchIndex>0</amiLaunchIndex>
+            <productCodes/>
+            <instanceType>m1.small</instanceType>
+            <launchTime>2013-01-24T16:03:47.000Z</launchTime>
+            <placement>
+                <availabilityZone>us-east-1c</availabilityZone>
+                <groupName/>
+                <tenancy>default</tenancy>
+            </placement>
+            <kernelId>aki-decafbad</kernelId>
+            <monitoring>
+                <state>disabled</state>
+            </monitoring>
+            <groupSet>
+                <item>
+                    <groupId>sg-decafbad</groupId>
+                    <groupName>launch-test</groupName>
+                </item>
+            </groupSet>
+            <stateReason>
+                <code>pending</code>
+                <message>pending</message>
+            </stateReason>
+            <architecture>i386</architecture>
+            <rootDeviceType>ebs</rootDeviceType>
+            <rootDeviceName>/dev/sda</rootDeviceName>
+            <blockDeviceMapping/>
+            <virtualizationType>paravirtual</virtualizationType>
+            <clientToken/>
+            <hypervisor>xen</hypervisor>
+            <networkInterfaceSet/>
+            <ebsOptimized>false</ebsOptimized>
+        </item>
+        <item>
+            <instanceId>i-decafbad1</instanceId>
+            <imageId>ami-decafbad</imageId>
+            <instanceState>
+                <code>0</code>
+                <name>pending</name>
+            </instanceState>
+            <privateDnsName/>
+            <dnsName/>
+            <reason/>
+            <keyName>miiban</keyName>
+            <amiLaunchIndex>0</amiLaunchIndex>
+            <productCodes/>
+            <instanceType>m1.small</instanceType>
+            <launchTime>2013-01-24T16:03:47.000Z</launchTime>
+            <placement>
+                <availabilityZone>us-east-1c</availabilityZone>
+                <groupName/>
+                <tenancy>default</tenancy>
+            </placement>
+            <kernelId>aki-decafbad</kernelId>
+            <monitoring>
+                <state>disabled</state>
+            </monitoring>
+            <groupSet>
+                <item>
+                    <groupId>sg-decafbad</groupId>
+                    <groupName>launch-test</groupName>
+                </item>
+            </groupSet>
+            <stateReason>
+                <code>pending</code>
+                <message>pending</message>
+            </stateReason>
+            <architecture>i386</architecture>
+            <rootDeviceType>ebs</rootDeviceType>
+            <rootDeviceName>/dev/sda</rootDeviceName>
+            <blockDeviceMapping/>
+            <virtualizationType>paravirtual</virtualizationType>
+            <clientToken/>
+            <hypervisor>xen</hypervisor>
+            <networkInterfaceSet/>
+            <ebsOptimized>false</ebsOptimized>
+        </item>
+    </instancesSet>
+</RunInstancesResponse>"""
+
+xml_ec2DescribeImages = """\
+<DescribeImagesResponse xmlns="http://ec2.amazonaws.com/doc/2012-08-15/">
+    <requestId>bc5e8dda-43a7-45c1-86b3-fccce45a343c</requestId>
+    <imagesSet>
+        <item>
+            <imageId>ami-decafbad</imageId>
+            <imageLocation>675450633870/bofors-40mm-x86_20-f26a41bc</imageLocation>
+            <imageState>available</imageState>
+            <imageOwnerId>675450633870</imageOwnerId>
+            <isPublic>false</isPublic>
+            <architecture>i386</architecture>
+            <imageType>machine</imageType>
+            <kernelId>aki-decafbad</kernelId>
+            <name>bofors-40mm-x86_20-f26a41bc</name>
+            <description>bofors-40mm-x86_20-f26a41bc</description>
+            <rootDeviceType>ebs</rootDeviceType>
+            <rootDeviceName>/dev/sdc</rootDeviceName>
+            <blockDeviceMapping>
+                <item>
+                    <deviceName>/dev/sdc</deviceName>
+                    <ebs>
+                        <snapshotId>snap-decafbad</snapshotId>
+                        <volumeSize>1</volumeSize>
+                        <deleteOnTermination>true</deleteOnTermination>
+                        <volumeType>standard</volumeType>
+                    </ebs>
+                </item>
+            </blockDeviceMapping>
+            <virtualizationType>paravirtual</virtualizationType>
+            <tagSet>
+                <item>
+                    <key>Name</key>
+                    <value>misa-ebs-32-2</value>
+                </item>
+            </tagSet>
+            <hypervisor>xen</hypervisor>
+        </item>
+    </imagesSet>
+</DescribeImagesResponse>"""
+
 xml_getAllInstances2 = (400, """\
 <?xml version="1.0"?>
 <Response><Errors><Error><Code>InvalidInstanceID.NotFound</Code><Message>The instance ID 'i-30a4c258' does not exist</Message></Error></Errors><RequestID>e53c7b2e-ae6e-4ac0-a47c-f0f4346a0dc2</RequestID></Response>
@@ -794,6 +943,7 @@ xml_newInstance1 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>ami-0435d06d</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>2</maxCount>
   <availabilityZone>us-east-1c</availabilityZone>
@@ -812,6 +962,7 @@ xml_newInstance2 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>0903de41206786d4407ff24ab6e972c0d6b801f3.gz</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>2</maxCount>
   <instanceType>vws.small</instanceType>
@@ -823,6 +974,7 @@ xml_newInstance3 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>b3fb7387bb04b1403bc0eb06bd55c0ef5f02d9bb.gz</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>2</maxCount>
   <instanceType>vws.small</instanceType>
@@ -834,6 +986,7 @@ xml_newInstance4 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>ami-decafbad</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>1</maxCount>
   <instanceType>m1.small</instanceType>
@@ -852,6 +1005,7 @@ xml_newInstance5 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>ami-afa642c6</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>1</maxCount>
   <instanceType>m1.small</instanceType>
@@ -867,6 +1021,7 @@ xml_newInstance6 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newInstance>
   <imageId>ami-afa642c6</imageId>
+  <instanceName>testing</instanceName>
   <minCount>1</minCount>
   <maxCount>2</maxCount>
   <availabilityZone>us-east-1c</availabilityZone>

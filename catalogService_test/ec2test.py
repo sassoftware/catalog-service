@@ -637,17 +637,19 @@ proxy_pass = pass
         self.failUnlessEqual(dsc.getDisplayName(), "Amazon EC2 System Launch Parameters")
         self.failUnlessEqual(dsc.getDescriptions(), {None : "Amazon EC2 System Launch Parameters"})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
-            ['imageId', 'instanceType', 'availabilityZone',
+            ['imageId', 'instanceName', 'instanceDescription', 'instanceType',
+             'availabilityZone',
              'minCount', 'maxCount', 'keyName',
              'securityGroups', 'remoteIp', 'userData'])
         ftypes = [ df.type for df in dsc.getDataFields() ]
-        self.failUnlessEqual([ ftypes[0], ftypes[3], ftypes[4], ftypes[7],
-                               ftypes[8] ],
-            ['str', 'int', 'int', 'str', 'str'])
+        self.failUnlessEqual([ ftypes[0], ftypes[1], ftypes[2], ftypes[5],
+            ftypes[6], ftypes[9], ftypes[10] ],
+            ['str', 'str', 'str', 'int', 'int', 'str', 'str'])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[1], ftypes[2], ftypes[5], ftypes[6] ] ],
+            for ftype in [ ftypes[3], ftypes[4], ftypes[7], ftypes[8] ] ],
             [
                 [
+                    ('t1.micro', {None: 'Micro'}),
                     ('m1.small', {None: 'Small'}),
                     ('m1.large', {None: 'Large'}),
                     ('m1.xlarge', {None: 'Extra Large'}),
@@ -672,17 +674,19 @@ proxy_pass = pass
                     ('build-cluster', {None: 'private group for rMake build cluster in ec2'})
                 ]
             ])
-        expMultiple = [None, None, None, None, None, None, True, None, None]
+        expMultiple = [None, None, None, None, None, None, None, None, True, None, None]
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, True, None, True, None, None] )
+            [ True, True, None, True, None, True, True, None, True, None, None] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, None, None, True, None] )
+            [ True, None, None, None, None, None, None, None, None, True, None] )
         prefix = self.makeUri(client, "help/targets/drivers/%s/launch/" % self.cloudType)
         self.failUnlessEqual([ df.helpAsDict for df in dsc.getDataFields() ],
             [
                 {},
+                {None: prefix + 'instanceName.html'},
+                {None: prefix + 'instanceDescription.html'},
                 {None: prefix + 'instanceTypes.html'},
                 {None: prefix + 'availabilityZones.html'},
                 {None: prefix + 'minInstances.html'},
@@ -693,11 +697,13 @@ proxy_pass = pass
                 {None: prefix + 'userData.html'}
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, 'm1.small', None, 1, 1, None, ['catalog-default'], None, None])
+            [None, None, None, 't1.micro', None, 1, 1, None, ['catalog-default'], None, None])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
             [
                 {None: 'Image ID'},
+                {None: 'Instance Name'},
+                {None: 'Instance Description'},
                 {None: 'Instance Type', 'fr_FR': "Type de l'instance"},
                 {None: 'Availability Zone', 'fr_FR': u"Zone de disponibilit\u00e9"},
                 {None: 'Minimum Number of Instances',
@@ -711,6 +717,8 @@ proxy_pass = pass
         self.failUnlessEqual([ df.constraintsPresentation for df in dsc.getDataFields() ],
             [
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
+                [{'constraintName': 'length', 'value': 32}],
+                [{'constraintName': 'length', 'value': 128}],
                 [],
                 [],
                 [{'max': 100, 'constraintName': 'range', 'min': 1}],
@@ -1222,6 +1230,7 @@ class MockedRequest(object):
         CreateSecurityGroup = mockedData.xml_createSecurityGroupSuccess,
         AuthorizeSecurityGroupIngress = mockedData.xml_authorizeSecurityGroupIngressSuccess,
         RevokeSecurityGroupIngress = mockedData.xml_revokeSecurityGroupIngressSuccess,
+        CreateTags = mockedData.xml_ec2CreateTags,
     )
 
     def _get_response(self, action, params, path, verb, kwargs):

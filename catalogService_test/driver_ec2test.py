@@ -216,6 +216,7 @@ class EC2Test(testbase.TestCase):
             DescribeImages = mockedData.xml_getAllImages2,
             DescribeInstances = mockedData.xml_getAllInstances3,
             DescribeAvailabilityZones = mockedData.xml_getAllZones1,
+            CreateTags = mockedData.xml_ec2CreateTags,
             )
 
         job = drv.launchInstance(mockedData.xml_newInstance7, None)
@@ -249,10 +250,10 @@ class EC2Test(testbase.TestCase):
             self._accumulator.append(args)
 
 
-    def testDeployImageEBS(self):
+    def _setupMocking(self, mockedCalls=None):
         drv = self._createDriver()
         # Test URL rewrites too
-        urlMapFile = tempfile.NamedTemporaryFile()
+        urlMapFile = drv._urlMapFile = tempfile.NamedTemporaryFile()
         urlMapFile.write("# http://commented\n")
         urlMapFile.write("ignored\n")
         urlMapFile.write("http://something https://somethingelse\n")
@@ -260,7 +261,7 @@ class EC2Test(testbase.TestCase):
         urlMapFile.flush()
         drv.ImageDownloadUrlMapFile = urlMapFile.name
 
-        self._fakeMakeRequest(drv,
+        mockedCallsArgs = dict(
             DescribeKeyPairs = mockedData.xml_getAllKeyPairs1,
             DescribeSecurityGroups = mockedData.xml_getAllSecurityGroups1,
             DescribeImages = mockedData.xml_getAllImages2,
@@ -278,7 +279,11 @@ class EC2Test(testbase.TestCase):
                 mockedData.xml_ec2DescribeVolumes1,
                 mockedData.xml_ec2DescribeVolumes2, ]),
             DeleteVolume=mockedData.xml_ec2DeleteVolume,
+            CreateTags=mockedData.xml_ec2CreateTags,
             )
+        if mockedCalls is not None:
+            mockedCallsArgs.update(mockedCalls)
+        self._fakeMakeRequest(drv, **mockedCallsArgs)
 
         _downloadUrls = []
         def fakeDownloadFile(url, destFile, headers = None):
@@ -286,6 +291,7 @@ class EC2Test(testbase.TestCase):
             _downloadUrls.append(url)
 
         self.mock(drv, "downloadFile", fakeDownloadFile)
+        drv._downloadUrls = _downloadUrls
 
         def getFilesystemImageFunc(job, image, dlpath):
             npath = dlpath + '-image'
@@ -316,6 +322,10 @@ class EC2Test(testbase.TestCase):
         drv.TIMEOUT_SNAPSHOT = 0.1
         drv.TIMEOUT_VOLUME = 0.1
 
+        return drv
+
+    def testDeployImageEBS(self):
+        drv = self._setupMocking()
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit")
         imageDownloadUrl = "http://localhost/blah"
@@ -347,7 +357,55 @@ class EC2Test(testbase.TestCase):
         ])
 
         # Make sure URL remap worked
-        self.assertEquals(_downloadUrls, ['https://localhost:1234/blah'])
+        self.assertEquals(drv._downloadUrls, ['https://localhost:1234/blah'])
+
+    def testLaunchInstanceEBS(self):
+        drv = self._setupMocking(mockedCalls=dict(
+            DescribeImages = mockedData.xml_ec2DescribeImages,
+            CreateSecurityGroup=mockedData.xml_createSecurityGroupSuccess,
+            RunInstances=mockedData.xml_ec2RunInstances,
+        ))
+        job = self.Job(list())
+        imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
+            architecture='x86')
+        imageDownloadUrl = "http://localhost/blah"
+        imageData = dict(freespace=1234, ebsBacked=True)
+        imageData['attributes.installed_size'] = 14554925
+        img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
+                                    imageData=imageData)
+        descriptorDataXml = """\
+<descriptor_data>
+  <imageId>5145</imageId>
+  <instanceName>instance prefix</instanceName>
+  <minCount>2</minCount>
+  <maxCount>2</maxCount>
+  <freeSpace>20</freeSpace>
+</descriptor_data>
+"""
+        ret = drv.launchSystemSynchronously(job, img, descriptorDataXml)
+        self.assertEquals(ret, ["i-decafbad0", "i-decafbad1", ])
+        self.failUnlessEqual(job._accumulator, [
+            ('Downloading image',),
+            ('Creating EBS volume',),
+            ('Created EBS volume vol-decafbad',),
+            ('Attaching EBS volume',),
+            ('Created snapshot snap-decafbad',),
+            ('Snapshot status: pending',),
+            ('Snapshot status: pending',),
+            ('Registering EBS-backed image',),
+            ('Registered image ami-decafbad',),
+            ('Cleaning up',),
+            ('Detaching volume vol-decafbad',),
+            ('Waiting for volume to be detached',),
+            ('Launching instance ami-decafbad',),
+            ('Tagging instances',),
+            ('Instance(s) running: i-decafbad',),
+            ('Instance i-decafbad: ec2-54-245-172-197.us-west-2.compute.amazonaws.com',)
+        ])
+
+        # Make sure URL remap worked
+        self.assertEquals(drv._downloadUrls, ['https://localhost:1234/blah'])
+
 
     def testTerminateInstance(self):
         drv = self._createDriver()
@@ -397,7 +455,7 @@ class EC2Test(testbase.TestCase):
         self.failUnlessEqual(descr.getDisplayName(),
                 'Amazon EC2 System Launch Parameters (EBS-backed)')
         field = descr.getDataField('freeSpace')
-        self.failUnlessEqual(field.getDefault(), 51459)
+        self.failUnlessEqual(field.getDefault(), 51)
 
 if __name__ == "__main__":
     testsuite.main()

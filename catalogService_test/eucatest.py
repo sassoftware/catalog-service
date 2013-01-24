@@ -611,6 +611,7 @@ class HandlerTest(testbase.TestCase):
             for ftype in [ ftypes[3], ftypes[4], ftypes[7], ftypes[8] ] ],
             [
                 [
+                    ('t1.micro', {None: 'Micro'}),
                     ('m1.small', {None: 'Small'}),
                     ('m1.large', {None: 'Large'}),
                     ('m1.xlarge', {None: 'Extra Large'}),
@@ -656,7 +657,7 @@ class HandlerTest(testbase.TestCase):
                 {None: prefix + 'userData.html'}
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 'm1.small', None, 1, 1, None,
+            [None, None, None, 't1.micro', None, 1, 1, None,
                 ['SAS Demo'], None, None])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
@@ -690,7 +691,8 @@ class HandlerTest(testbase.TestCase):
 
     def testNewInstances(self):
         # We need to mock the image data
-        self._mockRequest(DescribeImages = _t(mockedData.xml_getAllImages2))
+        self._mockRequest(DescribeImages = _t(mockedData.xml_getAllImages2),
+                CreateTags=mockedData.xml_ec2CreateTags)
 
         srv = self.newService()
         uri = self._baseCloudUrl + '/instances'
@@ -743,7 +745,8 @@ boot-uuid=%s
 
     def testNewInstancesWithDeployment(self):
         # We need to mock the image data
-        self._mockRequest(DescribeImages = _t(mockedData.xml_getAllImages2))
+        self._mockRequest(DescribeImages = _t(mockedData.xml_getAllImages2),
+                CreateTags=mockedData.xml_ec2CreateTags)
 
         uri = self._baseCloudUrl + '/instances'
 
@@ -871,9 +874,9 @@ Extra kwargs:
 
 def _t(data):
     return data.replace(
-        'ami', 'emi').replace(
-        'aki', 'eki').replace(
-        'ari', 'eri')
+        'ami-', 'emi-').replace(
+        'aki-', 'eki-').replace(
+        'ari-', 'eri-')
 
 class MockedRequest(object):
     data = dict(
