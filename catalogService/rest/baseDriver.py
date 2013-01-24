@@ -793,7 +793,7 @@ class BaseDriver(object):
 
     def launchInstanceWrapper(self, *args, **kwargs):
         try:
-            self._launchInstanceWrapper(*args, **kwargs)
+            return self._launchInstanceWrapper(*args, **kwargs)
         finally:
             self.cleanUpX509()
 

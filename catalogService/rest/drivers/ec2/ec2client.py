@@ -74,6 +74,7 @@ class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
 
     idMap = [
+        ('t1.micro', "Micro"),
         ('m1.small', "Small"),
         ('m1.large', "Large"),
         ('m1.xlarge', "Extra Large"),
@@ -399,6 +400,11 @@ class EC2Client(baseDriver.BaseDriver):
     TIMEOUT_SNAPSHOT = 2
     TIMEOUT_VOLUME = 3
 
+    ShutdownBehavior = [
+        ('stop', 'Stop'),
+        ('terminate', 'Terminate'),
+    ]
+
     def _getProxyInfo(self, https = True):
         proto = (https and "https") or "http"
         proxyUrl = self.db.cfg.proxy.get(proto)
@@ -671,17 +677,53 @@ boot-uuid=%s
         return self._launchInstances(job, image, launchParams)
 
     def _launchInstances(self, job, image, launchParams):
+        instanceIds = self._launchInstancesHelper(job, image, launchParams)
+        self._tagInstances(job, image, launchParams, instanceIds)
+        return instanceIds
+
+    def _tagInstances(self, job, image, launchParams, instanceIds):
+        self._msg(job, "Tagging instances")
+        reqInstName = launchParams.get('instanceName')
+        reqInstDescription = launchParams.get('instanceDescription')
+        instances = self.client.get_all_instances(instanceIds)[0].instances
+        instCount = len(instanceIds)
+        suffix = ""
+        for inst in instances:
+            idx = int(inst.ami_launch_index)
+            if instCount > 1:
+                suffix = " (%s/%s)" % (idx + 1, instCount)
+            if reqInstName:
+                self._tagResource(job, inst, 'Name',
+                        reqInstName + suffix)
+            if reqInstDescription:
+                self._tagResource(job, inst, 'Description',
+                        reqInstDescription + suffix)
+
+    def _launchInstancesHelper(self, job, image, launchParams):
         imageId = launchParams.pop('imageId')
         self._msg(job, "Launching instance %s" % imageId)
+        runInstancesParams = dict(
+                min_count=launchParams.get('minCount'),
+                max_count=launchParams.get('maxCount'),
+                key_name=launchParams.get('keyName'),
+                security_groups=launchParams.get('securityGroups'),
+                user_data=self.createUserData(launchParams.get('userData')),
+                instance_type=launchParams.get('instanceType'),
+                placement=launchParams.get('availabilityZone'))
+        # The hasattr below is because the testsuite insists on testing
+        # old codepaths. All images should have _imageData
+        if hasattr(image, '_imageData') and image._imageData.get('ebsBacked'):
+            img = self.client.get_all_images([imageId])[0]
+            # Reuse the block device definition from the image object
+            rootDevice = img.block_device_mapping[img.root_device_name]
+            rootDevice.size += launchParams.get('freeSpace')
+            rootDevice.delete_on_termination = launchParams.get('deleteRootVolumeOnTermination')
+            runInstancesParams.update(
+                instance_initiated_shutdown_behavior=launchParams.get('shutdownBehavior'),
+                block_device_map=img.block_device_mapping,
+            )
         try:
-            reservation = self.client.run_instances(imageId,
-                    min_count=launchParams.get('minCount'),
-                    max_count=launchParams.get('maxCount'),
-                    key_name=launchParams.get('keyName'),
-                    security_groups=launchParams.get('securityGroups'),
-                    user_data=self.createUserData(launchParams.get('userData')),
-                    instance_type=launchParams.get('instanceType'),
-                    placement=launchParams.get('availabilityZone'))
+            reservation = self.client.run_instances(imageId, **runInstancesParams)
         except EC2ResponseError, e:
             # is this a product code error?
             errorMsg = self._getErrorMessage(e)
@@ -750,9 +792,6 @@ boot-uuid=%s
         return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
             for x in image.product_codes ]
 
-    def drvLaunchDescriptorCommonFields(self, descr):
-        pass
-
     def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         imageData = self._getImageData(extraArgs)
         title = "Amazon EC2 System Launch Parameters"
@@ -778,12 +817,29 @@ boot-uuid=%s
             default = EC2_InstanceTypes.idMap[0][0],
             )
         if imageData.ebsBacked:
+            defaultFreeSpace = int(
+                (freeSpace +  self._computePadding(freeSpace, 1024)) / 1024)
             descr.addDataField("freeSpace",
-                descriptions = [ ("Free Space (Megabytes)", None) ],
+                descriptions = [ ("Addtional Space on Root Volume (Gigabytes)", None) ],
                 required = True,
                 type = "int",
-                default = freeSpace,
+                default = defaultFreeSpace,
+                constraints = dict(constraintName = 'range',
+                                   min = 0, max = 1024),
                 )
+            descr.addDataField("deleteRootVolumeOnTermination",
+                descriptions = [ ("Delete Root Volume on Termination", None) ],
+                required = True,
+                type = "bool",
+                default = True)
+            descr.addDataField("shutdownBehavior",
+                descriptions = [ ("Instance-initiated Shutdown Behavior", None) ],
+                required = True,
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x[0], descriptions = x[1])
+                    for x in self.ShutdownBehavior
+                ),
+                default = self.ShutdownBehavior[-1][0])
         descr.addDataField("availabilityZone",
             descriptions = [
                 ("Availability Zone", None),
@@ -1164,8 +1220,17 @@ boot-uuid=%s
         imageName = extraParams.get('imageName', None)
         if imageName is None:
             imageName = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
-        img.add_tag('Name', imageName)
+        self._tagResource(job, img, 'Name', imageName)
         return amiId
+
+    def _tagResource(self, job, resource, tagName, tagValue):
+        for i in range(10):
+            try:
+                return resource.add_tag(tagName, tagValue)
+            except EC2ResponseError, e:
+                self._msg(job, "Error tagging resource: %s" % e)
+            resource.update(validate=True)
+            time.sleep(1)
 
     def _deployImageHelper(self, job, image, filePath):
         tconf = self.getTargetConfiguration(forceAdmin=True)

@@ -339,7 +339,7 @@ class EucalyptusClient(ec2client.EC2Client):
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         if not image.getIsDeployed():
-            imageId = self._deployImage(job, image, auth)
+            imageId = self._deployImage(job, image, auth, extraParams=launchParams)
             launchParams.update(imageId=imageId)
         elif image._targetImageId is not None:
             imageId = image._targetImageId
