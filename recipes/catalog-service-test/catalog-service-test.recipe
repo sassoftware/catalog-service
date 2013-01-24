@@ -1,0 +1,36 @@
+#
+# Copyright (c) 2010 rPath, Inc.
+# All rights reserved.
+#
+
+loadSuperClass('conary-test')
+loadSuperClass('testpackage')
+class CatalogServiceTest(TestPackageRecipe, CPackageRecipe):
+    name = 'catalog-service-test'
+    version = '0.1'
+
+    Flags.coverage = True
+    # Don't inherit Flags.test from conary's test suite
+    Flags.test = True
+
+    # testpackage configuration
+    testDir = '.'
+
+    testsuite = "catalogService_test/testsuite.py"
+
+    buildRequires = [
+        'conary-test:python',
+        'decorator:python',
+        'lxml:python',
+        'rpath-xmllib:python',
+        'catalog-service:python',
+        'pywbem:python',
+        'simplejson:python',
+        'sun-jre:runtime',
+        'restlib:python',
+        'XenAPI:python',
+        'rpath-models:python',
+    ] + ConaryTest.buildRequires
+
+    def setupSource(r):
+        r.addMercurialSnapshot()
