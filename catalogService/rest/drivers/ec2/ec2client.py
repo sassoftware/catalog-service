@@ -641,13 +641,13 @@ boot-uuid=%s
         if image.getIsDeployed():
             self._msg(job, "Image is already deployed")
             return image.getImageId()
-        self._deployImage(job, image, auth)
+        self._deployImage(job, image, auth, extraParams=params)
         return image.getImageId()
 
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         if not image.getIsDeployed():
-            imageId = self._deployImage(job, image, auth)
+            imageId = self._deployImage(job, image, auth, extraParams=launchParams)
             launchParams.update(imageId=imageId)
         elif image._targetImageId is not None:
             imageId = image._targetImageId
@@ -1158,7 +1158,16 @@ boot-uuid=%s
         f.seek(0)
         return f
 
-    def _deployImageFromFile(self, job, image, filePath):
+    def _deployImageFromFile(self, job, image, filePath, extraParams=None):
+        amiId = self._deployImageHelper(job, image, filePath)
+        img = self.client.get_all_images([amiId])[0]
+        imageName = extraParams.get('imageName', None)
+        if imageName is None:
+            imageName = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
+        img.add_tag('Name', imageName)
+        return amiId
+
+    def _deployImageHelper(self, job, image, filePath):
         tconf = self.getTargetConfiguration(forceAdmin=True)
         # Force creation of client
         self._getEC2Connection(tconf)
@@ -1222,10 +1231,14 @@ boot-uuid=%s
         self._msg(job, "Registering EBS-backed image")
         conn = self.client
         bdm = bec2.blockdevicemapping.BlockDeviceMapping()
-        devName = "/dev/sdf"
-        name = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
+        devName = "/dev/sda"
+        # Add snapshot hash to image name as well, in case we want to
+        # re-register later
+        snapshotHash = snapshot.id.rsplit('-', 1)[-1]
+        name = "%s_%s-%s" % (image.getBaseFileName(), image.getBuildId(),
+                snapshotHash)
         bdm[devName] = bec2.blockdevicemapping.BlockDeviceType(
-                snapshot_id=snapshot.id)
+                snapshot_id=snapshot.id, delete_on_termination=True)
         architecture = image.getArchitecture() or "x86"
         if architecture == 'x86':
             architecture = 'i386'
