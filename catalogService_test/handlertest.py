@@ -20,33 +20,23 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
-import base64
 import boto
 import os
 import pickle
-import re
-import StringIO
-import sys
 import tempfile
-import urllib
 
 import testbase
 from mint.rest.db.database import TargetManager
 from catalogService.rest import baseDriver
-from catalogService.rest.models import descriptor
 from catalogService.restClient import ResponseError
 
-from catalogService import storage
-from catalogService.rest.api import users
 from catalogService.rest.models import cloud_types
 from catalogService.rest.models import clouds
 from catalogService.rest.models import credentials
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-from catalogService.rest.models import xmlNode
 
 import mockedData
-import mint.client, mint.shimclient, mint.mint_error
 
 from conary.lib import util
 
@@ -120,72 +110,6 @@ class SimpleHandlerTest(testbase.TestCase):
 </fault>
 """)
 
-    def testHeaderCase(self):
-        raise testsuite.SkipTestException("restlib: no longer applies")
-        class DummyRequest(handler.StandaloneRequest):
-            def __init__(self):
-                self._req = self
-        dummyReq = DummyRequest()
-        dummyReq.headers = {'foo': 'some data'}
-        self.assertEquals(dummyReq.getHeader('FOO'), 'some data')
-        headers = {'crud': 'some data'}
-
-    def testApacheGetSchemeNetloc(self):
-        raise testsuite.SkipTestException("restlib: temporary")
-        class DummyReq(handler_apache.ApacheRequest):
-            def __init__(self):
-                self._req = self
-                self.headers_in = \
-                        {'Via': '1.0 barney, 1.1 rogue.proxy (Comment)',
-                         'Host': 'random.host:1234'}
-                self.proxyreq = 0
-                self.subprocess_env = {'HTTPS' : 'off'}
-        req = DummyReq()
-
-        # set Via but not proxyreq (client side proxies)
-        req.headers_in['Via'] = '1.0 barney, 1.1 rogue.proxy (Comment)'
-        res = req.getSchemeNetloc()
-        self.assertEquals(res, 'http://random.host:1234')
-
-        req.subprocess_env['HTTPS'] = 'on'
-        res = req.getSchemeNetloc()
-        self.assertEquals(res, 'https://random.host:1234')
-
-        # XXX: we need to find a way to know if the connection from the
-        # client to the proxy was encrypted
-
-        req.subprocess_env['HTTPS'] = 'off'
-        # set proxyreq
-        req.proxyreq = 1
-        res = req.getSchemeNetloc()
-        self.assertEquals(res, 'http://rogue.proxy')
-
-        req.subprocess_env['HTTPS'] = 'on'
-        # set proxyreq
-        req.proxyreq = 1
-        res = req.getSchemeNetloc()
-        self.assertEquals(res, 'http://rogue.proxy')
-
-    def testApachePath(self):
-        raise testsuite.SkipTestException("restlib: temporary")
-        class DummyReq(handler_apache.ApacheRequest):
-            def __init__(self):
-                self._req = self
-        req = DummyReq()
-        req.setPath('http://www.foo/')
-        self.assertEquals(req.getRelativeURI(), '/')
-        req.setPath('http://www.foo')
-        self.assertEquals(req.getRelativeURI(), '/')
-        req.setPath('http://www.foo/bar')
-        self.assertEquals(req.getRelativeURI(), '/bar')
-        req.setPath('http://www.foo:8080/bar')
-        self.assertEquals(req.getRelativeURI(), '/bar')
-        req.setPath('/bar')
-        self.assertEquals(req.getRelativeURI(), '/bar')
-        req.setPath('http://www.foo/bar/baz')
-        self.assertEquals(req.getRelativeURI(), '/bar/baz')
-        req.setPath('/foo/bar/baz/')
-        self.assertEquals(req.getRelativeURI(), '/foo/bar/baz/')
 
 class BaseTest(testbase.TestCase):
     def setUp(self):

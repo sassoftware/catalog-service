@@ -16,7 +16,6 @@
 #
 
 
-import StringIO
 from catalogService.rest.api.base import BaseCloudController
 from catalogService.rest.middleware.response import XmlSerializableObjectResponse
 

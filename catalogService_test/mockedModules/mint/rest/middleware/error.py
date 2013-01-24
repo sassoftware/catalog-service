@@ -15,6 +15,7 @@
 #
 
 
+import logging
 import traceback
 from lxml import etree
 
@@ -22,6 +23,8 @@ from restlib import response
 
 from mint import logerror
 from mint import mint_error
+
+log = logging.getLogger('mint_error')
 
 class ErrorCallback(object):
     ERROR_TEMPLATE = """\

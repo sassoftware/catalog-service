@@ -42,7 +42,6 @@ from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import jobs as jobmodels
-from catalogService.utils import x509
 
 from catalogService_test import mockedData
 

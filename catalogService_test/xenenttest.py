@@ -20,8 +20,6 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
-import os
-import time
 import XenAPI
 
 from conary.lib import util
@@ -30,7 +28,6 @@ import testbase
 
 from catalogService.restClient import ResponseError
 
-from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.rest.drivers import xenent
 from catalogService.rest.models import clouds
@@ -38,7 +35,6 @@ from catalogService.rest.models import credentials
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-from catalogService.rest.models import job_models
 
 from catalogService_test import mockedData
 

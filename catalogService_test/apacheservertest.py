@@ -23,11 +23,8 @@ testsuite.setup()
 from testutils import apache_server
 
 import os
-import shutil
-import sys
 
 from catalogService import handler_apache
-from catalogService import restClient
 from catalogService.rest.models import clouds
 import testbase
 from conary_test import resources

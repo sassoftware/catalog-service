@@ -15,7 +15,6 @@
 #
 
 
-import datetime
 import os
 import subprocess
 import tarfile
@@ -36,7 +35,6 @@ from restlib import client as rl_client
 from catalogService import errors
 from catalogService import instanceStore
 from catalogService import nodeFactory
-from catalogService import instanceStore
 from catalogService import jobs
 from catalogService import storage
 from catalogService.rest.models import clouds

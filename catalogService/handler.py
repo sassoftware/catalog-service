@@ -80,9 +80,7 @@ import logging
 from restlib.http import simplehttp
 from catalogService.utils import logger as rlogging
 
-from catalogService import config
 from catalogService import errors
-from catalogService import storage
 from catalogService.rest.middleware import auth
 from catalogService.rest.api import site
 

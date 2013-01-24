@@ -19,25 +19,19 @@ import testsuite
 testsuite.setup()
 
 import os
-import tempfile
 import time
 
 from conary_test import rephelp
 
 from testrunner import testcase
-from testrunner import runner
-
-from conary.lib import util
 
 from catalogService import handler
-from catalogService import storage
 from catalogService.rest import baseDriver
 from catalogService.restClient import Client
 from catalogService.rest.database import RestDatabase
 from catalogService.rest.models import jobs as jobmodels
 
 from catalogService_test import setupbase
-from catalogService_test import mockedData
 
 # These imports come from mockedModules
 from mint import config

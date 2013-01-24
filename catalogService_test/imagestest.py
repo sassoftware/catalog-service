@@ -16,8 +16,6 @@
 #
 
 
-import StringIO
-
 import testsuite
 # Bootstrap the testsuite
 testsuite.setup()

@@ -20,7 +20,6 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
-import os
 import time
 
 from conary.lib import util

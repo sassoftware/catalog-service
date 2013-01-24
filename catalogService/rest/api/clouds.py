@@ -16,8 +16,6 @@
 #
 
 
-from restlib import controller
-
 from catalogService.rest.models import cloud_types
 
 from catalogService.rest.api import cloud_help
@@ -46,7 +44,6 @@ class AllCloudController(BaseController):
         return XmlResponse(cloudTypeNodes)
 
     def loadCloudTypes(self):
-        drivers = []
         self.urls = {}
         moduleDir =  __name__.rsplit('.', 2)[0] + '.drivers'
         for driverName in SUPPORTED_MODULES:

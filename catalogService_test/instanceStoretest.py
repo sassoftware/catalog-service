@@ -21,10 +21,7 @@ import testsuite
 testsuite.setup()
 
 import os
-import tempfile
 import time
-
-from conary.lib import util
 
 from catalogService import config
 from catalogService import storage

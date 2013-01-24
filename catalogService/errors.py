@@ -16,8 +16,6 @@
 #
 
 
-import sys
-import traceback
 from lxml import etree
 
 from mint.rest.middleware import error

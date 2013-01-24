@@ -26,7 +26,6 @@ import os
 
 from conary.lib import util
 
-from catalogService import storage
 from catalogService.rest.models import userData
 from catalogService.restClient import ResponseError
 

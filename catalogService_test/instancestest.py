@@ -51,32 +51,32 @@ class InstancesTest(testsuite.TestCase):
         self.failUnlessEqual(ret, """<?xml version='1.0' encoding='UTF-8'?>\n<instances><instance id="ec2-adfadf" xmlNodeHash="1a837d8c26533d24be7184cf5ebb8a00886a85ff"><state>someval</state></instance></instances>""")
         # XXX this has to change - we need to parse these objects
         return
-        x = hndlr.parseString(ret)
+        #x = hndlr.parseString(ret)
 
-        instance = instances.BaseInstance(location = instLocation)
-        self.failUnlessEqual(instance.getId(), None)
-        self.failUnlessEqual(instance.getLocation(), instLocation)
-        ret = hndlr.toXml(instance, prettyPrint = False)
-        self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><location>ec2 name</location></instance>")
-        x = hndlr.parseString(ret)
-        self.failUnlessEqual(x.getId(), None)
-        self.failUnlessEqual(x.getLocation(), instLocation)
+        #instance = instances.BaseInstance(location = instLocation)
+        #self.failUnlessEqual(instance.getId(), None)
+        #self.failUnlessEqual(instance.getLocation(), instLocation)
+        #ret = hndlr.toXml(instance, prettyPrint = False)
+        #self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><location>ec2 name</location></instance>")
+        #x = hndlr.parseString(ret)
+        #self.failUnlessEqual(x.getId(), None)
+        #self.failUnlessEqual(x.getLocation(), instLocation)
 
-        instance = instances.BaseInstance(id = instId, location = instLocation)
-        ret = hndlr.toXml(instance, prettyPrint = False)
-        self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><id>ec2-adfadf</id><location>ec2 name</location></instance>")
+        #instance = instances.BaseInstance(id = instId, location = instLocation)
+        #ret = hndlr.toXml(instance, prettyPrint = False)
+        #self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><id>ec2-adfadf</id><location>ec2 name</location></instance>")
 
-        x = hndlr.parseString(ret)
-        self.failUnlessEqual(x.getId(), instId)
-        self.failUnlessEqual(x.getLocation(), instLocation)
+        #x = hndlr.parseString(ret)
+        #self.failUnlessEqual(x.getId(), instId)
+        #self.failUnlessEqual(x.getLocation(), instLocation)
 
-        instance = instances.BaseInstance(id = instId, isPublic = False)
-        ret = hndlr.toXml(instance, prettyPrint = False)
-        self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><id>ec2-adfadf</id><isPublic>false</isPublic></instance>")
+        #instance = instances.BaseInstance(id = instId, isPublic = False)
+        #ret = hndlr.toXml(instance, prettyPrint = False)
+        #self.failUnlessEqual(ret, "<?xml version='1.0' encoding='UTF-8'?>\n<instance><id>ec2-adfadf</id><isPublic>false</isPublic></instance>")
 
-        x = hndlr.parseString(ret)
-        self.failUnlessEqual(x.getId(), instId)
-        self.failUnlessEqual(x.getIsPublic(), False)
+        #x = hndlr.parseString(ret)
+        #self.failUnlessEqual(x.getId(), instId)
+        #self.failUnlessEqual(x.getIsPublic(), False)
 
     def testFreezeInstanceTypes(self):
         hndlr = instances.Handler()

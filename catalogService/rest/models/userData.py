@@ -16,9 +16,8 @@
 #
 
 
-import rpath_xmllib as xmllib
-
 import xmlNode
+
 
 class IdNode(xmlNode.xmllib.GenericNode):
     tag = 'id'

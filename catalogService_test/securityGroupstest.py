@@ -20,7 +20,6 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
-import StringIO
 from catalogService.rest.models import securityGroups
 
 from catalogService_test import testbase

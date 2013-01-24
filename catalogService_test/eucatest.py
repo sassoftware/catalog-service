@@ -21,8 +21,6 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
-from testrunner.output import SkipTestException
-
 import base64
 import os
 import pickle
@@ -41,13 +39,10 @@ from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import jobs as jobmodels
-from catalogService.rest.models import job_models
 from catalogService.utils import x509
 
 from catalogService_test import mockedData
 from catalogService_test.mockedData import DUMMY_CERT, DUMMY_KEY
-from mint.shimclient import MintClient
-import mint.shimclient
 
 
 class HandlerTest(testbase.TestCase):
@@ -965,7 +960,7 @@ _xmlNewCloud = """
   <name>newbie.eng.rpath.com</name>
   <accountId>867-5309</accountId>
   <publicAccessKeyId>Public key    </publicAccessKeyId>
-  <secretAccessKey>	Secret key</secretAccessKey>
+  <secretAccessKey>\tSecret key</secretAccessKey>
   <certificateData>%s</certificateData>
   <certificateKeyData>%s</certificateKeyData>
   <launchUsers>a,b,c</launchUsers>

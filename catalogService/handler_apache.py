@@ -15,13 +15,9 @@
 # limitations under the License.
 #
 
-
-import base64
 import os
 
 from conary.lib import coveragehook
-from conary.lib import util
-from conary import dbstore
 
 from catalogService.utils import logger as rlogging
 from restlib.http import modpython
@@ -33,7 +29,7 @@ from catalogService import errors
 from catalogService.rest.api import site
 from catalogService.rest.database import RestDatabase
 from catalogService.rest.middleware import auth
-from catalogService.rest.middleware import response
+
 
 class Request(modpython.ModPythonRequest):
     _helpDir = '/usr/share/catalog-service/help'

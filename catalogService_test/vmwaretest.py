@@ -23,8 +23,6 @@ testsuite.setup()
 import os
 import httplib
 import StringIO
-import socket
-import time
 
 from conary.lib import util
 
