@@ -1,13 +1,17 @@
 (^|/)\.hg($|/)
-.*\.pyc$
-.*\.swp$
-.*\~$
-.*,cover$
-.*\.o$
-.*\.so$
+\.pyc$
+\.swp$
+\~$
+,cover$
+\.o$
+\.orig$
+\.so$
 ^tmp/
 ^pylint/reports/
 
 ^.*project$
 ^.*pydevproject$
 
+\.coverage
+\.failed
+\.times
