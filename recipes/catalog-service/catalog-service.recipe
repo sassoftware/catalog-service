@@ -20,6 +20,7 @@ class CatalogService(PackageRecipe):
     version = '0.1'
 
     buildRequires = [
+        'amiconfig:python',
         'boto:python',
         'ec2-ami-tools:runtime',
         'glance-client:python',
