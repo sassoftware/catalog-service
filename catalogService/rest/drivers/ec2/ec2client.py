@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 import urllib2
+from amiconfig import ami
 from boto import ec2 as bec2
 from boto.ec2 import EC2Connection
 from boto.s3.connection import S3Connection, Location
@@ -1366,7 +1367,6 @@ boot-uuid=%s
         return None
 
     def _findMyInstanceId(self):
-        from amiconfig import ami
         ac = ami.AMIConfig()
         instanceId = ac.id.getInstanceId()
         return instanceId
