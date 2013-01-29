@@ -78,6 +78,8 @@ class BuildData(object):
                     fileId = 6,
                 )],
                 'buildPageUrl': 'http://test.rpath.local2/project/foo/build?id=6',
+                'imageData' : {
+                },
             },
             {
                 'productName': 'bar project',
