@@ -54,6 +54,7 @@ class HandlerTest(testbase.TestCase):
             ec2PublicKey = 'Public Key',
             ec2PrivateKey = 'Private Key',
             ec2AccountId = '867530900000',
+            # Keep bucket name uppercase to test RCE-1354
             ec2S3Bucket = 'Bucket',
             ec2Certificate = mockedData.tmp_userCert,
             ec2CertificateKey = mockedData.tmp_userKey,
@@ -826,6 +827,12 @@ proxy_pass = pass
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
         self.failUnlessEqual([ x.href for x in job.get_resultResource() ],
             [ self.makeUri(client, self._baseCloudUrl + '/images/ami-00112233') ])
+
+        # RCE-1354 - verify we're attempting to register the image with
+        # the lowercase bucket name
+        fname = os.path.join(self.botoRequestDir, 'RegisterImage')
+        args = pickle.load(file(fname))
+        self.assertEquals(args, {'ImageLocation': 'bucket/some-file-6-1-x86_6.manifest.xml'})
 
     def testNewInstances(self):
         # We need to mock the image data

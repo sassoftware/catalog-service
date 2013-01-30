@@ -1257,7 +1257,9 @@ boot-uuid=%s
         if image._imageData.get('ebsBacked'):
             return self._deployImageFromFile_EBS(job, image, filePath)
 
-        bucketName = tconf['s3Bucket']
+        # RCE-1354: we create the bucket as lowercase, so we need to
+        # register the image with the lowercase bucket name too
+        bucketName = tconf['s3Bucket'].lower()
         tmpDir = os.path.dirname(filePath)
         imageFilePath = self._getFilesystemImage(job, image, filePath)
         bundlePath = os.path.join(tmpDir, "bundled")
