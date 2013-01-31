@@ -91,13 +91,13 @@ class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
 
     idMap = [
-        ('t1.micro', "Micro"),
         ('m1.small', "Small"),
         ('m1.large', "Large"),
         ('m1.xlarge', "Extra Large"),
         ('c1.medium', "High-CPU Medium"),
         ('c1.xlarge', "High-CPU Extra Large"),
     ]
+    idMapEBS = [ ('t1.micro', "Micro") ] + idMap
 
 class XRegionInfo(bec2.regioninfo.RegionInfo):
     def __init__(self, name=None, endpoint=None, s3Endpoint=None,
@@ -819,6 +819,10 @@ boot-uuid=%s
         descr.setDisplayName(title)
         descr.addDescription(title)
         self.drvLaunchDescriptorCommonFields(descr)
+        if imageData.ebsBacked:
+            instanceTypeMap = EC2_InstanceTypes.idMapEBS
+        else:
+            instanceTypeMap = EC2_InstanceTypes.idMap
         descr.addDataField("instanceType",
             descriptions = [
                 ("Instance Type", None),
@@ -830,8 +834,8 @@ boot-uuid=%s
             type = descr.EnumeratedType(
                 descr.ValueWithDescription(x,
                     descriptions = y)
-                  for (x, y) in EC2_InstanceTypes.idMap),
-            default = EC2_InstanceTypes.idMap[0][0],
+                  for (x, y) in instanceTypeMap),
+            default = instanceTypeMap[0][0],
             )
         if imageData.ebsBacked:
             defaultFreeSpace = int(
