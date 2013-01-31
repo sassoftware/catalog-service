@@ -1305,14 +1305,16 @@ boot-uuid=%s
             self._msg(job, "Attaching EBS volume")
             vol.attach(instance.id, devName)
 
-            self._waitForBlockDevice(job, internalDev)
-            self._writeFilesystemImage(internalDev, filePath)
+            try:
+                self._waitForBlockDevice(job, internalDev)
+                self._writeFilesystemImage(internalDev, filePath)
+            finally:
+                self._detachVolume(job, vol)
             snapshot = self._createSnapshot(job, vol)
             amiId = self._registerEBSBackedImage(job, image, snapshot)
             return amiId
         finally:
-            self._msg(job, 'Cleaning up')
-            self._detachVolume(job, vol)
+            self._msg(job, 'Deleting volume %s' % vol.id)
             conn.delete_volume(vol.id)
 
     def _registerEBSBackedImage(self, job, image, snapshot):
