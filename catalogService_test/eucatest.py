@@ -611,7 +611,6 @@ class HandlerTest(testbase.TestCase):
             for ftype in [ ftypes[3], ftypes[4], ftypes[7], ftypes[8] ] ],
             [
                 [
-                    ('t1.micro', {None: 'Micro'}),
                     ('m1.small', {None: 'Small'}),
                     ('m1.large', {None: 'Large'}),
                     ('m1.xlarge', {None: 'Extra Large'}),
@@ -657,7 +656,7 @@ class HandlerTest(testbase.TestCase):
                 {None: prefix + 'userData.html'}
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 't1.micro', None, 1, 1, None,
+            [None, None, None, 'm1.small', None, 1, 1, None,
                 ['SAS Demo'], None, None])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
