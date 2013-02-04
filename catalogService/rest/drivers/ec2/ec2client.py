@@ -629,6 +629,7 @@ class EC2Client(baseDriver.BaseDriver):
 x509-cert-hash=%s
 x509-cert(base64)=%s
 boot-uuid=%s
+zone-addresses=%s
 """
         certPath = self.getWbemClientCert()
         try:
@@ -640,7 +641,9 @@ boot-uuid=%s
         certData = base64.b64encode(certData)
         bootUuid = self.getBootUuid()
 
-        sect = templ % (certHash, certData, bootUuid)
+        zoneAddresses = ','.join(self.zoneAddresses)
+
+        sect = templ % (certHash, certData, bootUuid, zoneAddresses)
         if not userData:
             return sect
         return userData + '\n' + sect

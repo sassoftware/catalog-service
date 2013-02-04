@@ -731,13 +731,15 @@ class HandlerTest(testbase.TestCase):
             certFile = os.path.join(self.workDir, "data", "x509.crt")
             certContents = file(certFile).read()
             certHash = x509.X509.computeHash(certFile)
+            zoneAddresses = "1.2.3.4:5678,2.3.4.5:6789"
             userData = """\
 my user data
 [sfcb-client-setup]
 x509-cert-hash=%s
 x509-cert(base64)=%s
 boot-uuid=%s
-""" % (certHash, base64.b64encode(certContents), bootUuid)
+zone-addresses=%s
+""" % (certHash, base64.b64encode(certContents), bootUuid, zoneAddresses)
 
         self.failUnlessEqual(params['UserData'], base64.b64encode(userData))
         self.failUnlessEqual(params['Placement.AvailabilityZone'], 'us-east-1c')
@@ -750,7 +752,9 @@ boot-uuid=%s
         uri = self._baseCloudUrl + '/instances'
 
         imageId = '361d7fa1d99431e16a3a438c8d4ebaa79aea075a'
-        fakeDaemonize = lambda slf, *args, **kwargs: slf.function(*args, **kwargs)
+        def fakeDaemonize(slf, *args, **kwargs):
+            slf.postFork()
+            return slf.function(*args, **kwargs)
 
         srv, client, job, response = self._setUpNewInstanceTest(
             self.cloudName, fakeDaemonize, '', imageId = imageId)

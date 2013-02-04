@@ -89,6 +89,8 @@ class EC2Test(testbase.TestCase):
         # Initialize client
         client = driver.client
         driver.drvCreateCloudClient = lambda x: client
+        driver.zoneAddresses =  [ '1.2.3.4:5678', '2.3.4.5:6789' ]
+ 
         return driver
 
     def _fakeMakeRequest(self, drv, **kw):
