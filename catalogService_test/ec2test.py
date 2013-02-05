@@ -875,15 +875,21 @@ proxy_pass = pass
             certFile = os.path.join(self.workDir, "data", "x509.crt")
             certContents = file(certFile).read()
             certHash = x509.X509.computeHash(certFile)
-            zoneAddresses = "1.2.3.4:5678,2.3.4.5:6789"
+            zoneAddresses = "1.2.3.4:5678 2.3.4.5:6789"
+            conaryProxies = "1.2.3.4 2.3.4.5"
             userData = """\
 my user data
+[amiconfig]
+plugins = rpath sfcb-client-setup
 [sfcb-client-setup]
 x509-cert-hash=%s
 x509-cert(base64)=%s
+[rpath-tools]
 boot-uuid=%s
 zone-addresses=%s
-""" % (certHash, base64.b64encode(certContents), bootUuid, zoneAddresses)
+conary-proxies=%s
+""" % (certHash, base64.b64encode(certContents), bootUuid, zoneAddresses,
+            conaryProxies)
 
         self.failUnlessEqual(params['UserData'], base64.b64encode(userData))
         self.failUnlessEqual(params['Placement.AvailabilityZone'], 'us-east-1c')

@@ -625,11 +625,15 @@ class EC2Client(baseDriver.BaseDriver):
 
     def createUserData(self, userData):
         templ = """\
+[amiconfig]
+plugins = rpath sfcb-client-setup
 [sfcb-client-setup]
 x509-cert-hash=%s
 x509-cert(base64)=%s
+[rpath-tools]
 boot-uuid=%s
 zone-addresses=%s
+conary-proxies=%s
 """
         certPath = self.getWbemClientCert()
         try:
@@ -641,9 +645,11 @@ zone-addresses=%s
         certData = base64.b64encode(certData)
         bootUuid = self.getBootUuid()
 
-        zoneAddresses = ','.join(self.zoneAddresses)
+        zoneAddresses = ' '.join(self.zoneAddresses)
+        conaryProxies = ' '.join(x.split(':', 1)[0] for x in self.zoneAddresses)
 
-        sect = templ % (certHash, certData, bootUuid, zoneAddresses)
+        sect = templ % (certHash, certData, bootUuid, zoneAddresses,
+            conaryProxies)
         if not userData:
             return sect
         return userData + '\n' + sect
