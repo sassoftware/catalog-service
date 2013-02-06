@@ -711,10 +711,16 @@ conary-proxies=%s
         self._msg(job, "Tagging instances")
         reqInstName = launchParams.get('instanceName')
         reqInstDescription = launchParams.get('instanceDescription')
-        instances = self.client.get_all_instances(instanceIds)[0].instances
+        reservations = self.client.get_all_instances(instanceIds)
+        for i in range(60):
+            if reservations:
+                break
+            self._msg(job, "Waiting for reservation")
+            time.sleep(1)
         instCount = len(instanceIds)
         suffix = ""
-        for inst in instances:
+        # All instances should be part of the same reservation
+        for inst in reservations[0].instances:
             idx = int(inst.ami_launch_index)
             if instCount > 1:
                 suffix = " (%s/%s)" % (idx + 1, instCount)
