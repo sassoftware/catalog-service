@@ -1252,7 +1252,15 @@ conary-proxies=%s
 
     def _deployImageFromFile(self, job, image, filePath, extraParams=None):
         amiId = self._deployImageHelper(job, image, filePath)
-        img = self.client.get_all_images([amiId])[0]
+        for i in range(60):
+            imgs = self.client.get_all_images([amiId])
+            if imgs:
+                break
+            self._msg(job, "Waiting for image to become available")
+            time.sleep(1)
+        else:
+            raise Exception("Timeout waiting for image to become available")
+        img = imgs[0]
         imageName = extraParams.get('imageName', None)
         if imageName is None:
             imageName = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
