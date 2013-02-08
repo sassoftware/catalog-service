@@ -25,7 +25,7 @@ import sys
 import tempfile
 import time
 import urllib2
-from amiconfig import ami
+from amiconfig import AMIConfig, errors as amierrors
 from boto import ec2 as bec2
 from boto.ec2 import EC2Connection
 from boto.s3.connection import S3Connection, Location
@@ -1420,8 +1420,13 @@ conary-proxies=%s
         return None
 
     def _findMyInstanceId(self):
-        ac = ami.AMIConfig()
-        instanceId = ac.id.getInstanceId()
+        ac = AMIConfig()
+        try:
+            instanceId = ac.id.getInstanceId()
+        except amierrors.EC2DataRetrievalError, e:
+            raise errors.ResponseError(400,
+                "AWS endpoint invalid",
+                "The management endpoint was unable to talk to AWS' metadata service. Is it running in EC2? Error: %s" % e)
         return instanceId
 
     @classmethod

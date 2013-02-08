@@ -309,7 +309,17 @@ class EC2Test(testbase.TestCase):
 
         self.mock(drv, '_getFilesystemImage', getFilesystemImageFunc)
 
-        self.mock(drv, '_findMyInstanceId', lambda *args: 'i-decafbad')
+        class FakeGetInstanceId(object):
+            retval = None
+            def __call__(slf):
+                if isinstance(slf.retval, Exception):
+                    raise slf.retval
+                return slf.retval
+        self.GetInstanceId = FakeGetInstanceId()
+        from amiconfig import ami
+        self.mock(ami.InstanceData, "getInstanceId", self.GetInstanceId)
+
+        self.GetInstanceId.retval = 'i-decafbad'
 
         # Fake dev file so we can test formatting etc
         devFile = tempfile.NamedTemporaryFile()
@@ -367,6 +377,33 @@ class EC2Test(testbase.TestCase):
 
         # Make sure URL remap worked
         self.assertEquals(drv._downloadUrls, ['https://localhost:1234/blah'])
+
+    def testDeployImageEBS_non_ec2_endpoint(self):
+        drv = self._setupMocking()
+        job = self.Job(list())
+        imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
+            architecture='x86')
+        imageDownloadUrl = "http://localhost/blah"
+        imageData = dict(freespace=1234, ebsBacked=True)
+        imageData['attributes.installed_size'] = 14554925
+        img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
+                                    imageData=imageData)
+        descriptorDataXml = """\
+<descriptor_data>
+  <imageId>5145</imageId>
+  <imageName>ignoreme1</imageName>
+</descriptor_data>
+"""
+        # Convince InstanceData to raise an exception
+        from amiconfig import errors as amierrors
+        self.GetInstanceId.retval = amierrors.EC2DataRetrievalError("some error")
+        from catalogService import errors 
+        e = self.assertRaises(errors.ResponseError,
+                drv.deployImageFromUrl, job, img, descriptorDataXml)
+        self.assertEquals(e.status, 400)
+        self.assertEquals(e.msg, 'AWS endpoint invalid')
+        self.assertEquals(e.tracebackData,
+            "The management endpoint was unable to talk to AWS' metadata service. Is it running in EC2? Error: some error")
 
     def testLaunchInstanceEBS(self):
         drv = self._setupMocking(mockedCalls=dict(
