@@ -63,6 +63,7 @@ class EC2Test(testbase.TestCase):
         testbase.TestCase.setUp(self)
         baseDriver.CatalogJobRunner.preFork = lambda *args: None
         os.makedirs(os.path.join(self.workDir, "data"))
+        self.botoRequestDir = os.path.join(self.workDir, "botoRequest")
  
     def _createNodeFactory(self):
         return self._createDriver()._nodeFactory
@@ -94,8 +95,10 @@ class EC2Test(testbase.TestCase):
         return driver
 
     def _fakeMakeRequest(self, drv, **kw):
+        self._invocations = []
         def fakeMakeRequest(methodName, params, *args, **kwargs):
             #response = origMakeRequest(methodName, params, *args, **kwargs)
+            self._invocations.append((methodName, params, args, kwargs))
             data = kw[methodName]
             if isinstance(data, mockedData.MultiResponse):
                 return data.getData()
@@ -463,6 +466,35 @@ class EC2Test(testbase.TestCase):
                 'Amazon EC2 System Launch Parameters (EBS-backed)')
         field = descr.getDataField('freeSpace')
         self.failUnlessEqual(field.getDefault(), 51)
+
+    def testGetImagesWithMissingImages(self):
+        # Fake a response that says one of the images is missing. Make
+        # sure we call again, now without that image
+        errorResp = """\
+<Response>
+  <Errors>
+    <Error>
+      <Code>InvalidAMIID.NotFound</Code>
+      <Message>The image id '[ami-decafbad]' does not exist</Message>
+    </Error>
+  </Errors>
+  <RequestID>cb0ba15a-ac58-4bcb-807f-815aceda2d3d</RequestID>
+</Response>"""
+
+        drv = self._createDriver()
+        self._fakeMakeRequest(drv,
+            DescribeImages = mockedData.MultiResponse([
+                (400, errorResp),
+                mockedData.xml_getAllImages1,
+            ]))
+
+        drv.getImagesFromTarget(['ami-decafbad', 'ami-decafbee'])
+        self.assertEquals(self._invocations, [
+            ('DescribeImages', {'ImageId.2': 'ami-decafbad',
+                    'ImageId.1': 'ami-decafbee', 'Owner.1': '867530900000'},
+                ('/', 'POST'), {}),
+            ('DescribeImages', {'ImageId.1': 'ami-decafbee',
+                'Owner.1': '867530900000'}, ('/', 'POST'), {})])
 
 if __name__ == "__main__":
     testsuite.main()

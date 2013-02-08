@@ -403,6 +403,7 @@ class EC2Client(baseDriver.BaseDriver):
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
 
     dynamicSecurityGroupPattern = re.compile(baseDriver.BaseDriver._uuid('.' * 32))
+    imageListPattern = re.compile(r'.*\[([^]]*)\].*')
 
     RBUILDER_BUILD_TYPE = 'AMI'
 
@@ -786,18 +787,32 @@ conary-proxies=%s
         return insts
 
     def getImagesFromTarget(self, imageIds):
+        imageList = images.BaseImages()
         targetConfiguration = self.getTargetConfiguration()
         ownerId = targetConfiguration.get('accountId')
         if ownerId:
             ownerIds = [ ownerId ]
         else:
             ownerIds = None
-        rs = self.client.get_all_images(image_ids = imageIds, owners = ownerIds)
+        imageIds = set(imageIds or [])
+        try:
+            rs = self.client.get_all_images(image_ids = list(imageIds), owners = ownerIds)
+        except EC2ResponseError, e:
+            errorCode = self._getErrorCode(e)
+            errorMsg = self._getErrorMessage(e)
+            if errorCode != 'InvalidAMIID.NotFound':
+                raise
+            # Identify the non-existing images
+            missingImageIds = self._processInvalidAMIID(errorMsg)
+            imageIds = imageIds.difference(missingImageIds)
+            if not imageIds:
+                return imageList
+            rs = self.client.get_all_images(image_ids = list(imageIds), owners = ownerIds)
+
         # avoid returning amazon kernel images.
         rs = [ x for x in rs if x.id.startswith(self.ImagePrefix) ]
 
         cloudAlias = targetConfiguration.get('cloudAlias')
-        imageList = images.BaseImages()
         for image in rs:
             productCodes = self._productCodesForImage(image)
             if image.location:
@@ -1138,6 +1153,13 @@ conary-proxies=%s
         if "subscription to productcode" in message.lower():
             return self._getProductCodeData(message)
         return None
+
+    def _processInvalidAMIID(self, errorMsg):
+        match = self.imageListPattern.match(errorMsg)
+        if not match:
+            return []
+        imageList = match.group(1)
+        return [ x.strip() for x in imageList.split(',') ]
 
     def _getProductCodeData(self, message):
         """
