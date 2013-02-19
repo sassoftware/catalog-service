@@ -3,7 +3,6 @@
 # All rights reserved.
 #
 
-loadSuperClass('conary-test')
 loadSuperClass('testpackage')
 class CatalogServiceTest(TestPackageRecipe, CPackageRecipe):
     name = 'catalog-service-test'
@@ -19,18 +18,22 @@ class CatalogServiceTest(TestPackageRecipe, CPackageRecipe):
     testsuite = "catalogService_test/testsuite.py"
 
     buildRequires = [
+        'catalog-service:python',
+        'conary-build:python',
+        'conary:python',
+        'conary-repository:python',
         'conary-test:python',
         'decorator:python',
-        'lxml:python',
-        'rpath-xmllib:python',
-        'catalog-service:python',
+        'httpd',
+        'java-1.6.0-openjdk-devel',
+        'mod_python',
+        'mod_ssl',
         'pywbem:python',
-        'simplejson:python',
-        'sun-jre:runtime',
         'restlib:python',
-        'XenAPI:python',
         'rpath-models:python',
-    ] + ConaryTest.buildRequires
+        'rpath-xmllib:python',
+        'XenAPI:python',
+    ]
 
     def setupSource(r):
         r.addMercurialSnapshot()

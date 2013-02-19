@@ -18,7 +18,7 @@
 
 "see __init__ for docstring"
 
-import simplejson
+import json
 from catalogService_test import mockedData
 from mint.mint_error import TargetExists, TargetMissing
 
@@ -96,7 +96,7 @@ class MintClient(object):
         cu.execute("INSERT INTO Targets (targetType, targetName) VALUES (?, ?)",
             targetType, targetName)
         targetId = cls._getTargetId(targetType, targetName)
-        data = [ (targetId, k.encode('ascii'), simplejson.dumps(v))
+        data = [ (targetId, k.encode('ascii'), json.dumps(v))
             for (k, v) in dataDict.items() ]
         cu.executemany("""
             INSERT INTO TargetData (targetId, name, value)
@@ -123,7 +123,7 @@ class MintClient(object):
         cu = cls.db.cursor()
         cu.execute("SELECT name, value FROM TargetData WHERE targetId = ?",
             targetId)
-        return dict((k, simplejson.loads(v)) for (k, v) in cu)
+        return dict((k, json.loads(v)) for (k, v) in cu)
 
     @classmethod
     def getConfiguredTargetsData(cls, targetType):
@@ -135,7 +135,7 @@ class MintClient(object):
         ret = dict()
         for targetName, k, v in cu:
             l = ret.setdefault(targetName, {})
-            l[k] = simplejson.loads(v)
+            l[k] = json.loads(v)
         return ret
 
 
