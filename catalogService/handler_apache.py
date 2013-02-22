@@ -25,10 +25,8 @@ from restlib.http import modpython
 from mint import config
 from mint.db.database import Database
 
-from catalogService import errors
-from catalogService.rest.api import site
+from catalogService.handler import getHandler
 from catalogService.rest.database import RestDatabase
-from catalogService.rest.middleware import auth
 
 
 class Request(modpython.ModPythonRequest):
@@ -38,17 +36,12 @@ class Request(modpython.ModPythonRequest):
 class ModPythonHttpHandler(modpython.ModPythonHttpHandler):
     requestClass = Request
 
+
 class ApacheRESTHandler(object):
     httpHandlerClass = ModPythonHttpHandler
     def __init__(self, pathPrefix, restdb):
         self.pathPrefix = pathPrefix
-        controller = site.CatalogServiceController(restdb)
-        self.handler = self.httpHandlerClass(controller)
-        self.handler.addCallback(errors.ErrorMessageCallback(controller))
-        self.handler.addCallback(auth.AuthenticationCallback(restdb, controller))
-        # It is important that the logger callback is always called, so keep
-        # this last
-        self.handler.addCallback(rlogging.LoggerCallback())
+        self.handler = getHandler(restdb, self.httpHandlerClass)
 
     def handle(self, req):
         logger = self.getLogger(req)

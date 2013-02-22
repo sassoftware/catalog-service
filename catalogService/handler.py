@@ -91,9 +91,9 @@ class Request(simplehttp.SimpleHttpRequest):
 class SimpleHttpHandler(simplehttp.SimpleHttpHandler):
     requestClass = Request
 
-def getHandler(restDb):
+def getHandler(restDb, handlerClass=SimpleHttpHandler):
     controller = site.CatalogServiceController(restDb)
-    handler = SimpleHttpHandler(controller)
+    handler = handlerClass(controller)
     handler.addCallback(auth.AuthenticationCallback(restDb, controller))
     handler.addCallback(errors.ErrorMessageCallback(controller))
     # It is important that the logger callback is always called, so keep this
