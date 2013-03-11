@@ -138,6 +138,6 @@ class ErrorMessageCallback(error.ErrorCallback):
 
     @classmethod
     def _getEnvelopeStatus(cls, request):
-        if 'HTTP_X_FLASH_VERSION' not in request.headers:
+        if 'HTTP_X_FLASH_VERSION' not in request.headers and 'X-Wrap-Response-Codes' not in request.headers:
             return None
         return 200

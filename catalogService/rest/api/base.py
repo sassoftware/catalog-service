@@ -39,7 +39,7 @@ class BaseCloudController(BaseGenericController):
             [driver, cfg, db])
 
     def PermissionDenied(self, request, msg=''):
-        if 'HTTP_X_FLASH_VERSION' in request.headers:
+        if 'HTTP_X_FLASH_VERSION' in request.headers or 'X-Wrap-Response-Codes' in request.headers:
             return XmlStringResponse(msg, status=403)
         return XmlStringResponse(msg, status = 401)
 
