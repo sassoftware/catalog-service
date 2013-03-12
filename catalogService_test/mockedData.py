@@ -864,6 +864,13 @@ xml_registerImage1 = """\
 </RegisterImageResponse>
 """
 
+xml_authorizeSecurityGroupSuccess = """\
+<AuthorizeSecurityGroupIngressResponse xmlns="http://ec2.amazonaws.com/doc/2013-02-01/">
+  <requestId>59dbff89-35bd-4eac-99ed-be587EXAMPLE</requestId>
+  <return>true</return>
+</AuthorizeSecurityGroupIngressResponse>
+"""
+
 xml_environment1 = """\
 <?xml version='1.0' encoding='UTF-8'?>
 <environment>

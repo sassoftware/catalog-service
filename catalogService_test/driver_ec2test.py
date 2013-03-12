@@ -409,9 +409,9 @@ class EC2Test(testbase.TestCase):
         drv = self._setupMocking(mockedCalls=dict(
             DescribeImages = mockedData.xml_ec2DescribeImages,
             CreateSecurityGroup=mockedData.xml_createSecurityGroupSuccess,
+            AuthorizeSecurityGroupIngress=mockedData.xml_authorizeSecurityGroupSuccess,
             RunInstances=mockedData.xml_ec2RunInstances,
         ))
-        drv._getExternalIp = lambda: None
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
             architecture='x86')
@@ -466,14 +466,6 @@ class EC2Test(testbase.TestCase):
         node = drv.terminateInstance(instanceId)
         self.failUnless(isinstance(node, instances.BaseInstance), node)
         self.failUnlessEqual(node.getId(), 'http://mumbo.jumbo.com/bottom/clouds/ec2/instances/aws/instances/' + instanceId)
-
-    def test_getExternalIp(self):
-        drv = self._createDriver()
-        def fakeOpenUrl(url):
-            return StringIO.StringIO("""\
-1.2.3.4 \n""")
-        self.mock(drv, '_openUrl', fakeOpenUrl)
-        self.failUnlessEqual(drv._getExternalIp(), '1.2.3.4')
 
     def testGetImageDeploymentDescriptor(self):
         drv = self._createDriver()

@@ -432,26 +432,6 @@ class EC2Client(baseDriver.BaseDriver):
         proxyUser, proxyPass, proxy, proxyPort = splitUrl[1:5]
         return proxyUser, proxyPass, proxy, proxyPort
 
-    def _openUrl(self, url):
-        proxyUser, proxyPass, proxy, proxyPort = self._getProxyInfo(https = False)
-        opener = urllib2.OpenerDirector()
-        if proxy:
-            proxy = helperfuncs.urlUnsplit(("http", proxyUser, proxyPass,
-                proxy, proxyPort, '', '', ''))
-            opener.add_handler(urllib2.ProxyHandler(dict(http = proxy)))
-        opener.add_handler(urllib2.HTTPHandler())
-        ret = opener.open(url)
-        return ret
-
-    def _getExternalIp(self):
-        # RCE-1310
-        url = "http://automation.whatismyip.com/n09230945.asp"
-        resp = self._openUrl(url)
-        data = resp.read().strip()
-        if len(data) > 16:
-            return None
-        return data
-
     def drvCreateCloudClient(self, credentials):
         for key in ('publicAccessKeyId', 'secretAccessKey'):
             if key not in credentials or not credentials[key]:
@@ -1004,11 +984,6 @@ conary-proxies=%s
         return securityGroup
 
     def _updateCatalogSecurityGroup(self, remoteIPAddress, securityGroup):
-
-        serviceIp = self._getExternalIp()
-        if not remoteIPAddress and not serviceIp:
-            return
-
         allowed = []
         # open ingress for ports 80, 443, and 8003 on TCP
         # for the IP address
@@ -1017,9 +992,9 @@ conary-proxies=%s
                                 ip_protocol=proto,
                                 cidr_ip='%s/32' % remoteIPAddress)
                 for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS)
-        if serviceIp:
+        else:
             allowed.extend(dict(from_port=from_port, to_port=to_port,
-                                ip_protocol=proto, cidr_ip='%s/32' % serviceIp)
+                                ip_protocol=proto, cidr_ip='0.0.0.0/0')
                 for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS)
         for pdict in allowed:
             try:
