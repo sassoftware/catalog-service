@@ -411,6 +411,7 @@ class EC2Test(testbase.TestCase):
             CreateSecurityGroup=mockedData.xml_createSecurityGroupSuccess,
             RunInstances=mockedData.xml_ec2RunInstances,
         ))
+        drv._getExternalIp = lambda: None
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
             architecture='x86')
