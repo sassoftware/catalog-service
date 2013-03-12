@@ -469,13 +469,6 @@ class HandlerTest(BaseTest):
 
 
     def testNewEC2InstancesWithCatalogDefaultWithRemoteIp(self):
-        # Mock the external IP determination
-        def fakeOpenUrl(slf, url):
-            return util.BoundedStringIO("""\
-\t1.2.3.4\t\n""")
-        from catalogService.rest.drivers import ec2
-        self.mock(ec2.driver, '_openUrl', fakeOpenUrl)
-
         # We need to mock the image data
         self._mockRequest(DescribeImages = mockedData.xml_getAllImages4,
             RunInstances = mockedData.xml_runInstances3,
@@ -506,7 +499,7 @@ class HandlerTest(BaseTest):
                      ('tcp', 80, 80, '192.168.1.1/32'),
                      ('tcp', 443, 443, '192.168.1.1/32'),
                      ('tcp', 8003, 8003, '192.168.1.1/32'),
-                     ('tcp', 5989, 5989, '1.2.3.4/32')
+                     ('tcp', 5989, 5989, '0.0.0.0/0'),
                      ])
         finally:
             if f: f.close()

@@ -84,11 +84,6 @@ class HandlerTest(testbase.TestCase):
         testbase.TestCase.setUp(self)
 
         self._mockRequest()
-
-        # Mock the external IP determination
-        def fakeOpenUrl(slf, url):
-            return util.BoundedStringIO("1.2.3.4\n\n")
-        self.mock(dec2.driver, '_openUrl', fakeOpenUrl)
         baseDriver.CatalogJobRunner.preFork = lambda *args: None
 
     def _mockRequest(self, **kwargs):
@@ -937,11 +932,15 @@ conary-proxies=%s
 
         job = self.waitForJob(srv, jobUrlPath, "Completed")
 
-        # Make sure we requested 1.2.3.4 to be an ingress
         data = pickle.load(file(os.path.join(
             self.botoRequestDir, 'AuthorizeSecurityGroupIngress')))
-        self.failUnlessEqual(data,
-            {'IpPermissions.1.ToPort': 5989, 'GroupName': 'catalog-default', 'IpPermissions.1.IpRanges.1.CidrIp': u'1.2.3.4/32', 'IpPermissions.1.IpProtocol': 'tcp', 'IpPermissions.1.FromPort': 5989})
+        self.failUnlessEqual(data, {
+                'IpPermissions.1.ToPort': 5989,
+                'GroupName': 'catalog-default',
+                'IpPermissions.1.IpRanges.1.CidrIp': u'0.0.0.0/0',
+                'IpPermissions.1.IpProtocol': 'tcp',
+                'IpPermissions.1.FromPort': 5989,
+                })
 
     def testNewInstancesProductCodeError(self):
         def FakeRunInstances(*args, **kwargs):

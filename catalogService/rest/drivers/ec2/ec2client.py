@@ -987,15 +987,13 @@ conary-proxies=%s
         allowed = []
         # open ingress for ports 80, 443, and 8003 on TCP
         # for the IP address
-        if remoteIPAddress:
-            allowed.extend(dict(from_port=from_port, to_port=to_port,
-                                ip_protocol=proto,
-                                cidr_ip='%s/32' % remoteIPAddress)
-                for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS)
-        else:
-            allowed.extend(dict(from_port=from_port, to_port=to_port,
-                                ip_protocol=proto, cidr_ip='0.0.0.0/0')
-                for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS)
+        remoteNet = '%s/32' % remoteIPAddress if remoteIPAddress else '0.0.0.0/0'
+        allowed.extend(dict(from_port=from_port, to_port=to_port,
+                            ip_protocol=proto, cidr_ip=remoteNet)
+            for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_PERMS)
+        allowed.extend(dict(from_port=from_port, to_port=to_port,
+                            ip_protocol=proto, cidr_ip='0.0.0.0/0')
+            for proto, from_port, to_port in CATALOG_DEF_SECURITY_GROUP_WBEM_PORTS)
         for pdict in allowed:
             try:
                 self.client.authorize_security_group(securityGroup,
