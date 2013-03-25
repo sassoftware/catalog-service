@@ -1047,7 +1047,7 @@ class VMwareClient(baseDriver.BaseDriver):
         return uuid
 
     def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
-            computeResourceMor):
+            computeResourceMor, numCPUs=1, memoryMB=256):
         filename = self.getCredentialsIsoFile()
         dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
         dsInfo = self.vicfg.getMOR(dataStoreMor)
@@ -1077,7 +1077,8 @@ class VMwareClient(baseDriver.BaseDriver):
             cdromSpec = self.client.createCdromConfigSpec(
                 os.path.basename(filename), vmMor, controllerMor,
                 dataStoreMor, datastoreVolume)
-            self.client.reconfigVM(vmMor, dict(deviceChange = [ cdromSpec ]))
+            self.client.reconfigVM(vmMor, dict(deviceChange = [ cdromSpec ],
+                numCPUs=numCPUs, memoryMB=memoryMB))
         except viclient.client.FaultException, e:
             # We will not fail the request if we could not attach credentials
             # to the instance

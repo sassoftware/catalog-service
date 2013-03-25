@@ -1010,7 +1010,7 @@ class VimService(object):
                 error = fault.get_element_localizedMessage()
         raise Error(error)
 
-    def reconfigVM(self, vm, options):
+    def reconfigVM(self, vm, options, callback=None):
         req = ReconfigVM_TaskRequestMsg()
         spec = req.new_spec()
         for key, value in options.iteritems():
@@ -1019,7 +1019,7 @@ class VimService(object):
                 raise TypeError('no such configuration value "%s"' %key)
             setter = getattr(spec, method)
             setter(value)
-        return self._reconfigVM(vm, spec)
+        return self._reconfigVM(vm, spec, callback=callback)
 
     def _reconfigVM(self, vm, spec, callback=None):
         req = ReconfigVM_TaskRequestMsg()
