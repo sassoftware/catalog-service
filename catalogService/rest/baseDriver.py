@@ -686,6 +686,18 @@ class BaseDriver(object):
         def toString(cls, elt, encoding=None, prettyPrint=True):
             return cls._etree.tostring(elt, encoding=encoding, pretty_print=prettyPrint)
 
+    class ImageData(object):
+        __slots__ = []
+        def __init__(self, **kwargs):
+            for slot in self.__slots__:
+                setattr(self, slot, kwargs.get(slot))
+
+    def _getImageData(self, extraArgs):
+        if extraArgs is None:
+            imageDataDict = {}
+        else:
+            imageDataDict = extraArgs.get('imageData', {})
+        return self.ImageData(**imageDataDict)
 
     def uploadCapturedImage(self, job, instance, params, archive):
         imageUploadUrl = params.pop('imageUploadUrl')

@@ -948,18 +948,8 @@ conary-proxies=%s
         self.drvImageDeploymentDescriptorCommonFields(descr)
         return descr
 
-    class ImageData(object):
+    class ImageData(baseDriver.BaseDriver.ImageData):
         __slots__ = [ 'ebsBacked', 'freespace', 'amiHugeDiskMountpoint', ]
-        def __init__(self, **kwargs):
-            for slot in self.__slots__:
-                setattr(self, slot, kwargs.get(slot))
-
-    def _getImageData(self, extraArgs):
-        if extraArgs is None:
-            imageDataDict = {}
-        else:
-            imageDataDict = extraArgs.get('imageData', {})
-        return self.ImageData(**imageDataDict)
 
     def _updateCatalogDefaultSecurityGroup(self, remoteIPAddress, dynamic = False):
         # add the security group if it's not present already

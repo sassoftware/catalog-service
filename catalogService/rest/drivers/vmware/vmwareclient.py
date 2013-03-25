@@ -248,6 +248,10 @@ class VMwareClient(baseDriver.BaseDriver):
     #OVF_PREFERRENCE_LIST = [ '.ova', 'ovf.tar.gz', ]
     OVF_PREFERRENCE_LIST = [ 'ovf.tar.gz', 'ova', ]
 
+    class ImageData(baseDriver.BaseDriver.ImageData):
+        __slots__ = [ 'vmCPUs', 'vmMemory', ]
+
+
     def __init__(self, *args, **kwargs):
         baseDriver.BaseDriver.__init__(self, *args, **kwargs)
         self._vicfg = None
@@ -316,7 +320,35 @@ class VMwareClient(baseDriver.BaseDriver):
         descr.setDisplayName('VMware Launch Parameters')
         descr.addDescription('VMware Launch Parameters')
         self.drvLaunchDescriptorCommonFields(descr)
+        self._launchSpecificDescriptorFields(descr, extraArgs=extraArgs)
         return self._drvPopulateDescriptorFromTarget(descr)
+
+    def _launchSpecificDescriptorFields(self, descr, extraArgs=None):
+        imageData = self._getImageData(extraArgs)
+        vmCPUs = imageData.vmCPUs or 1
+        vmMemory = imageData.vmMemory or 1024
+        descr.addDataField(
+            'vmCPUs',
+            descriptions = 'Number of Virtual CPUs',
+            required = True,
+            help = [
+                ('launch/vmCPUs.html', None)
+            ],
+            type = 'int',
+            constraints = dict(constraintName = 'range',
+                               min = 1, max = 32),
+            default = vmCPUs)
+        descr.addDataField(
+            'vmMemory',
+            descriptions = 'Amount of Memory (Megabytes)',
+            required = True,
+            help = [
+                ('launch/vmMemory.html', None)
+            ],
+            type = 'int',
+            constraints = dict(constraintName = 'range',
+                               min = 256, max = 128*1024),
+            default = vmMemory)
 
     def _drvPopulateDescriptorFromTarget(self, descr):
         targetConfig = self.getTargetConfiguration()
@@ -993,6 +1025,8 @@ class VMwareClient(baseDriver.BaseDriver):
         network = ppop('network')
         vmFolder = ppop('vmFolder')
         diskProvisioning = ppop('diskProvisioning', None)
+        vmCPUs = ppop('vmCPUs')
+        vmMemory = ppop('vmMemory')
 
         vm = None
 
@@ -1036,8 +1070,9 @@ class VMwareClient(baseDriver.BaseDriver):
             vmMor = self.client._getVM(mor=vm)
 
         try:
-            self._attachCredentials(job, instanceName, vmMor, dataCenter, dataStore,
-                                    computeResource)
+            self._attachCredentials(job, instanceName, vmMor, dataCenter,
+                    dataStore, computeResource,
+                    numCPUs=vmCPUs, memoryMB=vmMemory)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
         self._msg(job, 'Launching')

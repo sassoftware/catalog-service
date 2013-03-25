@@ -195,6 +195,10 @@ class BuildData(object):
                     targetImages = []),
                 ],
                 'buildPageUrl': 'http://test.rpath.local2/project/foo/build?id=69',
+                'imageData' : {
+                    'vmMemory' : 512,
+                    'vmCPUs' : 2,
+                },
             },
             {
                 'architecture' : 'x86',
@@ -226,6 +230,10 @@ class BuildData(object):
                     targetImages = []),
                 ],
                 'buildPageUrl': 'http://test.rpath.local2/project/foo/build?id=169',
+                'imageData' : {
+                    'vmMemory' : 512,
+                    'vmCPUs' : 2,
+                },
             },
             ],
         'VMWARE_OVF_IMAGE': [
@@ -248,6 +256,10 @@ class BuildData(object):
                     fileId = 7,
                 )],
                 'buildPageUrl': 'http://test.rpath.local2/project/foo/build?id=7',
+                'imageData' : {
+                    'vmMemory' : 512,
+                    'vmCPUs' : 2,
+                },
             }
             ],
         'AMI' : [

@@ -560,7 +560,9 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(dsc.getDisplayName(), "VMware Launch Parameters")
         self.failUnlessEqual(dsc.getDescriptions(), {None : 'VMware Launch Parameters'})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
-            ['imageId', 'instanceName', 'instanceDescription', 'dataCenter',
+            ['imageId', 'instanceName', 'instanceDescription',
+                'vmCPUs', 'vmMemory',
+                'dataCenter',
                 'vmfolder-datacenter-2',
                 'cr-datacenter-2', 'network-datacenter-2',
                 'dataStore-domain-c5', 'resourcePool-domain-c5'])
@@ -568,22 +570,25 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(
             [ ftypes[0], ftypes[1], ftypes[2] ],
             ['str', 'str', 'str'])
+        self.failUnlessEqual(ftypes[3:5], [ 'int', 'int', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[3] ] ],
+            for ftype in [ ftypes[5] ] ],
             [[(u'datacenter-2', {None: u'rPath'})]])
         expMultiple = [None] * len(dsc.getDataFields())
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, True, True, True, True, True, ] )
+            [ True, True, None, True, True, True, True, True, True, True, True, ] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, None, None, None, None] )
+            [ True, None, None, None, None, None, None, None, None, None, None] )
         self.failUnlessEqual([ df.descriptions.asDict()
                 for df in dsc.getDataFields() ],
             [
                 {None: 'Image ID'},
                 {None: 'Instance Name'},
                 {None: 'Instance Description'},
+                {None: 'Number of Virtual CPUs'},
+                {None: 'Amount of Memory (Megabytes)'},
                 {None: 'Data Center'},
                 {None: 'VM Folder'},
                 {None: 'Compute Resource'},
@@ -597,6 +602,8 @@ class VMwareTest(testbase.TestCase):
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
                 [{'constraintName': 'length', 'value': 32}],
                 [{'constraintName': 'length', 'value': 128}],
+                [{'max': 32, 'constraintName': 'range', 'min': 1}],
+                [{'max': 131072, 'constraintName': 'range', 'min': 256}],
                 [],
                 [],
                 [],
@@ -605,7 +612,7 @@ class VMwareTest(testbase.TestCase):
                 [],
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
+            [None, None, None, 1, 1024, 'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
              'datastore-18', 'resgroup-50'])
         df = dsc.getDataField('network-datacenter-2')
         self.failUnlessEqual( [ x.descriptions.asDict() for x in df.type ],
@@ -637,6 +644,8 @@ class VMwareTest(testbase.TestCase):
                 None,
                 'instanceName.html',
                 'instanceDescription.html',
+                'vmCPUs.html',
+                'vmMemory.html',
                 'dataCenter.html',
                 'vmfolder.html',
                 'computeResource.html',
@@ -683,6 +692,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(dsc.getDescriptions(), {None : 'VMware Launch Parameters'})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
             ['imageId', 'instanceName', 'instanceDescription',
+                'vmCPUs', 'vmMemory',
                 'dataCenter', 'vmfolder-datacenter-10', 'cr-datacenter-10',
                 'vmfolder-datacenter-20', 'cr-datacenter-20',
                 'network-datacenter-10', 'network-datacenter-20',
@@ -692,8 +702,9 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(
             [ ftypes[0], ftypes[1], ftypes[2] ],
             ['str', 'str', 'str'])
+        self.failUnlessEqual(ftypes[3:5], [ 'int', 'int', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[3] ] ],
+            for ftype in [ ftypes[5] ] ],
                 [[('datacenter-10', {None: 'rPath 1'}),
                   ('datacenter-20', {None: 'rPath 2'})]])
         expMultiple = [None] * len(dsc.getDataFields())
@@ -709,6 +720,8 @@ class VMwareTest(testbase.TestCase):
                 {None: 'Image ID'},
                 {None: 'Instance Name'},
                 {None: 'Instance Description'},
+                {None: 'Number of Virtual CPUs'},
+                {None: 'Amount of Memory (Megabytes)'},
                 {None: 'Data Center'},
                 {None: 'VM Folder'},
                 {None: 'Compute Resource'},
@@ -727,14 +740,16 @@ class VMwareTest(testbase.TestCase):
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
                 [{'constraintName': 'length', 'value': 32}],
                 [{'constraintName': 'length', 'value': 128}],
-            ] + [ [] ] * (len(dsc.getDataFields()) - 3))
+                [{'max': 32, 'constraintName': 'range', 'min': 1}],
+                [{'max': 131072, 'constraintName': 'range', 'min': 256}],
+            ] + [ [] ] * (len(dsc.getDataFields()) - 5))
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None,
+            [None, None, None, 1, 1024,
             'datacenter-10', 'group-v10', 'domain-c10', 'group-v20', 'domain-c20',
             'network-10', 'network-20', 'datastore-101', 'datastore-201',
             'resgroup-100', 'resgroup-200'])
 
-        dfields = dsc.getDataFields()[3:]
+        dfields = dsc.getDataFields()[5:]
         self.failUnlessEqual([
             [ (x.key, x.descriptions.asDict()) for x in df.type ]
                 for df in dfields ],
@@ -775,7 +790,7 @@ class VMwareTest(testbase.TestCase):
                 ],
             ])
 
-        dfields = dsc.getDataFields()[4:]
+        dfields = dsc.getDataFields()[6:]
         self.failUnlessEqual([
             (df.conditional.fieldName, df.conditional.value)
                 for df in dfields ],
@@ -1545,7 +1560,7 @@ class VMwareTest(testbase.TestCase):
             # The data store should no longer be there (if we had multiple one
             # of them should show up)
             self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
-                ['imageId', 'instanceName', 'instanceDescription', 'dataCenter'])
+                ['imageId', 'instanceName', 'instanceDescription', 'vmCPUs', 'vmMemory', 'dataCenter'])
         finally:
             pass
 

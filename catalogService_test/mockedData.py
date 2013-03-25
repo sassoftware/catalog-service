@@ -3440,7 +3440,7 @@ Content-Length: 432
 </soapenv:Envelope>
 """
 
-vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>256</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromIsoBackingInfo"><ns1:fileName>[nas2-nfs]misa-remote-update-4/credentials.iso</ns1:fileName><datastore type="Datastore" xsi:type="ns1:ManagedObjectReference">datastore-18</datastore></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>'
+vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>1024</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromIsoBackingInfo"><ns1:fileName>[nas2-nfs]misa-remote-update-4/credentials.iso</ns1:fileName><datastore type="Datastore" xsi:type="ns1:ManagedObjectReference">datastore-18</datastore></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>'
 
 vmwareReconfigVMTaskReqTemplate = (
 '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
@@ -5101,7 +5101,7 @@ vmwareConfigSpec1 = (
               '<ns1:beforeGuestReboot>true</ns1:beforeGuestReboot>'
             '</tools>'
             '<ns1:numCPUs>1</ns1:numCPUs>'
-            '<ns1:memoryMB>256</ns1:memoryMB>'
+            '<ns1:memoryMB>1024</ns1:memoryMB>'
             '<deviceChange>'
               '<operation>add</operation>'
               '<device xsi:type="ns1:VirtualCdrom">'
