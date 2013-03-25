@@ -340,7 +340,7 @@ class VMwareClient(baseDriver.BaseDriver):
             default = vmCPUs)
         descr.addDataField(
             'vmMemory',
-            descriptions = 'Amount of Memory (Megabytes)',
+            descriptions = 'RAM (Megabytes)',
             required = True,
             help = [
                 ('launch/vmMemory.html', None)
