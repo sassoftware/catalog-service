@@ -1469,7 +1469,8 @@ conary-proxies=%s
 
     def _writeFilesystemImage(self, fsImage, tarFile):
         from jobslave.generators import bootable_image
-        fs = bootable_image.Filesystem(fsImage, fsType='ext3', size=0, fsLabel='root')
+        fs = bootable_image.Filesystem(fsImage, fsType='ext4', size=0,
+                fsLabel='root')
         fs.format()
         mountPoint = os.path.join(os.path.dirname(fsImage), "mounted")
         util.mkdirChain(mountPoint)
