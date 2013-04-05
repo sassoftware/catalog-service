@@ -1095,6 +1095,7 @@ xml_newInstanceVMware1 = """\
   <network-datacenter-2>dvportgroup-9987</network-datacenter-2>
   <dataStore-domain-c5>datastore-18</dataStore-domain-c5>
   <resourcePool-domain-c5>resgroup-50</resourcePool-domain-c5>
+  <rootSshKeys>bleepy</rootSshKeys>
 </newInstance>
 """
 

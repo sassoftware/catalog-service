@@ -119,6 +119,7 @@ class BaseDriver(object):
         self._x509Cert = None
         self._x509Key = None
         self._bootUuid = None
+        self._rootSshKeys = None
         self._targetConfig = None
 
         if inventoryHandler is None:
@@ -1499,6 +1500,13 @@ class BaseDriver(object):
         bootUuidFile.write(self.getBootUuid())
         bootUuidFile.flush()
 
+        rootSshKeyFile = None
+        rootSshKeys = self._rootSshKeys
+        if rootSshKeys:
+            rootSshKeyFile = tempfile.NamedTemporaryFile()
+            rootSshKeyFile.write(rootSshKeys)
+            rootSshKeyFile.flush()
+
         directMethodFile = None
         conaryProxyFile = None
         if self.zoneAddresses:
@@ -1529,6 +1537,8 @@ class BaseDriver(object):
         if conaryProxyFile:
             graftList.append("etc/conary/config.d/rpath-tools-conaryProxy=%s"
                 % conaryProxyFile.name)
+        if rootSshKeyFile:
+            graftList.append("etc/ssh/keys.d/root/key.pub=%s" % rootSshKeyFile.name)
 
         # Make ISO, if it doesn't exist already
         cmd = [ "/usr/bin/mkisofs", "-r", "-J", "-graft-points",

@@ -349,6 +349,14 @@ class VMwareClient(baseDriver.BaseDriver):
             constraints = dict(constraintName = 'range',
                                min = 256, max = 128*1024),
             default = vmMemory)
+        descr.addDataField(
+            'rootSshKeys',
+            descriptions = 'Root SSH keys',
+            help = [
+                ('launch/rootSshKeys.html', None)
+            ],
+            type = 'str',
+            constraints = dict(constraintName = 'length', value = 4096))
 
     def _drvPopulateDescriptorFromTarget(self, descr):
         targetConfig = self.getTargetConfiguration()
@@ -1027,6 +1035,7 @@ class VMwareClient(baseDriver.BaseDriver):
         diskProvisioning = ppop('diskProvisioning', None)
         vmCPUs = ppop('vmCPUs')
         vmMemory = ppop('vmMemory')
+        self._rootSshKeys = ppop('rootSshKeys', None)
 
         vm = None
 
