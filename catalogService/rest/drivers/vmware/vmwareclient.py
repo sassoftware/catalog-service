@@ -15,6 +15,7 @@
 #
 
 
+import fnmatch
 import operator
 import os
 import StringIO
@@ -217,7 +218,7 @@ def formatSize(size):
     suffixes = (' bytes', ' KiB', ' MiB', ' GiB')
     div = 1
     for suffix in suffixes:
-        if size < (div * 1024):
+        if abs(size) < (div * 1024):
             return '%d %s' %(size / div, suffix)
         div = div * 1024
     return '%d TiB' %(size / div)
@@ -293,6 +294,30 @@ class VMwareClient(baseDriver.BaseDriver):
         self._paramsFromDescriptorData(params, descriptorData)
         return params
 
+    def _filterDataStore_cond(self, cr, filterExp):
+        """
+        Filter out read-only datastores and the ones not matching filterExp
+        """
+
+        cfg = cr.configTarget
+        for ds in cfg.get_element_datastore():
+            if hasattr(ds, '_mode') and ds.get_element_mode() == 'readOnly':
+                # Read-only datastore. Can't launch on it
+                continue
+            name = ds.get_element_name()
+            if not fnmatch.fnmatch(name, filterExp):
+                continue
+            yield ds
+
+    def _filterDataStore_mostFreeSpace(self, cr, filterExp):
+        return max(self._filterDataStore_cond(cr, filterExp),
+            key = lambda x: x.get_element_datastore().get_element_freeSpace())
+
+    def _filterDataStore_leastOvercommitted(self, cr, filterExp):
+        return max(self._filterDataStore_cond(cr, filterExp),
+            key = lambda x: (x.get_element_datastore().get_element_freeSpace()
+                - x.get_element_datastore().get_element_uncommitted()))
+
     def _paramsFromDescriptorData(self, params, descriptorData):
         getField = descriptorData.getField
         dataCenter = getField('dataCenter')
@@ -300,9 +325,23 @@ class VMwareClient(baseDriver.BaseDriver):
         rp = getField('resourcePool-%s' % cr)
         network = getField('network-%s' % dataCenter)
         folder = getField('vmfolder-%s' % dataCenter)
+        vicfg = self.vicfg
+        dc = vicfg.getDatacenter(dataCenter)
+        crObj = dc.getComputeResource(cr)
+        dataStoreSelection = getField('dataStoreSelection-%s' % cr)
+        if dataStoreSelection == ('dataStoreManual-%s' % cr):
+            dataStore = getField('dataStore-%s' % cr)
+        elif dataStoreSelection == ('dataStoreFreeSpace-%s' % cr):
+            filterExp = getField('%s-filter' % dataStoreSelection)
+            ds = self._filterDataStore_mostFreeSpace(crObj, filterExp)
+            dataStore = ds.get_element_datastore().get_element_datastore()
+        elif dataStoreSelection == ('dataStoreLeastOvercommitted-%s' % cr):
+            filterExp = getField('%s-filter' % dataStoreSelection)
+            ds = self._filterDataStore_leastOvercommitted(crObj, filterExp)
+            dataStore = ds.get_element_datastore().get_element_datastore()
         params.update(dict(
             dataCenter = dataCenter,
-            dataStore = getField('dataStore-%s' % cr),
+            dataStore = dataStore,
             computeResource = cr,
             resourcePool = rp,
             network = network,
@@ -469,13 +508,48 @@ class VMwareClient(baseDriver.BaseDriver):
             cfg = cr.configTarget
             dataStores = []
 
+            dsSelection = [
+                ("dataStoreFreeSpace-%s" % cr.obj, "Most free space"),
+                ("dataStoreLeastOvercommitted-%s" % cr.obj, "Least Overcommitted"),
+                ("dataStoreManual-%s" % cr.obj, "Manual"),
+            ]
+
+            dsSelectionFieldName = 'dataStoreSelection-%s' % cr.obj
+            descr.addDataField(dsSelectionFieldName,
+                    descriptions = 'Data Store Selection',
+                    required = True,
+                    help = [ ('launch/dataStoreSelection.html', None) ],
+                    type = descr.EnumeratedType(
+                        descr.ValueWithDescription(x[0], descriptions = x[1])
+                        for x in dsSelection),
+                    conditional = descr.Conditional(
+                        fieldName='cr-%s' %dc.obj,
+                        operator='eq',
+                        fieldValue=cr.obj),
+                    default = dsSelection[0][0],
+                    )
+            # First two options allow for a glob filter
+            for opt in dsSelection[:2]:
+                parentFieldName = opt[0]
+                descr.addDataField('%s-filter' % parentFieldName,
+                        descriptions = 'Filter',
+                        required = True,
+                        type = "str",
+                        default = "*",
+                            conditional = descr.Conditional(
+                                fieldName=dsSelectionFieldName,
+                                operator='eq',
+                                fieldValue=parentFieldName)
+                        )
+
+            parentFieldName = dsSelection[-1][0]
             for ds in cfg.get_element_datastore():
                 if hasattr(ds, '_mode') and ds.get_element_mode() == 'readOnly':
                     # Read-only datastore. Can't launch on it
                     continue
                 name = ds.get_element_name()
-                dsInfo = ds.get_element_datastore()
-                free = dsInfo.get_element_freeSpace()
+                dsSummary = ds.get_element_datastore()
+                free = dsSummary.get_element_freeSpace()
                 dsDesc = '%s - %s free' %(name, formatSize(free))
                 dsMor = ds.get_element_datastore().get_element_datastore()
                 dataStores.append((dsMor, dsDesc))
@@ -490,9 +564,9 @@ class VMwareClient(baseDriver.BaseDriver):
                 for x in dataStores),
                                default = dataStores[0][0],
                                conditional = descr.Conditional(
-                                    fieldName='cr-%s' %dc.obj,
+                                    fieldName=dsSelectionFieldName,
                                     operator='eq',
-                                    fieldValue=cr.obj)
+                                    fieldValue=parentFieldName)
                                )
             # FIXME: add (descr.Conditional(
             #fieldName='dataCenter',
