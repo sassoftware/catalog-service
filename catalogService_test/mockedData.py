@@ -1093,6 +1093,7 @@ xml_newInstanceVMware1 = """\
   <vmfolder-datacenter-2>group-v3</vmfolder-datacenter-2>
   <cr-datacenter-2>domain-c5</cr-datacenter-2>
   <network-datacenter-2>dvportgroup-9987</network-datacenter-2>
+  <dataStoreSelection-domain-c5>dataStoreManual-domain-c5</dataStoreSelection-domain-c5>
   <dataStore-domain-c5>datastore-18</dataStore-domain-c5>
   <resourcePool-domain-c5>resgroup-50</resourcePool-domain-c5>
   <rootSshKeys>bleepy</rootSshKeys>
@@ -1108,6 +1109,7 @@ xml_newImageVMware1 = """\
   <vmfolder-datacenter-2>group-v3</vmfolder-datacenter-2>
   <cr-datacenter-2>domain-c5</cr-datacenter-2>
   <network-datacenter-2>dvportgroup-9987</network-datacenter-2>
+  <dataStoreSelection-domain-c5>dataStoreManual-domain-c5</dataStoreSelection-domain-c5>
   <dataStore-domain-c5>datastore-18</dataStore-domain-c5>
   <resourcePool-domain-c5>resgroup-50</resourcePool-domain-c5>
   <diskProvisioning>thin</diskProvisioning>
@@ -3143,23 +3145,366 @@ vmwareRetrievePropertiesHostReq35 = vmwareReqGetVirtualMachineProps35.replace(
     '<obj type="Folder">group-d1</obj>',
     '<obj type="Folder" xsi:type="ns1:ManagedObjectReference">group-v3</obj>')
 
-vmwareRetrievePropertiesHostResp = """\
-HTTP/1.1 200 OK
-Date: Fri, 22 May 2009 20:20:24 GMT
-Cache-Control: no-cache
-Content-Type: text/xml; charset=utf-8
-Content-Length: 12207
-
+vmwareRetrievePropertiesHostResp = HTTPResponse(data="""\
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
- xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
- xmlns:xsd="http://www.w3.org/2001/XMLSchema"
- xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-<soapenv:Body>
-<RetrievePropertiesResponse xmlns="urn:vim25"><returnval><obj type="HostSystem">host-879</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">esx02.eng.rpath.com</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet></returnval><returnval><obj type="Folder">group-v1622</obj><propSet><name>name</name><val xsi:type="xsd:string">rBO</val></propSet></returnval><returnval><obj type="ResourcePool">resgroup-7</obj><propSet><name>name</name><val xsi:type="xsd:string">Resources</val></propSet><propSet><name>parent</name><val type="ClusterComputeResource" xsi:type="ManagedObjectReference">domain-c5</val></propSet></returnval><returnval><obj type="Folder">group-v1191</obj><propSet><name>name</name><val xsi:type="xsd:string">OS tests</val></propSet></returnval><returnval><obj type="ClusterComputeResource">domain-c5</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference></val></propSet><propSet><name>host</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-183</ManagedObjectReference><ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-206</ManagedObjectReference><ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-879</ManagedObjectReference><ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-881</ManagedObjectReference><ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-9</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">lab</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference></val></propSet><propSet><name>parent</name><val type="Folder" xsi:type="ManagedObjectReference">group-h4</val></propSet><propSet><name>resourcePool</name><val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val></propSet></returnval><returnval><obj type="Folder">group-v2317</obj><propSet><name>name</name><val xsi:type="xsd:string">rUS</val></propSet></returnval><returnval><obj type="ResourcePool">resgroup-181</obj><propSet><name>name</name><val xsi:type="xsd:string">QA</val></propSet><propSet><name>parent</name><val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val></propSet></returnval><returnval><obj type="Folder">group-v2329</obj><propSet><name>name</name><val xsi:type="xsd:string">Discovered Virtual Machine</val></propSet></returnval><returnval><obj type="Folder">group-v1935</obj><propSet><name>name</name><val xsi:type="xsd:string">rPA testing</val></propSet></returnval><returnval><obj type="Folder">group-v3</obj><propSet><name>name</name><val xsi:type="xsd:string">vm</val></propSet></returnval><returnval><obj type="HostSystem">host-206</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">esx04.eng.rpath.com</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet></returnval><returnval><obj type="ResourcePool">resgroup-537</obj><propSet><name>name</name><val xsi:type="xsd:string">Proserv</val></propSet><propSet><name>parent</name><val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val></propSet></returnval><returnval><obj type="Folder">group-v2279</obj><propSet><name>name</name><val xsi:type="xsd:string">rBA</val></propSet></returnval><returnval><obj type="HostSystem">host-9</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">esx01.eng.rpath.com</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet></returnval><returnval><obj type="HostSystem">host-183</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">esx03.eng.rpath.com</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet></returnval><returnval><obj type="ResourcePool">resgroup-50</obj><propSet><name>name</name><val xsi:type="xsd:string">Franks</val></propSet><propSet><name>parent</name><val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val></propSet></returnval><returnval><obj type="ResourcePool">resgroup-51</obj><propSet><name>name</name><val xsi:type="xsd:string">General</val></propSet><propSet><name>parent</name><val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val></propSet></returnval><returnval><obj type="Folder">group-v506</obj><propSet><name>name</name><val xsi:type="xsd:string">Cognos</val></propSet></returnval><returnval><obj type="Folder">group-v354</obj><propSet><name>name</name><val xsi:type="xsd:string">QA</val></propSet></returnval><returnval><obj type="HostSystem">host-881</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">esx05.eng.rpath.com</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet></returnval><returnval><obj type="Folder">group-v355</obj><propSet><name>name</name><val xsi:type="xsd:string">Templates</val></propSet></returnval><returnval><obj type="Folder">group-v356</obj><propSet><name>name</name><val xsi:type="xsd:string">Field</val></propSet></returnval><returnval><obj type="Folder">group-d1</obj><propSet><name>name</name><val xsi:type="xsd:string">Datacenters</val></propSet></returnval><returnval><obj type="Folder">group-v357</obj><propSet><name>name</name><val xsi:type="xsd:string">Engineering</val></propSet></returnval><returnval><obj type="Folder">group-v358</obj><propSet><name>name</name><val xsi:type="xsd:string">Support</val></propSet></returnval><returnval><obj type="Folder">group-h4</obj><propSet><name>name</name><val xsi:type="xsd:string">host</val></propSet></returnval><returnval><obj type="Datacenter">datacenter-2</obj><propSet><name>datastore</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference><ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference></val></propSet><propSet><name>hostFolder</name><val type="Folder" xsi:type="ManagedObjectReference">group-h4</val></propSet><propSet><name>name</name><val xsi:type="xsd:string">rPath</val></propSet><propSet><name>network</name><val xsi:type="ArrayOfManagedObjectReference"><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference><ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference></val></propSet><propSet><name>vmFolder</name><val type="Folder" xsi:type="ManagedObjectReference">group-v3</val></propSet></returnval></RetrievePropertiesResponse>
-</soapenv:Body>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soapenv:Body>
+    <RetrievePropertiesResponse xmlns="urn:vim25">
+      <returnval>
+        <obj type="HostSystem">host-879</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">esx02.eng.rpath.com</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v1622</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">rBO</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ResourcePool">resgroup-7</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Resources</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="ClusterComputeResource" xsi:type="ManagedObjectReference">domain-c5</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v1191</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">OS tests</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ClusterComputeResource">domain-c5</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>host</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-183</ManagedObjectReference>
+            <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-206</ManagedObjectReference>
+            <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-879</ManagedObjectReference>
+            <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-881</ManagedObjectReference>
+            <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-9</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">lab</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-h4</val>
+        </propSet>
+        <propSet>
+          <name>resourcePool</name>
+          <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v2317</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">rUS</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ResourcePool">resgroup-181</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">QA</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v2329</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Discovered Virtual Machine</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v1935</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">rPA testing</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v3</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">vm</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="HostSystem">host-206</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">esx04.eng.rpath.com</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ResourcePool">resgroup-537</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Proserv</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v2279</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">rBA</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="HostSystem">host-9</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">esx01.eng.rpath.com</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference>
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="HostSystem">host-183</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">esx03.eng.rpath.com</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ResourcePool">resgroup-50</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Franks</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="ResourcePool">resgroup-51</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">General</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-7</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v506</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Cognos</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v354</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">QA</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="HostSystem">host-881</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">esx05.eng.rpath.com</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v355</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Templates</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v356</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Field</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-d1</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Datacenters</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v357</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Engineering</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-v358</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Support</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Folder">group-h4</obj>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">host</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="Datacenter">datacenter-2</obj>
+        <propSet>
+          <name>datastore</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>hostFolder</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-h4</val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">rPath</val>
+        </propSet>
+        <propSet>
+          <name>network</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference>
+            <ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>vmFolder</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-v3</val>
+        </propSet>
+      </returnval>
+    </RetrievePropertiesResponse>
+  </soapenv:Body>
 </soapenv:Envelope>
-"""
+""")
 
 vmwareQueryConfigOptionReq = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:QueryConfigOption><_this type="EnvironmentBrowser" xsi:type="ns1:ManagedObjectReference">envbrowser-5</_this><host type="HostSystem">host-879</host></ns1:QueryConfigOption></SOAP-ENV:Body></SOAP-ENV:Envelope>'
 
@@ -4209,6 +4554,29 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
   '<soapenv:Body>'
     '<RetrievePropertiesResponse xmlns="urn:vim25">'
       '<returnval>'
+        '<obj type="HostSystem">host-9</obj>'
+        '<propSet>'
+          '<name>datastore</name>'
+          '<val xsi:type="ArrayOfManagedObjectReference">'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>'
+          '</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>name</name>'
+          '<val xsi:type="xsd:string">esx01.eng.rpath.com</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>network</name>'
+          '<val xsi:type="ArrayOfManagedObjectReference">'
+            '<ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-2282</ManagedObjectReference>'
+            '<ManagedObjectReference type="Network" xsi:type="ManagedObjectReference">network-22</ManagedObjectReference>'
+          '</val>'
+        '</propSet>'
+      '</returnval>'
+      '<returnval>'
         '<obj type="HostSystem">host-879</obj>'
         '<propSet>'
           '<name>datastore</name>'
@@ -4237,6 +4605,7 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>'
           '</val>'
         '</propSet>'
         '<propSet>'
@@ -4281,6 +4650,7 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
           '<val xsi:type="ArrayOfManagedObjectReference">'
             '<ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-206</ManagedObjectReference>'
             '<ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-879</ManagedObjectReference>'
+            '<ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-9</ManagedObjectReference>'
           '</val>'
         '</propSet>'
         '<propSet>'
@@ -4794,6 +5164,32 @@ vmwareRetrievePropertiesEnvBrowserResp = HTTPResponse('<?xml version="1.0" encod
 vmwareRetrievePropertiesDatastoreSummaryReq = \
     _vmwareReqRetrievePropertiesSimpleTemplate % dict(
         klass = 'Datastore', path = 'summary', value = 'datastore-18')
+
+vmwareRetrievePropertiesDatastoreSummaryResponse = HTTPResponse("""\
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soapenv:Body>
+    <RetrievePropertiesResponse xmlns="urn:vim25">
+      <returnval>
+        <obj type="Datastore">datastore-18</obj>
+        <propSet>
+          <name>summary</name>
+          <val xsi:type="DatastoreSummary">
+            <datastore type="Datastore">datastore-18</datastore>
+            <name>nas2-nfs</name>
+            <url>netfs://172.16.160.167//mnt/vg00/nfs-storage/vmware-images/</url>
+            <capacity>724236845056</capacity>
+            <freeSpace>407087947776</freeSpace>
+            <accessible>true</accessible>
+            <multipleHostAccess>true</multipleHostAccess>
+            <type>NFS</type>
+          </val>
+        </propSet>
+      </returnval>
+    </RetrievePropertiesResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+""")
 
  # START REQUEST - get environment browser property
 vmwareRetrievePropertiesEnvBrowserReq = \
@@ -5451,6 +5847,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>netfs://172.16.160.167//mnt/vg00/nfs-storage/vmware-images/</url>
         <capacity>724236845056</capacity>
         <freeSpace>409254006784</freeSpace>
+        <uncommitted>0</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>NFS</type>
@@ -5471,6 +5868,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:47e71a3d-1cac6286-f0fe-00188b3fb778/</url>
         <capacity>1749662302208</capacity>
         <freeSpace>264553627648</freeSpace>
+        <uncommitted>0</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
@@ -5489,8 +5887,9 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <datastore type="Datastore">datastore-20</datastore>
         <name>nas2-iscsi</name>
         <url>sanfs://vmfs_uuid:47e71a7f-82d08548-2178-00188b3fb778/</url>
-        <capacity>1749662302208</capacity>
-        <freeSpace>242972884992</freeSpace>
+        <capacity>8749662302208</capacity>
+        <freeSpace>942972884992</freeSpace>
+        <uncommitted>942972884992</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
@@ -5511,6 +5910,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:48b4718e-0713c17a-5df1-00188b4020e0/</url>
         <capacity>151129161728</capacity>
         <freeSpace>147722338304</freeSpace>
+        <uncommitted>147722338304</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
@@ -5531,6 +5931,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:48b47438-b1c642ee-0930-00188b3faa0f/</url>
         <capacity>151129161728</capacity>
         <freeSpace>141145669632</freeSpace>
+        <uncommitted>1000</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
@@ -5551,6 +5952,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:48c6cc03-ab28edb0-cac5-00188b3fb776/</url>
         <capacity>154350387200</capacity>
         <freeSpace>147264110592</freeSpace>
+        <uncommitted>247264110592</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
@@ -5571,6 +5973,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:48c69614-086355b0-c0af-00188b3fa806/</url>
         <capacity>153813516288</capacity>
         <freeSpace>144366895104</freeSpace>
+        <uncommitted>244366895104</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
@@ -5591,6 +5994,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <url>sanfs://vmfs_uuid:48b47134-c01805f0-6371-00188b401fd1/</url>
         <capacity>310579822592</capacity>
         <freeSpace>305246765056</freeSpace>
+        <uncommitted>605246765056</uncommitted>
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
@@ -6077,28 +6481,7 @@ vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
  vmwareRetrievePropertiesReq35 : vmwareRetrievePropertiesResp1,
  vmwareRetrievePropertiesEnvBrowserReq : vmwareRetrievePropertiesEnvBrowserResp,
 
- # START REQUEST - getDynamicProperty for datastore
- vmwareRetrievePropertiesDatastoreSummaryReq :
- # START RESPONSE - getDynamicProperty for datastore
-"""\
-HTTP/1.1 200 OK
-Date: Thu, 21 May 2009 21:52:36 GMT
-Cache-Control: no-cache
-Content-Type: text/xml; charset=utf-8
-Content-Length: 844
-
-<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
- xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
- xmlns:xsd="http://www.w3.org/2001/XMLSchema"
- xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-<soapenv:Body>
-<RetrievePropertiesResponse xmlns="urn:vim25"><returnval><obj type="Datastore">datastore-18</obj><propSet><name>summary</name><val xsi:type="DatastoreSummary"><datastore type="Datastore">datastore-18</datastore><name>nas2-nfs</name><url>netfs://172.16.160.167//mnt/vg00/nfs-storage/vmware-images/</url><capacity>724236845056</capacity><freeSpace>407087947776</freeSpace><accessible>true</accessible><multipleHostAccess>true</multipleHostAccess><type>NFS</type></val></propSet></returnval></RetrievePropertiesResponse>
-</soapenv:Body>
-</soapenv:Envelope>
-"""
- # END RESPONSE - getDynamicProperty for datastore
- ,
+ vmwareRetrievePropertiesDatastoreSummaryReq : vmwareRetrievePropertiesDatastoreSummaryResponse,
  vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86' :
      vmwareFindByInventoryPathResp % 'vm-4732',
  vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86-1' :

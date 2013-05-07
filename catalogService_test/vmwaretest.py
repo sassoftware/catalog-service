@@ -20,6 +20,7 @@ import testsuite
 # Bootstrap the testsuite
 testsuite.setup()
 
+from lxml import etree
 import os
 import httplib
 import StringIO
@@ -546,6 +547,9 @@ class VMwareTest(testbase.TestCase):
             ['imageId', 'imageName', 'imageDescription', 'dataCenter',
                 'vmfolder-datacenter-2', 'cr-datacenter-2',
                 'network-datacenter-2',
+                'dataStoreSelection-domain-c5',
+                'dataStoreFreeSpace-domain-c5-filter',
+                'dataStoreLeastOvercommitted-domain-c5-filter',
                 'dataStore-domain-c5', 'resourcePool-domain-c5'])
 
     def testGetLaunchDescriptor(self):
@@ -565,6 +569,9 @@ class VMwareTest(testbase.TestCase):
                 'dataCenter',
                 'vmfolder-datacenter-2',
                 'cr-datacenter-2', 'network-datacenter-2',
+                'dataStoreSelection-domain-c5',
+                'dataStoreFreeSpace-domain-c5-filter',
+                'dataStoreLeastOvercommitted-domain-c5-filter',
                 'dataStore-domain-c5', 'resourcePool-domain-c5'])
         ftypes = [ df.type for df in dsc.getDataFields() ]
         self.failUnlessEqual(ftypes[:6],
@@ -576,9 +583,11 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, True, None, True, True, True, True, True, True, ] )
+            [ True, True, None, True, True, None, True, True, True, True, True,
+                True, True, True, True, ] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, None, None, None, None, None, None, None] )
+            [ True, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None, ] )
         self.failUnlessEqual([ df.descriptions.asDict()
                 for df in dsc.getDataFields() ],
             [
@@ -592,6 +601,9 @@ class VMwareTest(testbase.TestCase):
                 {None: 'VM Folder'},
                 {None: 'Compute Resource'},
                 {None: 'Network'},
+                {None: 'Data Store Selection'},
+                {None: 'Filter'},
+                {None: 'Filter'},
                 {None: 'Data Store'},
                 {None: 'Resource Pool'},
             ])
@@ -610,9 +622,13 @@ class VMwareTest(testbase.TestCase):
                 [],
                 [],
                 [],
+                [],
+                [],
+                [],
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
             [None, None, None, 1, 1024, None, 'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
+             'dataStoreFreeSpace-domain-c5', '*', '*',
              'datastore-18', 'resgroup-50'])
         df = dsc.getDataField('network-datacenter-2')
         self.failUnlessEqual( [ x.descriptions.asDict() for x in df.type ],
@@ -651,6 +667,9 @@ class VMwareTest(testbase.TestCase):
                 'vmfolder.html',
                 'computeResource.html',
                 'network.html',
+                'dataStoreSelection.html',
+                None,
+                None,
                 'dataStore.html',
                 'resourcePool.html',
             ]])
@@ -697,7 +716,10 @@ class VMwareTest(testbase.TestCase):
                 'dataCenter', 'vmfolder-datacenter-10', 'cr-datacenter-10',
                 'vmfolder-datacenter-20', 'cr-datacenter-20',
                 'network-datacenter-10', 'network-datacenter-20',
-                'dataStore-domain-c10', 'dataStore-domain-c20',
+                'dataStoreSelection-domain-c10', 'dataStoreFreeSpace-domain-c10-filter', 'dataStoreLeastOvercommitted-domain-c10-filter',
+                'dataStore-domain-c10',
+                'dataStoreSelection-domain-c20', 'dataStoreFreeSpace-domain-c20-filter', 'dataStoreLeastOvercommitted-domain-c20-filter',
+                'dataStore-domain-c20',
                 'resourcePool-domain-c10', 'resourcePool-domain-c20'])
         ftypes = [ df.type for df in dsc.getDataFields() ]
         self.failUnlessEqual(ftypes[:6],
@@ -729,7 +751,13 @@ class VMwareTest(testbase.TestCase):
                 {None: 'Compute Resource'},
                 {None: 'Network'},
                 {None: 'Network'},
+                {None: 'Data Store Selection'},
+                {None: 'Filter'},
+                {None: 'Filter'},
                 {None: 'Data Store'},
+                {None: 'Data Store Selection'},
+                {None: 'Filter'},
+                {None: 'Filter'},
                 {None: 'Data Store'},
                 {None: 'Resource Pool'},
                 {None: 'Resource Pool'},
@@ -747,13 +775,21 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
             [None, None, None, 1, 1024, None,
             'datacenter-10', 'group-v10', 'domain-c10', 'group-v20', 'domain-c20',
-            'network-10', 'network-20', 'datastore-101', 'datastore-201',
+            'network-10', 'network-20',
+            'dataStoreFreeSpace-domain-c10', '*', '*',
+            'datastore-101',
+            'dataStoreFreeSpace-domain-c20', '*', '*',
+            'datastore-201',
             'resgroup-100', 'resgroup-200'])
 
+        def _descr(df):
+            if df.type == 'str':
+                return "String"
+            return [ (x.key, x.descriptions.asDict()) for x in df.type ]
+
         dfields = dsc.getDataFields()[6:]
-        self.failUnlessEqual([
-            [ (x.key, x.descriptions.asDict()) for x in df.type ]
-                for df in dfields ],
+        self.failUnlessEqual(
+            [ _descr(df) for df in dfields ],
             [
                 [
                     ('datacenter-10', {None: 'rPath 1'}),
@@ -772,9 +808,27 @@ class VMwareTest(testbase.TestCase):
                     ('dvportgroup-201', {None: 'Engineering Lab 20'}),
                 ],
                 [
+                    ('dataStoreFreeSpace-domain-c10',
+                        {None: 'Most free space'}),
+                    ('dataStoreLeastOvercommitted-domain-c10',
+                        {None: 'Least Overcommitted'}),
+                    ('dataStoreManual-domain-c10',
+                        {None: 'Manual'})
+                ],
+                'String', 'String',
+                [
                     ('datastore-101', {None: 'datastore 101 - 381  GiB free'}),
                     ('datastore-102', {None: 'datastore 102 - 381  GiB free'}),
                 ],
+                [
+                    ('dataStoreFreeSpace-domain-c20',
+                        {None: 'Most free space'}),
+                    ('dataStoreLeastOvercommitted-domain-c20',
+                        {None: 'Least Overcommitted'}),
+                    ('dataStoreManual-domain-c20',
+                        {None: 'Manual'})
+                ],
+                'String', 'String',
                 [
                     ('datastore-201', {None: 'datastore 201 - 381  GiB free'}),
                     ('datastore-202', {None: 'datastore 202 - 381  GiB free'}),
@@ -803,7 +857,13 @@ class VMwareTest(testbase.TestCase):
                 ('dataCenter', 'datacenter-10'),
                 ('dataCenter', 'datacenter-20'),
                 ('cr-datacenter-10', 'domain-c10'),
+                ('dataStoreSelection-domain-c10', 'dataStoreFreeSpace-domain-c10'),
+                ('dataStoreSelection-domain-c10', 'dataStoreLeastOvercommitted-domain-c10'),
+                ('dataStoreSelection-domain-c10', 'dataStoreManual-domain-c10'),
                 ('cr-datacenter-20', 'domain-c20'),
+                ('dataStoreSelection-domain-c20', 'dataStoreFreeSpace-domain-c20'),
+                ('dataStoreSelection-domain-c20', 'dataStoreLeastOvercommitted-domain-c20'),
+                ('dataStoreSelection-domain-c20', 'dataStoreManual-domain-c20'),
                 ('cr-datacenter-10', 'domain-c10'),
                 ('cr-datacenter-20', 'domain-c20'),
             ])
@@ -844,7 +904,8 @@ class VMwareTest(testbase.TestCase):
             ])
 
     def _setUpNewImageTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, asOvf = True):
+            imageId = None, downloadFileFunc = None, asOvf = True,
+            requestXmlTemplate = None):
         self._mockFunctions(daemonizeFunc=daemonizeFunc,
             downloadFileFunc=downloadFileFunc, asOvf=asOvf)
         if not imageId:
@@ -854,7 +915,9 @@ class VMwareTest(testbase.TestCase):
         srv = self.newService()
         uri = 'clouds/%s/instances/%s/images' % (cloudType, cloudName)
 
-        requestXml = mockedData.xml_newImageVMware1 % imageId
+        if requestXmlTemplate is None:
+            requestXmlTemplate = mockedData.xml_newImageVMware1
+        requestXml = requestXmlTemplate % imageId
         client = self.newClient(srv, uri)
         response = client.request('POST', requestXml)
 
@@ -1543,6 +1606,51 @@ class VMwareTest(testbase.TestCase):
             mockedData.xml_newImageVMware1.replace(
                 '<diskProvisioning>thin</diskProvisioning>', ''))
         self.testDeployImageVsphere50(diskProvisioning='twoGbMaxExtentSparse')
+
+    def testDeployImage_mostFreeSpace(self):
+        # datastore-559 has the most free space
+        soapReqDatastoreSummary = \
+                mockedData._vmwareReqRetrievePropertiesSimpleTemplate % dict(
+                    klass = 'Datastore', path = 'summary', value = 'datastore-559')
+
+        soapRespDatastoreSummary = mockedData.HTTPResponse(
+                mockedData.vmwareRetrievePropertiesDatastoreSummaryResponse.data.replace('datastore-18', 'datastore-559'))
+        soapReqCreateImportSpec = mockedData.vmwareCreateImportSpecRequest2.replace(
+                'datastore-18', 'datastore-559')
+        self._replaceVmwareData({
+            soapReqDatastoreSummary : soapRespDatastoreSummary,
+            soapReqCreateImportSpec : mockedData.vmwareCreateImportSpecResponse1,
+        })
+        newImageNode = etree.fromstring(mockedData.xml_newImageVMware1)
+        newImageNode.find('dataStoreSelection-domain-c5').text = 'dataStoreFreeSpace-domain-c5'
+        etree.SubElement(newImageNode, 'dataStoreFreeSpace-domain-c5-filter').text = 'esx*-local'
+        newImageNode.remove(newImageNode.find('dataStore-domain-c5'))
+        self.mock(mockedData, 'xml_newImageVMware1',
+            etree.tostring(newImageNode))
+        self.testDeployImage1()
+
+    def testDeployImage_leastOvercommitted(self):
+        # datastore-565 has the least overcommitted
+        soapReqDatastoreSummary = \
+                mockedData._vmwareReqRetrievePropertiesSimpleTemplate % dict(
+                    klass = 'Datastore', path = 'summary', value = 'datastore-565')
+
+        soapRespDatastoreSummary = mockedData.HTTPResponse(
+                mockedData.vmwareRetrievePropertiesDatastoreSummaryResponse.data.replace('datastore-18', 'datastore-565'))
+        soapReqCreateImportSpec = mockedData.vmwareCreateImportSpecRequest2.replace(
+                'datastore-18', 'datastore-565')
+        self._replaceVmwareData({
+            soapReqDatastoreSummary : soapRespDatastoreSummary,
+            soapReqCreateImportSpec : mockedData.vmwareCreateImportSpecResponse1,
+        })
+        newImageNode = etree.fromstring(mockedData.xml_newImageVMware1)
+        newImageNode.find('dataStoreSelection-domain-c5').text = 'dataStoreLeastOvercommitted-domain-c5'
+        etree.SubElement(newImageNode, 'dataStoreLeastOvercommitted-domain-c5-filter').text = 'esx*-local'
+        newImageNode.remove(newImageNode.find('dataStore-domain-c5'))
+        self.mock(mockedData, 'xml_newImageVMware1',
+            etree.tostring(newImageNode))
+        self.testDeployImage1()
+
 
     def testGetLaunchDescriptorComputeResourceDisabled(self):
         try:
