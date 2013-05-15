@@ -764,16 +764,18 @@ class BaseDriver(object):
             imageId=imageId, isDeployed=False,
             buildId=imageId,
             is_rBuilderImage=True,
-            cloudName=self.cloudName,
-            downloadUrl=imageDownloadUrl)
-        self.updateImageFromFileInfo(image, imageFileInfo, imageData=imageData)
+            cloudName=self.cloudName)
+        self.updateImageFromFileInfo(image, imageFileInfo,
+                imageDownloadUrl, imageData=imageData)
         return image
 
-    def updateImageFromFileInfo(self, image, imageFileInfo, imageData=None):
+    def updateImageFromFileInfo(self, image, imageFileInfo,
+            imageDownloadUrl=None, imageData=None):
         image.setBaseFileName(imageFileInfo['baseFileName'])
         image.setChecksum(imageFileInfo.get('sha1'))
         image.setSize(imageFileInfo.get('size'))
         image.setArchitecture(imageFileInfo.get('architecture'))
+        image.setDownloadUrl(imageDownloadUrl)
         image._fileId = imageFileInfo['fileId']
         image._imageData = imageData
         return image
