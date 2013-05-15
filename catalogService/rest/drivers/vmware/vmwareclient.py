@@ -969,7 +969,8 @@ class VMwareClient(baseDriver.BaseDriver):
         return uuid
 
     def deployImageProcess(self, job, image, auth, **params):
-        if image.getIsDeployed():
+        # RCE-1751: always redeploy.
+        if 0 and image.getIsDeployed():
             self._msg(job, "Image is already deployed")
             return image.getImageId()
 
