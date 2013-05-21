@@ -365,7 +365,7 @@ class TargetsImageDeployTask(JobProgressTaskHandler):
                     imageData=imageData)
         else:
             self.driver.updateImageFromFileInfo(img, imageFileInfo,
-                    imageData=imageData)
+                    imageDownloadUrl, imageData=imageData)
         self.image = img
         return img, descriptorData
 
