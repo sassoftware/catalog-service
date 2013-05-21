@@ -563,6 +563,9 @@ class VMwareTest(testbase.TestCase):
                 [],
                 [],
                 [],
+                [],
+                [],
+                [],
             ])
 
     def testGetLaunchDescriptor(self):
