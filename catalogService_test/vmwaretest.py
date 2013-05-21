@@ -547,6 +547,19 @@ class VMwareTest(testbase.TestCase):
                 'vmfolder-datacenter-2', 'cr-datacenter-2',
                 'network-datacenter-2',
                 'dataStore-domain-c5', 'resourcePool-domain-c5'])
+        self.failUnlessEqual([ df.constraintsPresentation
+                for df in dsc.getDataFields() ],
+            [
+                [{'max': 32, 'constraintName': 'range', 'min': 1}],
+                [{'constraintName': 'length', 'value': 76}],
+                [{'constraintName': 'length', 'value': 128}],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+            ])
 
     def testGetLaunchDescriptor(self):
         srv = self.newService()

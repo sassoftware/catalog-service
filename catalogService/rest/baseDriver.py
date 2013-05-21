@@ -610,8 +610,11 @@ class BaseDriver(object):
                            help = [
                                ('launch/imageName.html', None)
                            ],
+                           # RCE-1781; image names can be up to 80
+                           # chars, leave a few chars to add -1 at the
+                           # end
                            constraints = dict(constraintName = 'length',
-                                              value = 32))
+                                              value = 76))
 
         descr.addDataField('imageDescription',
                            descriptions = 'Image Description',
