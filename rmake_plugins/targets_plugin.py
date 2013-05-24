@@ -17,6 +17,7 @@
 
 from xobj import xobj2
 from lxml import etree
+import base64
 import sys
 import StringIO
 import weakref
@@ -153,6 +154,11 @@ class TargetsSystemLaunchHandler(TargetsImageDeployHandler):
         systemsXml = response.response
         location = models.URL.fromString(systemsCreateUrl, port=80)
         self.postResults(systemsXml, method='POST', location=location)
+
+    def postprocessHeaders(self, elt, headers):
+        super(TargetsSystemLaunchHandler, self).postprocessHeaders(elt, headers)
+        if self.zone is not None:
+            headers['X-rPath-Management-Zone'] = base64.b64encode(self.zone)
 
 class TargetsImageDeployDescriptorHandler(BaseHandler):
     jobType = NS.TARGET_IMAGE_DEPLOY_DESCRIPTOR
