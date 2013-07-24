@@ -91,11 +91,17 @@ class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
 
     idMap = [
-        ('m1.small', "Small"),
-        ('m1.large', "Large"),
-        ('m1.xlarge', "Extra Large"),
-        ('c1.medium', "High-CPU Medium"),
-        ('c1.xlarge', "High-CPU Extra Large"),
+        ('m1.small', "M1 Small"),
+        ('m1.medium', "M1 Medium"),
+        ('m1.large', "M1 Large"),
+        ('m1.xlarge', "M1 Extra Large"),
+        ('m2.xlarge', "M2 High Memory Extra Large"),
+        ('m2.2xlarge', "M2 High Memory Double Extra Large"),
+        ('m2.4xlarge', "M2 High Memory Quadruple Extra Large"),
+        ('c1.medium', "C1 High-CPU Medium"),
+        ('c1.xlarge', "C1 High-CPU Extra Large"),
+        ('hi1.4xlarge', "High I/O Quadruple Extra Large"),
+        ('hs1.8xlarge', "High Storage Eight Extra Large"),
     ]
     idMapEBS = [ ('t1.micro', "Micro") ] + idMap
 
