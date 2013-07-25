@@ -1365,15 +1365,21 @@ conary-proxies=%s
         conn = self.client
         snapshot = volume.create_snapshot()
         snapshotId = snapshot.id
-        self._msg(job, "Created snapshot %s" % snapshotId)
-        for i in range(120):
-            if snapshot.status == 'completed':
-                return snapshot
-            self._msg(job, "Snapshot status: %s" % snapshot.status)
+        while True:
+            if snapshot.status != 'pending':
+                break
+            progress = str(snapshot.progress) if snapshot.progress else '0'
+            if not progress.endswith('%'):
+                progress += '%'
+            self._msg(job, "Creating snapshot: %s" % (progress,))
             time.sleep(self.TIMEOUT_SNAPSHOT)
             snapshot.update(validate=True)
-        conn.delete_snapshot(snapshotId)
-        raise RuntimeError("Timed out waiting for snapshot operation")
+        if snapshot.status == 'completed':
+            self._msg(job, "Snapshot created")
+            return snapshot
+        else:
+            conn.delete_snapshot(snapshotId)
+            raise RuntimeError("Failed to create snapshot")
 
     def _detachVolume(self, job, volume):
         volumeId = volume.id

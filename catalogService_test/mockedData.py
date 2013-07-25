@@ -418,7 +418,7 @@ xml_ec2DescribeSnapshots1 = """\
             <volumeId>vol-decafbad</volumeId>
             <status>pending</status>
             <startTime>2013-01-21T21:47:44.000Z</startTime>
-            <progress/>
+            <progress>9</progress>
             <ownerId>675450633870</ownerId>
             <volumeSize>1</volumeSize>
             <description/>
