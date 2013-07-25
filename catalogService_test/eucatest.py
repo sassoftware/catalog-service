@@ -611,11 +611,17 @@ class HandlerTest(testbase.TestCase):
             for ftype in [ ftypes[3], ftypes[4], ftypes[7], ftypes[8] ] ],
             [
                 [
-                    ('m1.small', {None: 'Small'}),
-                    ('m1.large', {None: 'Large'}),
-                    ('m1.xlarge', {None: 'Extra Large'}),
-                    ('c1.medium', {None: 'High-CPU Medium'}),
-                    ('c1.xlarge', {None: 'High-CPU Extra Large'})
+                    ('m1.small', {None: 'M1 Small'}),
+                    ('m1.medium', {None: 'M1 Medium'}),
+                    ('m1.large', {None: 'M1 Large'}),
+                    ('m1.xlarge', {None: 'M1 Extra Large'}),
+                    ('m2.xlarge', {None: 'M2 High Memory Extra Large'}),
+                    ('m2.2xlarge', {None: 'M2 High Memory Double Extra Large'}),
+                    ('m2.4xlarge', {None: 'M2 High Memory Quadruple Extra Large'}),
+                    ('c1.medium', {None: 'C1 High-CPU Medium'}),
+                    ('c1.xlarge', {None: 'C1 High-CPU Extra Large'}),
+                    ('hi1.4xlarge', {None: 'High I/O Quadruple Extra Large'}),
+                    ('hs1.8xlarge', {None: 'High Storage Eight Extra Large'}),
                 ],
                 [
                     ('us-east-1a', {None: 'us-east-1a'}),
