@@ -1400,7 +1400,7 @@ conary-proxies=%s
             instanceId = ac.id.getInstanceId()
         except amierrors.EC2DataRetrievalError, e:
             raise errors.ResponseError(400,
-                "AWS endpoint invalid",
+                "Attempted AWS operation from outside a non-AWS endpoint",
                 "The management endpoint was unable to talk to AWS' metadata service. Is it running in EC2? Error: %s" % e)
         return instanceId
 

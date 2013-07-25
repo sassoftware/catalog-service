@@ -401,7 +401,7 @@ class EC2Test(testbase.TestCase):
         e = self.assertRaises(errors.ResponseError,
                 drv.deployImageFromUrl, job, img, descriptorDataXml)
         self.assertEquals(e.status, 400)
-        self.assertEquals(e.msg, 'AWS endpoint invalid')
+        self.assertEquals(e.msg, "Attempted AWS operation from outside a non-AWS endpoint")
         self.assertEquals(e.tracebackData,
             "The management endpoint was unable to talk to AWS' metadata service. Is it running in EC2? Error: some error")
 
