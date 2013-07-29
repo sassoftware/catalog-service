@@ -14,10 +14,10 @@
 # limitations under the License.
 #
 
-import os
 import sys
 import time
 from collections import namedtuple
+from conary.lib.util import SavedException
 
 from catalogService.libs.ovf import OVF
 
@@ -190,7 +190,7 @@ class LeaseProgressUpdate(object):
         self.httpNfcLease = httpNfcLease
         self.callback = callback
 
-    def progress(self, percent):
+    def __call__(self, percent):
         req = HttpNfcLeaseProgressRequestMsg()
         req.set_element__this(self.httpNfcLease)
         req.set_element_percent(percent)
@@ -1103,9 +1103,8 @@ class VimService(object):
 
         return params
 
-    def ovfImportStart(self, ovfFileObj, vmName,
+    def ovfImportStart(self, ovfContents, vmName,
             vmFolder, resourcePool, dataStore, network, diskProvisioning):
-        ovfContents = ovfFileObj.read()
         ovfContents = self.sanitizeOvfDescriptor(ovfContents)
         createImportSpecResult = self.createOvfImportSpec(ovfContents, vmName,
             resourcePool, dataStore, network, diskProvisioning)
@@ -1126,50 +1125,51 @@ class VimService(object):
             createImportSpecResult.get_element_importSpec())
         return fileItems, httpNfcLease
 
-    def ovfUpload(self, httpNfcLease, archive, fileItems, progressUpdate):
+    def ovfUpload(self, httpNfcLease, archive, prefix, fileItems):
         httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
         deviceUrls = httpNfcLeaseInfo.get_element_deviceUrl()
         vmMor = httpNfcLeaseInfo.get_element_entity()
 
-        archiveNameMap = dict((x.name, x) for x in archive)
-
-        fileMap = {}
-        # Compute total size
-        totalSize = 0
+        # Figure out which files get uploaded where first and key it by archive
+        # path, because the archive has to be read out in stream order.
+        idToPathMap = {}
         for fileItem in fileItems:
+            deviceId = fileItem.get_element_deviceId()
             filePath = fileItem.get_element_path()
-            filePathInArchive = os.path.join(archive.baseDir, filePath)
-            member = archiveNameMap[filePathInArchive]
+            filePathInArchive = prefix + filePath
             isCreated = fileItem.get_element_create()
             method = (isCreated and 'PUT') or 'POST'
-            fileSize = member.size
-            fileMap[fileItem.get_element_deviceId()] = (method, member, fileSize)
-            totalSize += fileSize
-
-        progressUpdate.totalSize = totalSize
-        progressUpdate.progress(0, 0)
+            idToPathMap[deviceId] = (method, filePathInArchive)
+        pathToUrlMap = {}
+        for deviceUrl in deviceUrls:
+            deviceId = deviceUrl.get_element_importKey()
+            method, filePathInArchive = idToPathMap[deviceId]
+            url = deviceUrl.get_element_url()
+            if url.startswith("https://*/"):
+                url = self.baseUrl + url[10:]
+            pathToUrlMap[filePathInArchive] = (method, url)
 
         try:
-            for deviceUrl in deviceUrls:
-                method, member, fileSize = fileMap[deviceUrl.get_element_importKey()]
-                fileObj = archive.extractfile(member)
-                url = deviceUrl.get_element_url()
-                if url.startswith("https://*/"):
-                    url = self.baseUrl + url[10:]
-                vmutils._putFile(fileObj, url,
-                    session=None, method=method, callback = progressUpdate)
-                progressUpdate.updateSize(fileSize)
-            progressUpdate.progress(100, 0)
+            # Now pull out files in order and upload them
+            for path, tarinfo, fobj in archive.iterFileStreams():
+                if path not in pathToUrlMap:
+                    continue
+                method, url = pathToUrlMap[path]
+                vmutils._putFile(fobj, url, session=None, method=method)
+                del pathToUrlMap[path]
             self.leaseComplete(httpNfcLease)
         except:
-            # Save this exception, so we can re-raise it further down
-            exc_info = sys.exc_info()
+            err = SavedException()
             try:
                 self.leaseAbort(httpNfcLease)
             except:
                 # Ignore errors related to aborting the lease
                 pass
-            raise exc_info[0], exc_info[1], exc_info[2]
+            err.throw()
+
+        if pathToUrlMap:
+            raise Exception("File(s) missing from archive: %s"
+                    % (', '.join(sorted(pathToUrlMap))))
 
         return vmMor
 

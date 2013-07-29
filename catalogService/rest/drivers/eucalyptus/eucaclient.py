@@ -18,8 +18,10 @@
 # vim: set fileencoding=utf-8 :
 
 import os
+import subprocess
 from boto.s3 import connection as s3connection
 from boto.ec2.regioninfo import RegionInfo
+from conary.lib import util
 
 from catalogService import errors
 from catalogService.rest.drivers.ec2 import ec2client
@@ -359,6 +361,21 @@ class EucalyptusClient(ec2client.EC2Client):
             launchParams.update(imageId=imageId)
         instanceIds = self._launchInstances(job, image, launchParams)
         return instanceIds
+
+    def extractImage(self, path):
+        if path.endswith('.zip'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'unzip -d %s %s' % (workdir, path)
+        elif path.endswith('.tgz'):
+            workdir = path[:-4]
+            util.mkdirChain(workdir)
+            cmd = 'tar zxSf %s -C %s' % (path, workdir)
+        else:
+            raise errors.CatalogError('unsupported rBuilder image archive format')
+        p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
+        p.wait()
+        return workdir
 
     def _getFilesystemImage(self, job, image, dlpath):
         fileExtensions = [ '.ext3' ]

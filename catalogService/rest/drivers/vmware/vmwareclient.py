@@ -19,18 +19,14 @@ import fnmatch
 import operator
 import os
 import StringIO
-import tarfile
-import tempfile
-
-from conary.lib import util
 
 from catalogService import errors
 from catalogService import storage
 from catalogService.rest import baseDriver
-from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.libs.viclient.VimService_client import *  # pyflakes=ignore
+from catalogService.utils.stream_archive import TarStreamExtractor
 
 diskProvisioningOptions = [
     ('sparse', 'Monolithic Sparse or Thin'),
@@ -781,79 +777,58 @@ class VMwareClient(baseDriver.BaseDriver):
             testName = startName + '-%d' %x
         return testName
 
-    def _deployOvf(self, job, vmName, uuid, archive, dataCenter,
+    def _deployOvf(self, job, vmName, uuid, stream, dataCenter,
                      dataStore, host, resourcePool, network, diskProvisioning,
                      vmFolder=None,
                      asTemplate = False):
-        # Grab ovf file
-        ovfFiles = list(archive.iterFileWithExtensions(['.ovf']))
-        if not ovfFiles:
+        ovfFileName = None
+        ovfContents = None
+        found = 0
+        stream = self.streamProgressWrapper(job, stream, "Importing OVF")
+        archive = TarStreamExtractor(stream)
+        for name, contents in archive.getSmallFiles().iteritems():
+            if name.endswith('.ovf'):
+                ovfFileName = name
+                ovfContents = contents
+                found += 1
+        if not found:
             raise RuntimeError("No ovf file found")
-        if len(ovfFiles) != 1:
+        if found != 1:
             raise RuntimeError("More than one .ovf file found")
-        ovfFileMember = ovfFiles[0]
-        ovfFileObj = archive.extractfile(ovfFileMember)
-        archive.baseDir = os.path.dirname(ovfFileMember.name)
+        idx = ovfFileName.rfind('/')
+        if idx == -1:
+            prefix = ''
+        else:
+            prefix = ovfFileName[:idx+1]
+        baseDir = os.path.dirname(ovfFileName)
 
         if vmFolder is None:
             vmFolder = dataCenter.properties['vmFolder']
         self._msg(job, 'Importing OVF descriptor')
 
-        from ZSI import FaultException
-        msg =  'The object has already been deleted or has not been completely created'
-        for i in range(5):
-            try:
-                return self._uploadOvf_1(job, ovfFileObj, archive, vmName,
-                    vmFolder, resourcePool, dataStore, network, diskProvisioning)
-            except FaultException, e:
-                if e.fault.string != msg:
-                    raise
-                self._msg(job, 'Import failed, retrying...')
-        else: # for
-            # We failed repeatedly. Give up.
-            raise
-
-    def _uploadOvf_1(self, job, ovfFileObj, archive, vmName, vmFolder,
-                     resourcePool, dataStore, network, diskProvisioning):
-        fileItems, httpNfcLease = self.client.ovfImportStart(ovfFileObj,
-            vmName = vmName, vmFolder = vmFolder, resourcePool = resourcePool,
-            dataStore = dataStore, network = network,
-            diskProvisioning = diskProvisioning)
+        fileItems, httpNfcLease = self.client.ovfImportStart(
+                ovfContents=ovfContents,
+                vmName=vmName,
+                vmFolder=vmFolder,
+                resourcePool=resourcePool,
+                dataStore=dataStore,
+                network=network,
+                diskProvisioning=diskProvisioning,
+                )
         self.client.waitForLeaseReady(httpNfcLease)
 
-        callback = lambda x: self._msg(job, "Importing OVF: %d%% complete" % x)
-        progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
-            callback=callback)
+        # Also send progress info to vmware
+        percenter = stream.callback
+        percenter.callback = self.LeaseProgressUpdate(
+                httpNfcLease, percenter.callback)
 
-        vmMor = self.client.ovfUpload(httpNfcLease, archive, fileItems,
-            progressUpdate)
+        vmMor = self.client.ovfUpload(httpNfcLease, archive, prefix, fileItems)
         return vmMor
-
-    def _deployByVmx(self, job, vmName, uuid, archive, dataCenter,
-                     dataStoreName, host, resourcePool, network,
-                     asTemplate = False):
-        dataCenterName = dataCenter.properties['name']
-        from catalogService.libs import viclient
-        vmx = viclient.vmutils.uploadVMFiles(self.client,
-                                             archive,
-                                             vmName,
-                                             dataCenter=dataCenterName,
-                                             dataStore=dataStoreName)
-        try:
-            self._msg(job, 'Registering VM')
-            vm = self.client.registerVM(dataCenter.properties['vmFolder'], vmx,
-                                        vmName, asTemplate=False,
-                                        host=host, pool=resourcePool)
-            return vm
-        except viclient.Error, e:
-            self.log_exception("Exception registering VM: %s", e)
-            raise RuntimeError('An error occurred when registering the '
-                               'VM: %s' %str(e))
 
     def getImageIdFromTargetImageRef(self, vmRef):
         return self._getVmUuid(vmRef)
 
-    def _deployImageFromFile(self, job, image, filePath, dataCenter,
+    def _deployImageFromStream(self, job, image, stream, dataCenter,
                              dataStore, computeResource, resourcePool, vmName,
                              uuid, network, diskProvisioning,
                              vmFolder=None, asTemplate=False):
@@ -888,52 +863,35 @@ class VMwareClient(baseDriver.BaseDriver):
         # FIXME: make sure that there isn't something in the way on
         # the data store
 
-        fileExtensions = [ '.ovf', '.vmx' ]
-        try:
-            archive = self.Archive(filePath, logger)
-            archive.extract()
-            vmFiles = list(archive.iterFileWithExtensions(fileExtensions))
-            if not vmFiles:
-                raise RuntimeError("No file(s) found: %s" %
-                    ', '.join("*%s" % x for x in fileExtensions))
-            self._msg(job, 'Uploading image to VMware')
-            if self.client.vmwareVersion >= (4, 0, 0):
-                vmMor = self._deployOvf(job, vmName, uuid,
-                    archive, dc, dataStore=ds,
-                    host = host, resourcePool=rp, network = network,
-                    diskProvisioning = diskProvisioning,
-                    vmFolder=vmFolderMor,
-                    asTemplate = asTemplate)
-            else:
-                vmMor = self._deployByVmx(job, vmName, uuid,
-                    archive, dc, dataStoreName=dsName,
-                    host = host, resourcePool=rp, network = network,
-                    asTemplate = asTemplate)
+        vmMor = self._deployOvf(job, vmName, uuid,
+            stream, dc, dataStore=ds,
+            host = host, resourcePool=rp, network = network,
+            diskProvisioning = diskProvisioning,
+            vmFolder=vmFolderMor,
+            asTemplate = asTemplate)
 
-            nwobj = self.client.getMoRefProp(vmMor, 'network')
-            reconfigVmParams = dict()
-            if not nwobj.get_element_ManagedObjectReference():
-                # add NIC
-                nicSpec = self.client.createNicConfigSpec(network)
-                deviceChange = [ nicSpec ]
-                reconfigVmParams['deviceChange'] = deviceChange
+        nwobj = self.client.getMoRefProp(vmMor, 'network')
+        reconfigVmParams = dict()
+        if not nwobj.get_element_ManagedObjectReference():
+            # add NIC
+            nicSpec = self.client.createNicConfigSpec(network)
+            deviceChange = [ nicSpec ]
+            reconfigVmParams['deviceChange'] = deviceChange
 
-            if asTemplate:
-                # Reconfiguring the uuid is unreliable, we're using the
-                # annotation field for now
-                reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
+        if asTemplate:
+            # Reconfiguring the uuid is unreliable, we're using the
+            # annotation field for now
+            reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
 
-            if reconfigVmParams:
-                self._msg(job, 'Reconfiguring VM')
-                self.client.reconfigVM(vmMor, reconfigVmParams)
+        if reconfigVmParams:
+            self._msg(job, 'Reconfiguring VM')
+            self.client.reconfigVM(vmMor, reconfigVmParams)
 
-            if asTemplate:
-                self._msg(job, 'Converting VM to template')
-                self.client.markAsTemplate(vm=vmMor)
-            image.setShortName(vmName)
-            return vmMor
-        finally:
-            pass
+        if asTemplate:
+            self._msg(job, 'Converting VM to template')
+            self.client.markAsTemplate(vm=vmMor)
+        image.setShortName(vmName)
+        return vmMor
 
     def _getVmUuid(self, vmMor):
         # Grab the real uuid
@@ -988,13 +946,13 @@ class VMwareClient(baseDriver.BaseDriver):
             self._msg(job, message % progress)
         return callback
 
-    class ProgressUpdate(baseDriver.BaseDriver.IntervalCallback):
-        INTERVAL = 5
-
-    def LeaseProgressUpdate(self, lease, callback):
+    def LeaseProgressUpdate(self, lease, origCallback):
+        """
+        Returns a progress callback that sends a percentage completion to
+        vmware before invoking the original callback
+        """
         from catalogService.libs.viclient import client
-        progress = client.LeaseProgressUpdate(self.client, lease, callback)
-        return self.ProgressUpdate(totalSize=0, callback=progress.progress)
+        return client.LeaseProgressUpdate(self.client, lease, origCallback)
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
@@ -1074,8 +1032,7 @@ class VMwareClient(baseDriver.BaseDriver):
         from catalogService.libs import viclient
         try:
             self._msg(job, 'Uploading initial configuration')
-            fileobj = baseDriver.Archive.CommandArchive.File(
-                os.path.basename(filename), os.path.dirname(filename))
+            fileobj = open(filename)
             viclient.vmutils._uploadVMFiles(self.client, [ fileobj ], vmName,
                 dataCenter = dataCenter, dataStore = dataStore)
         finally:

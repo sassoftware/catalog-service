@@ -26,15 +26,11 @@ import urllib2
 import weakref
 import gzip
 
-from lxml import etree
-
 from conary.lib import magic, util, sha1helper
-from conary.lib import digestlib
-from restlib import client as rl_client
 
 from catalogService import errors
 from catalogService import instanceStore
-from catalogService import nodeFactory
+from catalogService import nodeFactory as nodeFactoryMod
 from catalogService import jobs
 from catalogService import storage
 from catalogService.rest.models import clouds
@@ -48,6 +44,7 @@ from catalogService.rest.models import keypairs
 from catalogService.rest.models import securityGroups
 from catalogService.utils import timeutils
 from catalogService.utils import x509
+from catalogService.utils.progress import StreamWithProgress, PercentageCallback
 
 from mint.mint_error import TargetExists, TargetMissing
 
@@ -224,7 +221,7 @@ class BaseDriver(object):
         return drv
 
     def _createNodeFactory(self):
-        factory = nodeFactory.NodeFactory(
+        factory = nodeFactoryMod.NodeFactory(
             cloudName = self.cloudName,
             cloudType = self.cloudType,
             cloudConfigurationDescriptorFactory = self.CloudConfigurationDescriptor,
@@ -1076,16 +1073,25 @@ class BaseDriver(object):
         # deployImageProcess in sublcasses calls _deployImage in the
         # base class, which calls _deployImageFromFile from the subclass
         # again.
+        stream = self.openImage(image, auth=auth)
+        vmRef = self._deployImageFromStream(job, image, stream, *args, **kwargs)
+        targetImageId = self.getImageIdFromTargetImageRef(vmRef)
+        image.setId(targetImageId)
+        image.setImageId(targetImageId)
+        image.setInternalTargetId(targetImageId)
+        self.linkTargetImageToImage(image)
+        return vmRef
+
+    def _deployImageFromStream(self, job, image, stream, *args, **kwargs):
+        # By default, save image to file then deploy from the file. Subclasses
+        # might be able to use the stream more efficiently.
+        stream = self.streamProgressWrapper(job, stream)
         tmpDir = tempfile.mkdtemp(prefix="%s-download-" % self.cloudType)
-        path = self.downloadImage(job, image, tmpDir, auth=auth)
         try:
-            vmRef = self._deployImageFromFile(job, image, path, *args, **kwargs)
-            targetImageId = self.getImageIdFromTargetImageRef(vmRef)
-            image.setId(targetImageId)
-            image.setImageId(targetImageId)
-            image.setInternalTargetId(targetImageId)
-            self.linkTargetImageToImage(image)
-            return vmRef
+            imageId = os.path.basename(image.getId())
+            extension = '.tgz'
+            path = os.path.join(tmpDir, '%s%s' % (imageId, extension))
+            return self._deployImageFromFile(job, image, path, *args, **kwargs)
         finally:
             # clean up our mess
             util.rmtree(tmpDir, ignore_errors=True)
@@ -1093,21 +1099,6 @@ class BaseDriver(object):
     def getImageIdFromTargetImageRef(self, vmRef):
         # Default implementation is fairly dumb
         return vmRef
-
-    def extractImage(self, path):
-        if path.endswith('.zip'):
-            workdir = path[:-4]
-            util.mkdirChain(workdir)
-            cmd = 'unzip -d %s %s' % (workdir, path)
-        elif path.endswith('.tgz'):
-            workdir = path[:-4]
-            util.mkdirChain(workdir)
-            cmd = 'tar zxSf %s -C %s' % (path, workdir)
-        else:
-            raise errors.CatalogError('unsupported rBuilder image archive format')
-        p = subprocess.Popen(cmd, shell = True, stderr = file(os.devnull, 'w'))
-        p.wait()
-        return workdir
 
     @classmethod
     def findFile(cls, topdir, extensions):
@@ -1118,36 +1109,31 @@ class BaseDriver(object):
                         return dirPath, fileName
         return None, None
 
-    @classmethod
-    def downloadFile(cls, url, destFile, headers = None):
-        """Download the contents of the url into a file"""
+    def openUrl(self, url, headers):
         req = urllib2.Request(url, headers = headers or {})
         resp = urllib2.urlopen(req)
         if resp.headers['Content-Type'].startswith("text/html"):
             # We should not get HTML content out of rbuilder - most likely
             # a private project to which we don't have access
             raise errors.DownloadError("Unable to download file")
-        util.copyfileobj(resp, file(destFile, 'w'))
-
+        return resp
 
     def downloadImage(self, job, image, tmpDir, auth=None, extension='.tgz'):
-        self._msg(job, 'Downloading image')
-        try:
-            path = self._downloadImage(image, tmpDir, auth=auth,
-                extension=extension)
-        except errors.CatalogError, e:
-            util.rmtree(tmpDir, ignore_errors=True)
-            raise
-        return path
-
-    def _downloadImage(self, image, tmpDir, auth=None, extension=None):
-        imageId = image.getImageId()
-
-        downloadUrl = image.getDownloadUrl()
-        downloadUrl = self._remapDownloadUrl(downloadUrl)
         imageId = os.path.basename(image.getId())
         downloadFilePath = os.path.join(tmpDir, '%s%s' % (imageId, extension))
+        try:
+            inf = self.openImage(image, auth)
+            inf = self.streamProgressWrapper(job, inf)
+            with open(downloadFilePath, 'wb') as outf:
+                util.copyfileobj(inf, outf)
+        except Exception:
+            util.rmtree(tmpDir, ignore_errors=True)
+            raise
+        return downloadFilePath
 
+    def openImage(self, image, auth=None):
+        downloadUrl = image.getDownloadUrl()
+        downloadUrl = self._remapDownloadUrl(downloadUrl)
         headers = {}
         if image.getIsPrivate_rBuilder() and auth:
             # We need to acquire a pysid cookie
@@ -1158,8 +1144,14 @@ class BaseDriver(object):
             if pysid is not None:
                 headers['Cookie'] = pysid
             # If we could not fetch the pysid, we'll still try to download
-        self.downloadFile(downloadUrl, downloadFilePath, headers = headers)
-        return downloadFilePath
+        return self.openUrl(downloadUrl, headers)
+
+    def streamProgressWrapper(self, job, resp, message='Downloading image'):
+        size = long(resp.headers['content-length'])
+        def callback(percent):
+            self._msg(job, "%s: %d%%" % (message, percent))
+        callback = PercentageCallback(size, callback)
+        return StreamWithProgress(resp, callback)
 
     def _remapDownloadUrl(self, downloadUrl):
         if not os.path.exists(self.ImageDownloadUrlMapFile):
