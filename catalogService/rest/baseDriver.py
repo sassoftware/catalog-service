@@ -1146,12 +1146,17 @@ class BaseDriver(object):
             # If we could not fetch the pysid, we'll still try to download
         return self.openUrl(downloadUrl, headers)
 
-    def streamProgressWrapper(self, job, resp, message='Downloading image'):
-        size = long(resp.headers['content-length'])
+    def streamProgressWrapper(self, job, fobj, message='Downloading image'):
+        if hasattr(fobj, 'headers'):
+            size = long(fobj.headers['content-length'])
+        elif hasattr(fobj, 'fileno'):
+            size = os.fstat(fobj.fileno()).st_size
+        else:
+            raise TypeError("Can't determine size of file object")
         def callback(percent):
             self._msg(job, "%s: %d%%" % (message, percent))
         callback = PercentageCallback(size, callback)
-        return StreamWithProgress(resp, callback)
+        return StreamWithProgress(fobj, callback)
 
     def _remapDownloadUrl(self, downloadUrl):
         if not os.path.exists(self.ImageDownloadUrlMapFile):

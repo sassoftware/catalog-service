@@ -17,14 +17,13 @@
 
 
 import base64
-import gzip
+import logging
 import os
 import re
 import subprocess
 import sys
 import tempfile
 import time
-import urllib2
 from amiconfig import AMIConfig, errors as amierrors
 from boto import ec2 as bec2
 from boto.ec2 import EC2Connection
@@ -33,6 +32,8 @@ from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 from conary.lib import util
 
 from mint import ec2, helperfuncs
+from jobslave.util import logCall
+from jobslave.generators import bootable_image
 
 from catalogService import errors
 from catalogService.rest import baseDriver
@@ -40,6 +41,8 @@ from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import securityGroups
+
+log = logging.getLogger(__name__)
 
 CATALOG_DYN_SECURITY_GROUP = 'dynamic'
 CATALOG_DYN_SECURITY_GROUP_DESC = 'Generated Security Group'
@@ -558,7 +561,7 @@ class EC2Client(baseDriver.BaseDriver):
         # Do a call to force cred validation
         try:
             cli.get_all_regions()
-        except EC2ResponseError, e:
+        except EC2ResponseError:
             return False
         return True
 
@@ -1241,8 +1244,8 @@ conary-proxies=%s
         f.seek(0)
         return f
 
-    def _deployImageFromFile(self, job, image, filePath, extraParams=None):
-        amiId = self._deployImageHelper(job, image, filePath)
+    def _deployImageFromStream(self, job, image, stream, extraParams=None):
+        amiId = self._deployImageHelper(job, image, stream)
         for i in range(60):
             imgs = self.client.get_all_images([amiId])
             if imgs:
@@ -1267,34 +1270,46 @@ conary-proxies=%s
             resource.update(validate=True)
             time.sleep(1)
 
-    def _deployImageHelper(self, job, image, filePath):
+    def _deployImageHelper(self, job, image, stream):
         tconf = self.getTargetConfiguration(forceAdmin=True)
         # Force creation of client
         self._getEC2Connection(tconf)
 
         if image._imageData.get('ebsBacked'):
-            return self._deployImageFromFile_EBS(job, image, filePath)
+            return self._deployImageFromStream_EBS(job, image, stream)
+        else:
+            return self._deployImageFromStream_S3(job, image, stream, tconf)
 
+    def _deployImageFromStream_S3(self, job, image, stream, tconf):
         # RCE-1354: we create the bucket as lowercase, so we need to
         # register the image with the lowercase bucket name too
         bucketName = tconf['s3Bucket'].lower()
-        tmpDir = os.path.dirname(filePath)
-        imageFilePath = self._getFilesystemImage(job, image, filePath)
-        bundlePath = os.path.join(tmpDir, "bundled")
-        util.mkdirChain(bundlePath)
         imagePrefix = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
         architecture = image.getArchitecture() or "x86"
         if architecture == 'x86':
             architecture = 'i386'
-        self._msg(job, "Bundling image")
         aki = self.kernelMap.get(architecture)
-        self._bundleImage(imageFilePath, bundlePath, imagePrefix,
-                architecture, targetConfiguration=tconf, kernelImage=aki)
-        manifestName = self._uploadBundle(job, bundlePath, bucketName, tconf)
+
+        imageFilePath = self._getFilesystemImage(job, image, stream)
+        try:
+            self._msg(job, "Bundling image")
+            bundlePath = tempfile.mkdtemp(prefix='bundle-')
+            try:
+                self._bundleImage(imageFilePath, bundlePath, imagePrefix,
+                        architecture,
+                        targetConfiguration=tconf,
+                        kernelImage=aki,
+                        )
+                manifestName = self._uploadBundle(job, bundlePath, bucketName,
+                        tconf)
+            finally:
+                util.rmtree(bundlePath)
+        finally:
+            os.unlink(imageFilePath)
         emiId = self._registerImage(job, bucketName, manifestName, tconf)
         return emiId
 
-    def _deployImageFromFile_EBS(self, job, image, filePath):
+    def _deployImageFromStream_EBS(self, job, image, stream):
         imageData = image._imageData
         fsSize = imageData.get('attributes.installed_size')
         # Moderate amount of free space necessary, we'll resize at
@@ -1312,16 +1327,17 @@ conary-proxies=%s
         instance = instances[0].instances[0]
 
         devName, internalDev = self._findOpenBlockDevice(instance)
-        self._msg(job, "Creating EBS volume")
-        vol = conn.create_volume(size=volumeSize, zone=instance.placement)
+        vol = self._createVolume(job, size=volumeSize, zone=instance.placement)
         self._msg(job, "Created EBS volume %s" % vol.id)
         try:
             self._msg(job, "Attaching EBS volume")
             vol.attach(instance.id, devName)
 
+            stream = self.streamProgressWrapper(job, stream,
+                    "Writing filesystem image")
             try:
                 self._waitForBlockDevice(job, internalDev)
-                self._writeFilesystemImage(internalDev, filePath)
+                self._writeFilesystemImage(internalDev, stream, compressed='z')
             finally:
                 self._detachVolume(job, vol)
             snapshot = self._createSnapshot(job, vol)
@@ -1352,6 +1368,18 @@ conary-proxies=%s
                 root_device_name=devName, architecture=architecture)
         self._msg(job, "Registered image %s" % amiId)
         return amiId
+
+    def _createVolume(self, job, size, zone):
+        self._msg(job, "Creating EBS volume")
+        vol = self.client.create_volume(size=size, zone=zone)
+        while vol.status == 'creating':
+            time.sleep(self.TIMEOUT_BLOCKDEV)
+            vol.update(validate=True)
+        if vol.status == 'available':
+            return vol
+        else:
+            self.client.delete_volume(vol.id)
+            raise RuntimeError("Failed to create volume")
 
     def _waitForBlockDevice(self, job, internalDev):
         for i in range(120):
@@ -1413,46 +1441,43 @@ conary-proxies=%s
                 return devName, '/dev/xvd%s' % chr(ord('j') + i)
         return None, None
 
-    def _getFilesystemImage(self, job, image, dlpath):
+    def _getFilesystemImage(self, job, image, stream):
+        compressed = 'z'
         imageData = image._imageData
         fsSize = imageData.get('attributes.installed_size')
         if fsSize is None:
             # Hopefully we won't have to do this
-            self._msg(job, "Computing filesystem image size")
-            gf = gzip.open(dlpath)
-            fsSize = 0
+            stream = self.streamProgressWrapper(job, stream,
+                    "Computing filesystem image size")
+            imageFile = tempfile.TemporaryFile()
             blockSize = 1024 * 1024
-            while 1:
-                gf.seek(blockSize, 1)
-                pos = gf.tell()
-                if fsSize == pos:
-                    break
-                fsSize = pos
-            gf.close()
-        imageFilePath = os.path.join(os.path.dirname(dlpath),
-            "%s.ext3" % image.getBaseFileName())
+            fsSize = util.copyfileobj(util.GzipFile(fileobj=stream), imageFile)
+            fsSize = (fsSize + blockSize - 1) / blockSize * blockSize
+            imageFile.seek(0)
+            stream = imageFile
+            compressed = ''
 
         freeSpace = image._imageData.get('freespace', 256) * 1024 * 1024
-
         totalSize = self._extFilesystemSize(fsSize + freeSpace)
-        # ext3 hides 5% of the space for root's own usage. To avoid
-        # having people come screaming they didn't get all their free
-        # space, let's pad things a bit.
-        totalSize = int((fsSize + freeSpace) * 1.09)
-
         # Round filesystem size to a multiple of FS_BLK_SIZE
         FS_BLK_SIZE = 4096
-
         padding = self._computePadding(totalSize, FS_BLK_SIZE)
-        imageF = file(imageFilePath, "w")
+
+        imageF = tempfile.NamedTemporaryFile(prefix=image.getBaseFileName(),
+                suffix='.ext4', delete=False)
         imageF.seek(totalSize + padding - 1)
         imageF.write('\0')
         imageF.close()
 
-        self._msg(job, "Creating filesystem image")
-        self._writeFilesystemImage(imageFilePath, dlpath)
+        stream = self.streamProgressWrapper(job, stream,
+                "Creating filesystem image")
+        try:
+            self._writeFilesystemImage(imageF.name, stream, compressed)
+        except:
+            os.unlink(imageF.name)
+            raise
 
-        return imageFilePath
+        return imageF.name
 
     @classmethod
     def _extFilesystemSize(cls, fsSize):
@@ -1469,30 +1494,39 @@ conary-proxies=%s
         padding = blockSize - (( actualSize + blockSize - 1) % blockSize) - 1
         return padding
 
-    def _writeFilesystemImage(self, fsImage, tarFile):
-        from jobslave.generators import bootable_image
+    def _writeFilesystemImage(self, fsImage, stream, compressed=''):
         fs = bootable_image.Filesystem(fsImage, fsType='ext4', size=0,
                 fsLabel='root')
         fs.format()
-        mountPoint = os.path.join(os.path.dirname(fsImage), "mounted")
-        util.mkdirChain(mountPoint)
+        mountPoint = tempfile.mkdtemp(prefix='mount-')
         fs.mount(mountPoint)
-        cmd = [ 'tar', 'zxf', tarFile, '--directory', mountPoint, '--sparse', ]
-        p = subprocess.Popen(cmd)
-        p.wait()
+        try:
+            cmd = [ 'tar', '-x' + compressed,
+                    '--directory', mountPoint,
+                    '--sparse',
+                    ]
+            p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+            util.copyfileobj(stream, p.stdin)
+            p.stdin.close()
+            if p.wait():
+                raise RuntimeError("tar exited with status %s" % p.returncode)
 
-        self._fixGrub(mountPoint)
-        grubConfF = file(os.path.join(mountPoint, 'etc', 'grub.conf'), "r+")
-        grubData = grubConfF.read()
-        grubData = grubData.replace('(hd0,0)', '(hd0)')
-        grubData = grubData.replace('timeout=5', 'timeout=1')
-        grubConfF.seek(0)
-        grubConfF.truncate()
-        grubConfF.write(grubData)
-        grubConfF.close()
+            self._fixGrub(mountPoint)
+            grubConfF = file(os.path.join(mountPoint, 'etc', 'grub.conf'), "r+")
+            grubData = grubConfF.read()
+            grubData = grubData.replace('(hd0,0)', '(hd0)')
+            grubData = grubData.replace('timeout=5', 'timeout=1')
+            grubConfF.seek(0)
+            grubConfF.truncate()
+            grubConfF.write(grubData)
+            grubConfF.close()
 
-        fs.umount()
-        util.rmtree(mountPoint)
+        finally:
+            try:
+                fs.umount()
+                os.rmdir(mountPoint)
+            except Exception:
+                log.exception("Error in unmount:")
 
     def _fixGrub(self, mountPoint):
         confFiles = [ 'grub.conf', 'menu.lst' ]
@@ -1535,8 +1569,7 @@ conary-proxies=%s
             cmd.extend(['--ramdisk', ramdiskImage])
         if cloudX509CertFile:
             cmd.extend(['--ec2cert', cloudX509CertFile.name])
-        p = subprocess.Popen(cmd)
-        p.wait()
+        logCall(cmd)
 
     @classmethod
     def _bundleItem(cls, bundlePath, fileName):

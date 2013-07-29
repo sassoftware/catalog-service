@@ -55,7 +55,8 @@ class StreamWithProgress(object):
         self.fobj = fobj
         self.callback = callback
         self.count = 0
-        self.when = 0
+        self.when = time.time()
+        callback(0)
 
     _DEFAULT = object()
     def read(self, size=_DEFAULT):
