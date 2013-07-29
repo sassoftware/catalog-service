@@ -626,70 +626,6 @@ class BaseDriver(object):
                                               value = 128))
         return descr
 
-    def captureSystem(self, job, instanceId, params):
-        if not hasattr(self, 'drvCaptureSystem'):
-            raise NotImplemented()
-        instance = self.getInstance(instanceId)
-        archive = self.drvCaptureSystem(job, instance, params)
-        self.uploadCapturedImage(job, instance, params, archive)
-        self._msg(job, "Finished")
-
-    def _getCaptureTmpName(self, vmName):
-        from random import Random
-        r = Random().randrange(10000, 99999)
-        return "%s capture %s" % (vmName, r)
-
-    class IntervalCallback(object):
-        INTERVAL = 2
-        def __init__(self, totalSize, callback):
-            self.totalSize = totalSize
-            self.last = 0
-            self.callback = callback
-            self.prevFilesSize = 0
-
-        def progress(self, bytes, rate=0):
-            now = time.time()
-            if (self.last + self.INTERVAL > now and
-                    self.prevFilesSize + bytes < self.totalSize):
-                return
-            self.last = now
-            pct = self._percent(bytes)
-            self.callback(pct)
-
-        def _percent(self, bytes):
-            if self.totalSize == 0:
-                return 100
-            return min(100,
-                int((self.prevFilesSize + bytes) * 100.0 / self.totalSize))
-
-        def updateSize(self, size):
-            self.prevFilesSize += size
-
-        def updateTotalSize(self, size):
-            self.totalSize += size
-
-    class DummyWriter(object):
-        @classmethod
-        def write(cls, *args):
-            pass
-
-    class XML(object):
-        _etree = etree
-
-        @classmethod
-        def Text(cls, tagName, text):
-            txt = cls._etree.Element(tagName)
-            txt.text = text
-            return txt
-        @classmethod
-        def Element(cls, tagName, *children, **attributes):
-            node = cls._etree.Element(tagName, attrib=attributes)
-            node.extend(children)
-            return node
-        @classmethod
-        def toString(cls, elt, encoding=None, prettyPrint=True):
-            return cls._etree.tostring(elt, encoding=encoding, pretty_print=prettyPrint)
-
     class ImageData(object):
         __slots__ = []
         def __init__(self, **kwargs):
@@ -702,55 +638,6 @@ class BaseDriver(object):
         else:
             imageDataDict = extraArgs.get('imageData', {})
         return self.ImageData(**imageDataDict)
-
-    def uploadCapturedImage(self, job, instance, params, archive):
-        imageUploadUrl = params.pop('imageUploadUrl')
-        imageFilesCommitUrl = params.pop('imageFilesCommitUrl')
-        outputToken = params.pop('outputToken')
-        imageTitle = params.pop('imageTitle')
-        imageName = params.pop('imageName')
-        headers = { 'X-rBuilder-OutputToken' : outputToken }
-
-        self._msg(job, "Computing SHA1 digest")
-        # Grab file size
-        archive.seek(0, 2)
-        contentLength = archive.tell()
-        archive.seek(0)
-        ctx = digestlib.sha1()
-
-        cb = self.IntervalCallback(contentLength, callback=lambda x:
-            self._msg(job, "SHA1 digest: %d%%" % x))
-        util.copyfileobj(archive, self.DummyWriter, digest=ctx, callback=cb.progress)
-        sha1 = ctx.hexdigest()
-
-        # Grab file size
-        cb = self.IntervalCallback(contentLength,
-            callback=lambda x:
-                self._msg(job, "Uploading captured image: %d%%" % x))
-
-        uploadUrl = "%s/%s" % (imageUploadUrl, imageName)
-        cli = rl_client.Client(uploadUrl, headers)
-        cli.connect()
-        cli.request("PUT", body=archive, headers=headers, callback=cb.progress)
-        # partition splits at the first '_'
-        metadataNodes = [ (x.partition('_'), y) for (x, y) in params.items() ]
-        # we only care about a leading metadata
-        metadataNodes = [ self.XML.Text(x[2], y)
-            for (x, y) in metadataNodes if x[0] == 'metadata' ]
-        root = self.XML.Element("files",
-            self.XML.Element("file",
-                self.XML.Text("title", imageTitle),
-                self.XML.Text("size", str(contentLength)),
-                self.XML.Text("sha1", sha1),
-                self.XML.Text("file_name", imageName),
-            ),
-            self.XML.Element('metadata', *metadataNodes))
-        xml = self.XML.toString(root)
-
-        self._msg(job, "Committing captured image")
-        cli = rl_client.Client(imageFilesCommitUrl, headers)
-        cli.connect()
-        cli.request("PUT", body=xml)
 
     def deployImage(self, xmlString, auth):
         # Grab descriptor
@@ -1584,63 +1471,6 @@ class BaseDriver(object):
         hex = sha1helper.md5ToString(sha1helper.md5String(os.urandom(128)))
         return cls._uuid(hex)
 
-    class ProbeHostError(Exception):
-        pass
-
-    def _buildExportArchive(self, job, destDir, ovfFiles):
-        dest = tempfile.TemporaryFile(prefix="system-capture-%s-" % self.cloudType,
-            suffix=".ova")
-        callback = lambda pct: self._msg(job, "Archiving: %d%%" % pct)
-        callback = self.IntervalCallback(0, callback)
-        t = self.TarWriter(dest, destDir, callback=callback)
-        t.archive(ovfFiles)
-        return dest
-
-class FileWithProgress(file):
-    """
-    A file object that calls a progress callback
-    """
-    def __init__(self, *args, **kwargs):
-        self._readCallback = kwargs.pop('readCallback', None)
-        file.__init__(self, *args, **kwargs)
-        if self._readCallback:
-            self._readCallback.updateTotalSize(os.fstat(self.fileno()).st_size)
-
-    def read(self, size=None):
-        data = file.read(self, size)
-        if self._readCallback:
-            self._readCallback.progress(self.tell())
-        return data
-
-class TarWriter(object):
-    def __init__(self, destFile, baseDir, callback):
-        self.baseDir = baseDir
-        if isinstance(destFile, basestring):
-            self.tarfile = tarfile.TarFile(destFile, mode="w")
-        else:
-            self.tarfile = tarfile.TarFile(fileobj=destFile, mode="w")
-        self.callback = callback
-
-    def setIncrementSize(self, incrementSize):
-        self.callback.INCREMENT = incrementSize
-
-    def archive(self, fileNames):
-        tfiles = []
-        for fname in fileNames:
-            fullPath = os.path.join(self.baseDir, fname)
-            fwp = FileWithProgress(fullPath, readCallback=self.callback)
-            tfiles.append((self.tarfile.gettarinfo(arcname=fname, fileobj=fwp),
-                fwp))
-
-        for ti, fwp in tfiles:
-            self.tarfile.addfile(ti, fileobj=fwp)
-            self.callback.updateSize(ti.size)
-        self.close()
-
-    def close(self):
-        if self.tarfile is not None:
-            self.tarfile.close()
-            self.tarfile = None
 
 class CookieClient(object):
     def __init__(self, server, username, password):
@@ -1872,4 +1702,3 @@ class Archive(object):
 
 
 BaseDriver.Archive = Archive
-BaseDriver.TarWriter = TarWriter

@@ -146,70 +146,6 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 </descriptor>
 """
 
-_systemCaptureXmlData = """<?xml version='1.0' encoding='UTF-8'?>
-<descriptor xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.rpath.org/permanent/descriptor-1.0.xsd descriptor-1.0.xsd">
-  <metadata>
-    <displayName>VMware System Capture</displayName>
-    <descriptions>
-      <desc>Capturing a System's Image</desc>
-    </descriptions>
-  </metadata>
-  <dataFields>
-    <field>
-      <name>instanceId</name>
-      <descriptions>
-        <desc>System ID</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Field must contain between 1 and 36 characters</desc>
-        </descriptions>
-        <length>36</length>
-      </constraints>
-      <required>true</required>
-      <hidden>true</hidden>
-    </field>
-    <field>
-      <name>imageTitle</name>
-      <descriptions>
-        <desc>Image Title</desc>
-      </descriptions>
-      <type>str</type>
-      <constraints>
-        <descriptions>
-          <desc>Field must be between 1 and 64 characters</desc>
-        </descriptions>
-        <length>64</length>
-      </constraints>
-      <required>true</required>
-    </field>
-    <field>
-      <name>architecture</name>
-      <descriptions>
-        <desc>Architecture</desc>
-      </descriptions>
-      <help lang="en_US" href="@Help_import_image_arch@"/>
-      <enumeratedType>
-        <describedValue>
-          <descriptions>
-            <desc>x86</desc>
-          </descriptions>
-          <key>x86</key>
-        </describedValue>
-        <describedValue>
-          <descriptions>
-            <desc>x86_64</desc>
-          </descriptions>
-          <key>x86_64</key>
-        </describedValue>
-      </enumeratedType>
-      <required>true</required>
-    </field>
-  </dataFields>
-</descriptor>
-"""
-
 
 class VMwareImage(images.BaseImage):
     'VMware Image'
@@ -238,7 +174,6 @@ class VMwareClient(baseDriver.BaseDriver):
 
     configurationDescriptorXmlData = _configurationDescriptorXmlData
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
-    systemCaptureXmlData = _systemCaptureXmlData
     # transport is mocked out during testing to simulate talking to
     # an actual server
     VimServiceTransport = None
@@ -739,41 +674,6 @@ class VMwareClient(baseDriver.BaseDriver):
                                                    'guest.ipAddress' ],
                                                    root = root)
         return instMap
-
-    def drvCaptureSystem(self, job, instance, params):
-        vmMor = instance._opaqueId
-        vmName = instance.getInstanceName()
-        tmpVmName = self._getCaptureTmpName(vmName)
-        # Optional params
-        dcMor = params.get('datacenterMor')
-        resourcePoolMor = params.get('resourcePoolMor')
-        dataStoreMor = params.get('dataStoreMor')
-        folderMor = params.get('folderMor')
-        callback = self.taskCallbackFactory(job, "Cloning: %d%%")
-        cloneMor = self.client.cloneVM(mor=vmMor, name=tmpVmName,
-            dc=dcMor, rp=resourcePoolMor, ds=dataStoreMor, callback=callback)
-
-        destDir = tempfile.mkdtemp(prefix="system-capture-%s" % self.cloudType)
-        try:
-            callback = lambda x: self._msg(job, "Exporting OVF: %d%% complete" % x)
-            self._msg(job, "Exporting VM %s" % tmpVmName)
-
-            # It's unfortunate that we need to create the lease outside
-            # of ovfExport; the interval callback needs it
-            # beforehand
-            httpNfcLease = self.client.getOvfExportLease(cloneMor)
-            progressUpdate = self.LeaseProgressUpdate(httpNfcLease,
-                callback=callback)
-
-            ovfFiles = self.client.ovfExport(cloneMor, vmName, destDir,
-                httpNfcLease, progressUpdate)
-            archive = self._buildExportArchive(job, destDir, ovfFiles)
-            return archive
-        finally:
-            self._msg(job, "Destroying VM %s" % tmpVmName)
-            callback = self.taskCallbackFactory(job, "Destroying VM: %d%%")
-            self.client.destroyVM(cloneMor, callback=callback)
-            util.rmtree(destDir, ignore_errors=True)
 
     @classmethod
     def getImageIdFromMintImage(cls, image, targetImageIds):

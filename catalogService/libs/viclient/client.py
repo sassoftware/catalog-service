@@ -1082,57 +1082,6 @@ class VimService(object):
         if ret != 'success':
             raise RuntimeError("Unable to destroy virtual machine: %s" % ret)
 
-    def ovfExport(self, vmMor, vmName, destinationPath, httpNfcLease, progressUpdate):
-        self.waitForLeaseReady(httpNfcLease)
-        try:
-            ovfFiles = self._ovfExport(httpNfcLease, destinationPath,
-                progressUpdate)
-        finally:
-            self.leaseComplete(httpNfcLease)
-
-        descr = self.createOvfDescriptor(vmMor, vmName, vmName, ovfFiles)
-        # Write OVF descriptor to disk
-        xmlData = descr.get_element_ovfDescriptor()
-        ovfFilePath = os.path.join(destinationPath, "instance.ovf")
-        file(ovfFilePath, "w").write(xmlData)
-
-        ovfFileNames = [ os.path.basename(ovfFilePath) ]
-        ovfFileNames.extend(x.get_element_path() for x in ovfFiles)
-        return ovfFileNames
-
-    def _ovfExport(self, httpNfcLease, destinationPath, progressUpdate):
-        httpNfcLeaseInfo = self.getMoRefProp(httpNfcLease, 'info')
-        totalSize = (int(httpNfcLeaseInfo.get_element_totalDiskCapacityInKB()) + 1) * 1024
-        ovfFiles = []
-
-        progressUpdate.totalSize = totalSize
-        progressUpdate.progress(0, 0)
-
-        for deviceUrl in httpNfcLeaseInfo.get_element_deviceUrl():
-            url = deviceUrl.get_element_url()
-            if url.startswith("https://*/"):
-                url = self.baseUrl + url[10:]
-
-            fileName = os.path.basename(url)
-            destFile = os.path.join(destinationPath, fileName)
-
-            # If there are any exceptions, let them pass, we'll close
-            # the lease regardless
-            vmutils._getFile(destFile, url, callback = progressUpdate)
-
-            fileSize = os.stat(destFile).st_size
-
-            ovfFile = ns0.OvfFile_Def('').pyclass()
-            ovfFile.set_element_deviceId(deviceUrl.get_element_key())
-            ovfFile.set_element_size(fileSize)
-            ovfFile.set_element_path(fileName)
-            ovfFiles.append(ovfFile)
-
-            progressUpdate.updateSize(fileSize)
-
-        progressUpdate.progress(100, 0)
-        return ovfFiles
-
     def createOvfDescriptor(self, vmMor, name, description, ovfFiles):
         req = CreateDescriptorRequestMsg()
         req.set_element__this(self.getOvfManager())
@@ -1278,13 +1227,6 @@ class VimService(object):
         req.set_element_folder(vmFolder)
 
         resp = self._service.ImportVApp(req)
-        httpNfcLease = resp.get_element_returnval()
-        return httpNfcLease
-
-    def getOvfExportLease(self, vmMor):
-        req = ExportVmRequestMsg()
-        req.set_element__this(vmMor)
-        resp = self._service.ExportVm(req)
         httpNfcLease = resp.get_element_returnval()
         return httpNfcLease
 

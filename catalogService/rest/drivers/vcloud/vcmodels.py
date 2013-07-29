@@ -258,11 +258,6 @@ class InstantiateVAppTemplateParams(_BaseNode):
         InstantiationParams=InstantiationParams,
         linkedClone=bool, IsSourceDelete=bool, Source=Source)
 
-class CaptureVAppParams(ParamsType):
-    tag = 'CaptureVAppParams'
-    __slots__, _slotAttributes, _slotTypeMap = _BaseNode._inherit(ParamsType,
-        elements=[Source])
-
 class Children(_BaseNode):
     tag = 'Children'
     __slots__ = ['VApp', 'Vm', ]
