@@ -26,6 +26,8 @@ from testrunner.output import SkipTestException
 import base64
 import os
 import pickle
+import StringIO
+import tempfile
 
 from conary.lib import util
 
@@ -732,41 +734,29 @@ proxy_pass = pass
     class InstancesHandler(instances.Handler):
         instanceClass = dec2.driver.Instance
 
-    def _mockFunctions(self, daemonizeFunc, downloadFileFunc = None,
-            getFilesystemImageFunc=None):
-        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', daemonizeFunc)
+    def _mockFunctions(self):
+        def fakeDaemonize(slf, *args, **kwargs):
+            slf.postFork()
+            return slf.function(*args, **kwargs)
+        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', fakeDaemonize)
 
-        if downloadFileFunc:
-            fakeDownloadFile = downloadFileFunc
-        else:
-            def fakeDownloadFile(slf, url, destFile, headers = None):
-                file(destFile, "w").write(url)
+        def fakeOpenUrl(slf, url, headers):
+            return StringIO.StringIO(url)
+        self.mock(dec2.driver, "openUrl", fakeOpenUrl)
 
-        self.mock(dec2.driver, "downloadFile", fakeDownloadFile)
-
-        if getFilesystemImageFunc is None:
-            def getFilesystemImageFunc(slf, job, image, dlpath):
-                npath = dlpath + '-image'
-                f = file(npath, "w")
-                f.seek(1024 * 1024 - 1)
-                f.write('\0')
-                f.close()
-                return npath
-
+        def getFilesystemImageFunc(slf, job, image, stream):
+            f = tempfile.NamedTemporaryFile(delete=False)
+            f.seek(1024 * 1024 - 1)
+            f.write('\0')
+            f.close()
+            return f.name
         self.mock(dec2.driver, '_getFilesystemImage', getFilesystemImageFunc)
 
-    def _setUpNewImageTest(self, cloudName=None, daemonizeFunc=None,
-            imageName=None, imageId = None, downloadFileFunc = None):
+    def _setUpNewImageTest(self, cloudName=None, imageName=None, imageId=None):
         if cloudName is None:
             cloudName = self.cloudName
-        if daemonizeFunc is None:
-            def fakeDaemonize(slf, *args, **kwargs):
-                slf.postFork()
-                return slf.function(*args, **kwargs)
-            daemonizeFunc = fakeDaemonize
 
-        self._mockFunctions(daemonizeFunc=daemonizeFunc,
-            downloadFileFunc=downloadFileFunc)
+        self._mockFunctions()
         if not imageId:
             imageId = 'aaaaaabbbbbbbbbcccccccccccddddddddeeeeee'
 
@@ -817,7 +807,6 @@ proxy_pass = pass
 
         self.failUnlessEqual([ x.get_content() for x in job.history ], [
             'Running',
-            'Downloading image',
             'Bundling image',
             'Uploading bundle',
             'Registering image',

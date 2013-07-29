@@ -291,22 +291,18 @@ class EC2Test(testbase.TestCase):
             mockedCallsArgs.update(mockedCalls)
         self._fakeMakeRequest(drv, **mockedCallsArgs)
 
-        _downloadUrls = []
-        def fakeDownloadFile(url, destFile, headers = None):
-            file(destFile, "w").write(url)
-            _downloadUrls.append(url)
+        self._downloadUrls = []
+        def fakeOpenUrl(url, headers):
+            self._downloadUrls.append(url)
+            return StringIO.StringIO(url)
+        self.mock(drv, "openUrl", fakeOpenUrl)
 
-        self.mock(drv, "downloadFile", fakeDownloadFile)
-        drv._downloadUrls = _downloadUrls
-
-        def getFilesystemImageFunc(job, image, dlpath):
-            npath = dlpath + '-image'
-            f = file(npath, "w")
+        def getFilesystemImageFunc(job, image, stream):
+            f = tempfile.NamedTemporaryFile(delete=False)
             f.seek(1024 * 1024 - 1)
             f.write('\0')
             f.close()
-            return npath
-
+            return f.name
         self.mock(drv, '_getFilesystemImage', getFilesystemImageFunc)
 
         class FakeGetInstanceId(object):
@@ -333,7 +329,7 @@ class EC2Test(testbase.TestCase):
             return ret[0], devFile.name
         self.mock(drv, '_findOpenBlockDevice', mock_findOpenBlockDevice)
 
-        self.mock(drv, '_writeFilesystemImage', lambda *args: None)
+        self.mock(drv, '_writeFilesystemImage', lambda *args, **kwargs: None)
         drv.TIMEOUT_BLOCKDEV = 0.1
         drv.TIMEOUT_SNAPSHOT = 0.1
         drv.TIMEOUT_VOLUME = 0.1
@@ -360,10 +356,10 @@ class EC2Test(testbase.TestCase):
         ret = drv.deployImageFromUrl(job, img, descriptorDataXml)
         self.assertEquals(ret.id, "ami-decafbad")
         self.failUnlessEqual(job._accumulator, [
-            ('Downloading image',),
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume',),
+            ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached',),
             ('Waiting for volume to be detached',),
@@ -376,7 +372,7 @@ class EC2Test(testbase.TestCase):
         ])
 
         # Make sure URL remap worked
-        self.assertEquals(drv._downloadUrls, ['https://localhost:1234/blah'])
+        self.assertEquals(self._downloadUrls, ['https://localhost:1234/blah'])
 
     def testDeployImageEBS_non_ec2_endpoint(self):
         drv = self._setupMocking()
@@ -432,10 +428,10 @@ class EC2Test(testbase.TestCase):
         ret = drv.launchSystemSynchronously(job, img, descriptorDataXml)
         self.assertEquals(ret, ["i-decafbad0", "i-decafbad1", ])
         self.failUnlessEqual(job._accumulator, [
-            ('Downloading image',),
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume',),
+            ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached',),
             ('Waiting for volume to be detached',),
@@ -452,7 +448,7 @@ class EC2Test(testbase.TestCase):
         ])
 
         # Make sure URL remap worked
-        self.assertEquals(drv._downloadUrls, ['https://localhost:1234/blah'])
+        self.assertEquals(self._downloadUrls, ['https://localhost:1234/blah'])
 
 
     def testTerminateInstance(self):

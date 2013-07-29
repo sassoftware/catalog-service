@@ -24,6 +24,7 @@ testsuite.setup()
 import base64
 import os
 import pickle
+import StringIO
 
 from conary.lib import util
 
@@ -763,12 +764,9 @@ conary-proxies=%s
         uri = self._baseCloudUrl + '/instances'
 
         imageId = '361d7fa1d99431e16a3a438c8d4ebaa79aea075a'
-        def fakeDaemonize(slf, *args, **kwargs):
-            slf.postFork()
-            return slf.function(*args, **kwargs)
 
         srv, client, job, response = self._setUpNewInstanceTest(
-            self.cloudName, fakeDaemonize, '', imageId = imageId)
+            self.cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         imageUrlPath = '%s/images/%s' % (self._baseCloudUrl, imageId)
@@ -816,33 +814,30 @@ Extra kwargs:
         response = client.request('GET')
         self.failUnlessEqual(response.status, 200)
 
-    def _setUpNewInstanceTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, extractImageFunc = None,
-            requestXml = None):
+    def _setUpNewInstanceTest(self, cloudName, imageName, imageId=None,
+            requestXml=None):
         if not imageId:
             imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
         cloudType = self.cloudType
 
-        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', daemonizeFunc)
+        def fakeDaemonize(slf, *args, **kwargs):
+            slf.postFork()
+            return slf.function(*args, **kwargs)
+        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', fakeDaemonize)
 
-        if downloadFileFunc:
-            fakeDownloadFile = downloadFileFunc
-        else:
-            def fakeDownloadFile(slf, url, destFile, headers = None):
-                file(destFile, "w").write(url)
+        def fakeOpenUrl(slf, url, headers):
+            return StringIO.StringIO(url)
+        self.mock(deuca.driver, "openUrl", fakeOpenUrl)
 
         baseFileName = 'some-file-6-1-x86'
-        if extractImageFunc:
-            fakeExtractImage = extractImageFunc
-        else:
-            def fakeExtractImage(slf, path):
-                workdir = path[:-4]
-                workdir = os.path.join(workdir, baseFileName)
-                sdir = os.path.join(workdir, baseFileName)
-                util.mkdirChain(sdir)
-                fileName = os.path.join(sdir, '%s-root.ext3' % baseFileName)
-                file(fileName, "w")
-                return workdir
+        def fakeExtractImage(slf, path):
+            workdir = path[:-4]
+            workdir = os.path.join(workdir, baseFileName)
+            sdir = os.path.join(workdir, baseFileName)
+            util.mkdirChain(sdir)
+            fileName = os.path.join(sdir, '%s-root.ext3' % baseFileName)
+            file(fileName, "w")
+            return workdir
 
         def fakeBundleImage(slf, inputFSImage, bundlePath, *args, **kwargs):
             bfn = os.path.basename(inputFSImage)
@@ -870,7 +865,6 @@ Extra kwargs:
             os.rename(ret, dest)
             return dest
 
-        self.mock(deuca.driver, "downloadFile", fakeDownloadFile)
         self.mock(deuca.driver, "extractImage", fakeExtractImage)
         self.mock(deuca.driver, "getCredentialsIsoFile", fakeGetCredentialsIsoFile)
         srv = self.newService()

@@ -22,6 +22,7 @@ testsuite.setup()
 
 import os
 import re
+import StringIO
 import urllib
 
 from conary.lib import util
@@ -607,10 +608,9 @@ class HandlerTest(testbase.TestCase):
         uri = self._baseCloudUrl + '/images'
 
         imageId = 'sha1ForOvf101111111111111111111111111111'
-        fakeDaemonize = lambda slf, *args, **kwargs: slf.function(*args, **kwargs)
 
         srv, client, job, response = self._setUpNewImageTest(
-            self.cloudName, fakeDaemonize, '', imageId = imageId)
+            self.cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/image-deployment/jobs/1'
         imageUrlPath = '%s/images/%s' % (self._baseCloudUrl, imageId)
@@ -638,7 +638,7 @@ class HandlerTest(testbase.TestCase):
         self.failUnlessEqual([ x.get_content() for x in job.history ],
             [
                 'Running',
-                'Downloading image',
+                'Downloading image: 0%',
                 'Exploding archive',
                 'Uploading image to VMware vCloud',
                 'Creating vApp template',
@@ -654,10 +654,9 @@ class HandlerTest(testbase.TestCase):
         uri = self._baseCloudUrl + '/instances'
 
         imageId = 'sha1ForOvf101111111111111111111111111111'
-        fakeDaemonize = lambda slf, *args, **kwargs: slf.function(*args, **kwargs)
 
         srv, client, job, response = self._setUpNewInstanceTest(
-            self.cloudName, fakeDaemonize, '', imageId = imageId)
+            self.cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         imageUrlPath = '%s/images/%s' % (self._baseCloudUrl, imageId)
@@ -685,7 +684,7 @@ class HandlerTest(testbase.TestCase):
         self.failUnlessEqual([ x.get_content() for x in job.history ],
             [
                 'Launching instance from image sha1ForOvf101111111111111111111111111111 (type VMWARE_ESX_IMAGE)',
-                'Downloading image',
+                'Downloading image: 0%',
                 'Exploding archive',
                 'Uploading image to VMware vCloud',
                 'Creating vApp template',
@@ -710,10 +709,8 @@ class HandlerTest(testbase.TestCase):
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
 
 
-    def _setUpNewImageTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, asOvf = True):
-        self._mockFunctions(daemonizeFunc=daemonizeFunc,
-            downloadFileFunc=downloadFileFunc, asOvf=asOvf)
+    def _setUpNewImageTest(self, cloudName, imageName, imageId=None):
+        self._mockFunctions()
         if not imageId:
             imageId = 'sha1ForOvf101111111111111111111111111111'
         cloudType = dvcloud.driver.cloudType
@@ -729,10 +726,8 @@ class HandlerTest(testbase.TestCase):
         return srv, client, job, response
 
 
-    def _setUpNewInstanceTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, asOvf = True):
-        self._mockFunctions(daemonizeFunc=daemonizeFunc,
-            downloadFileFunc=downloadFileFunc, asOvf=asOvf)
+    def _setUpNewInstanceTest(self, cloudName, imageName, imageId=None):
+        self._mockFunctions()
         if not imageId:
             imageId = 'sha1ForOvf101111111111111111111111111111'
         cloudType = dvcloud.driver.cloudType
@@ -748,14 +743,15 @@ class HandlerTest(testbase.TestCase):
         return srv, client, job, response
 
 
-    def _mockFunctions(self, daemonizeFunc, downloadFileFunc, asOvf=True):
-        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', daemonizeFunc)
+    def _mockFunctions(self):
+        def fakeDaemonize(slf, *args, **kwargs):
+            slf.postFork()
+            return slf.function(*args, **kwargs)
+        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', fakeDaemonize)
 
-        if downloadFileFunc:
-            fakeDownloadFile = downloadFileFunc
-        else:
-            def fakeDownloadFile(slf, url, destFile, headers = None):
-                file(destFile, "w").write(url)
+        def fakeOpenUrl(slf, url, headers):
+            return StringIO.StringIO(url)
+        self.mock(dvcloud.driver, "openUrl", fakeOpenUrl)
 
         class ModifiedArchive(baseDriver.Archive):
             def identify(slf):
@@ -764,18 +760,15 @@ class HandlerTest(testbase.TestCase):
                 slf.archive = slf.CommandArchive(wself, workdir, cmd=[])
                 baseDir = os.path.join(workdir, 'some-file-6-1-x86')
                 util.mkdirChain(baseDir)
-                if asOvf:
-                    fileName = os.path.join(baseDir, 'foo.ovf')
-                    file(fileName, "w").write(mockedData.vmwareOvfDescriptor1)
-                    # Create a vmdk file (zeros only, in our case)
-                    fileName = os.path.join(baseDir, "some-file-6-1-x86.vmdk")
-                    f = file(fileName, "w")
-                    f.seek(10 * 1024 * 1024 - 1)
-                    f.write('\0')
-                    f.close()
-                else:
-                    fileName = os.path.join(baseDir, 'foo.vmx')
-                    file(fileName, "w")
+
+                fileName = os.path.join(baseDir, 'foo.ovf')
+                file(fileName, "w").write(mockedData.vmwareOvfDescriptor1)
+                # Create a vmdk file (zeros only, in our case)
+                fileName = os.path.join(baseDir, "some-file-6-1-x86.vmdk")
+                f = file(fileName, "w")
+                f.seek(10 * 1024 * 1024 - 1)
+                f.write('\0')
+                f.close()
             def extract(slf):
                 slf.log("Exploding archive")
 
@@ -787,7 +780,6 @@ class HandlerTest(testbase.TestCase):
             os.rename(ret, dest)
             return dest
 
-        self.mock(dvcloud.driver, "downloadFile", fakeDownloadFile)
         self.mock(dvcloud.driver, "Archive", ModifiedArchive)
         self.mock(dvcloud.driver, "getCredentialsIsoFile", fakeGetCredentialsIsoFile)
         cont = []

@@ -19,6 +19,7 @@
 
 import os
 import subprocess
+import tempfile
 from boto.s3 import connection as s3connection
 from boto.ec2.regioninfo import RegionInfo
 from conary.lib import util
@@ -377,7 +378,13 @@ class EucalyptusClient(ec2client.EC2Client):
         p.wait()
         return workdir
 
-    def _getFilesystemImage(self, job, image, dlpath):
+    def _getFilesystemImage(self, job, image, stream):
+        dlfile = tempfile.NamedTemporaryFile(prefix=image.getBaseFileName(),
+                delete=False)
+        util.copyfileobj(stream, dlfile)
+        dlfile.close()
+        dlpath = dlfile.name
+
         fileExtensions = [ '.ext3' ]
         self._msg(job, "Uncompressing image")
         workdir = self.extractImage(dlpath)

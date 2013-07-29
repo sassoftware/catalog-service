@@ -24,6 +24,7 @@ from lxml import etree
 import os
 import httplib
 import StringIO
+import tarfile
 
 from conary.lib import util
 
@@ -40,8 +41,10 @@ from catalogService.rest.models import credentials
 from catalogService.rest.models import descriptor
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
+from catalogService.utils.progress import StreamWithProgress
 
 from catalogService_test import mockedData
+
 
 class FakeSocket(StringIO.StringIO):
     def makefile(self, *args):
@@ -135,7 +138,7 @@ class VMwareTest(testbase.TestCase):
         for k, v in mockedData.vmwareSoapData.items():
             if isinstance(v, mockedData.HTTPResponse):
                 v.reset()
-        self.mock(vmware.driver.ProgressUpdate, 'INTERVAL', 0.0001)
+        self.mock(StreamWithProgress, 'interval', 0)
 
     def  _replaceVmwareData(self, dataDict):
         vmwareSoapData = mockedData.vmwareSoapData.copy()
@@ -919,11 +922,10 @@ class VMwareTest(testbase.TestCase):
                 {None: 'Flat 2G Maximum Extent'},
             ])
 
-    def _setUpNewImageTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, asOvf = True,
+    def _setUpNewImageTest(self, cloudName, imageName,
+            imageId = None,
             requestXmlTemplate = None):
-        self._mockFunctions(daemonizeFunc=daemonizeFunc,
-            downloadFileFunc=downloadFileFunc, asOvf=asOvf)
+        self._mockFunctions()
         if not imageId:
             imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
         cloudType = vmware.driver.cloudType
@@ -940,10 +942,9 @@ class VMwareTest(testbase.TestCase):
         job = self.getJobFromResponse(response)
         return srv, client, job, response
 
-    def _setUpNewInstanceTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None, asOvf = True):
-        self._mockFunctions(daemonizeFunc=daemonizeFunc,
-            downloadFileFunc=downloadFileFunc, asOvf=asOvf)
+    def _setUpNewInstanceTest(self, cloudName, imageName,
+            imageId = None):
+        self._mockFunctions()
         if not imageId:
             imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
         cloudType = vmware.driver.cloudType
@@ -958,37 +959,26 @@ class VMwareTest(testbase.TestCase):
         job = self.getJobFromResponse(response)
         return srv, client, job, response
 
-    def _mockFunctions(self, daemonizeFunc, downloadFileFunc = None, asOvf = True):
-        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', daemonizeFunc)
-
-        if downloadFileFunc:
-            fakeDownloadFile = downloadFileFunc
+    _ovacache = {}
+    def _makeOva(self, ovfContents):
+        key = id(ovfContents)
+        if key in self._ovacache:
+            sio = self._ovacache[key]
         else:
-            def fakeDownloadFile(slf, url, destFile, headers = None):
-                file(destFile, "w").write(url)
+            sio = StringIO.StringIO()
+            tf = tarfile.open(fileobj=sio, mode='w')
+            def _addfile(name, contents):
+                ti = tarfile.TarInfo(name)
+                ti.size = len(contents)
+                tf.addfile(ti, fileobj=StringIO.StringIO(contents))
+            _addfile('foo.ovf', ovfContents)
+            _addfile('some-file-6-1-x86.vmdk', '\0' * 102400)
+            tf.close()
+            self._ovacache[key] = sio
+        sio.seek(0)
+        return sio
 
-        class ModifiedArchive(baseDriver.Archive):
-            def identify(slf):
-                workdir = slf.path[:-4]
-                wself = baseDriver.weakref.ref(slf)
-                slf.archive = slf.CommandArchive(wself, workdir, cmd=[])
-                baseDir = os.path.join(workdir, 'some-file-6-1-x86')
-                util.mkdirChain(baseDir)
-                if asOvf:
-                    fileName = os.path.join(baseDir, 'foo.ovf')
-                    file(fileName, "w").write(mockedData.vmwareOvfDescriptor1)
-                    # Create a vmdk file (zeros only, in our case)
-                    fileName = os.path.join(baseDir, "some-file-6-1-x86.vmdk")
-                    f = file(fileName, "w")
-                    f.seek(10 * 1024 * 1024 - 1)
-                    f.write('\0')
-                    f.close()
-                else:
-                    fileName = os.path.join(baseDir, 'foo.vmx')
-                    file(fileName, "w")
-            def extract(slf):
-                slf.log("Exploding archive")
-
+    def _mockFunctions(self):
         oldGetCredentialsIsoFile = vmware.driver.getCredentialsIsoFile
         def fakeGetCredentialsIsoFile(slf):
             ret = oldGetCredentialsIsoFile(slf)
@@ -997,27 +987,47 @@ class VMwareTest(testbase.TestCase):
             os.rename(ret, dest)
             return dest
 
-        self.mock(vmware.driver, "downloadFile", fakeDownloadFile)
-        self.mock(vmware.driver, "Archive", ModifiedArchive)
+        def fakeOpenUrl(slf, url, headers):
+            return self._makeOva(mockedData.vmwareOvfDescriptor1)
+        self.mock(vmware.driver, "openUrl", fakeOpenUrl)
         self.mock(vmware.driver, "getCredentialsIsoFile", fakeGetCredentialsIsoFile)
+        def fakeDaemonize(slf, *args, **kwargs):
+            slf.postFork()
+            return slf.function(*args, **kwargs)
+        self.mock(baseDriver.CatalogJobRunner, 'backgroundRun', fakeDaemonize)
         cont = []
         def fakeGenerateString(slf, keyLength):
             ret = "00000000-0000-0000-%04d-000000000000" % len(cont)
             cont.append(ret)
             return ret
-
         self.mock(vmware.driver.instanceStorageClass, '_generateString',
             fakeGenerateString)
+        self.mock(vmware.driver, 'LeaseProgressUpdate',
+                lambda slf, lease, origCallback: origCallback)
+
+        self._putFiles = []
+        def fakePutFile(inUrl, outUrl, session = None, method = None,
+                callback=None):
+            if hasattr(inUrl, 'read'):
+                inObj = inUrl
+            else:
+                inObj = file(inUrl)
+            self._putFiles.append((outUrl, method))
+            fout = file(os.devnull, "w")
+            if callback:
+                callback = callback.progress
+            util.copyfileobj(inObj, fout, callback = callback,
+                bufSize = 1024 * 1024)
+        from catalogService.libs.viclient import vmutils
+        self.mock(vmutils, "_putFile", fakePutFile)
 
     def testNewInstances_1(self):
         cloudName = 'virtcenter.eng.rpath.com'
         cloudType = vmware.driver.cloudType
-        def fakeDaemonize(*args, **kwargs):
-            pass
 
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
         srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf = True)
+            cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         self.failUnlessEqual(job.get_id(),
@@ -1042,29 +1052,10 @@ class VMwareTest(testbase.TestCase):
 
     def testNewInstances_2(self):
         cloudName = 'virtcenter.eng.rpath.com'
-        def fakeDaemonize(slf, *args, **kwargs):
-            slf.postFork()
-            return slf.function(*args, **kwargs)
 
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inUrl, outUrl, session = None, method = None,
-                callback=None):
-            if hasattr(inUrl, 'read'):
-                inObj = inUrl
-            else:
-                inObj = file(inUrl)
-            putFiles.append((outUrl, method))
-            fout = file(os.devnull, "w")
-            if callback:
-                callback = callback.progress
-            util.copyfileobj(inObj, fout, callback = callback,
-                bufSize = 1024 * 1024)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
         srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf = True)
+            cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
@@ -1093,21 +1084,8 @@ class VMwareTest(testbase.TestCase):
         job = self.getJobFromResponse(response)
         self.failUnlessEqual([ x.get_content() for x in job.history ],
             ['Launching instance from image aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd (type VMWARE_OVF_IMAGE)',
-            'Downloading image', 'Exploding archive',
-            'Uploading image to VMware',
+            ] + _progress + [
             'Importing OVF descriptor',
-            'Importing OVF: 0% complete',
-            'Importing OVF: 10% complete',
-            'Importing OVF: 20% complete',
-            'Importing OVF: 30% complete',
-            'Importing OVF: 40% complete',
-            'Importing OVF: 50% complete',
-            'Importing OVF: 60% complete',
-            'Importing OVF: 70% complete',
-            'Importing OVF: 80% complete',
-            'Importing OVF: 90% complete',
-            'Importing OVF: 100% complete',
-            'Importing OVF: 100% complete',
             'Reconfiguring VM', 'Converting VM to template',
             'Cloning template',
             'Uploading initial configuration',
@@ -1116,109 +1094,6 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
         self.failUnlessEqual([ x.href for x in job.get_resultResource() ],
             [ self.makeUri(client, self._baseCloudUrl + '/instances/vmuuid10') ])
-
-    def testNewInstances35_1(self):
-        self._replaceVmwareData({
-            mockedData.vmwareRetrieveServiceContentRequest :
-                mockedData.vmwareRetrieveServiceContentResponse35})
-
-        cloudName = 'virtcenter.eng.rpath.com'
-        cloudType = vmware.driver.cloudType
-        def fakeDaemonize(*args, **kwargs):
-            pass
-
-        imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
-        srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId,
-            asOvf=False)
-
-        jobUrlPath = 'jobs/types/instance-launch/jobs/1'
-        self.failUnlessEqual(job.get_id(),
-            self.makeUri(client, jobUrlPath))
-        self.failUnlessEqual(job.get_imageId(),
-            self.makeUri(client, "clouds/vmware/instances/virtcenter.eng.rpath.com/images/" + imageId))
-
-        # Enumerate instances
-        response = client.request('GET')
-        hndlr = instances.Handler()
-        nodes = hndlr.parseString(response.read())
-
-        self.failUnlessEqual(len(nodes), 2)
-
-        # Grab the job
-        client = self.newClient(srv, jobUrlPath)
-        response = client.request('GET')
-
-        job = self.getJobFromResponse(response)
-
-        self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
-
-    def testNewInstances35_2(self):
-        self._replaceVmwareData({
-            mockedData.vmwareRetrieveServiceContentRequest :
-                mockedData.vmwareRetrieveServiceContentResponse35,
-            mockedData.vmwareWaitForUpdatesRequest1 :
-                mockedData.HTTPResponse([
-                    mockedData.vmwareWaitForUpdatesResponseRegisterVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponseCloneVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponsePowerOnVM1,
-                ]),
-        })
-
-        cloudName = 'virtcenter.eng.rpath.com'
-        cloudType = vmware.driver.cloudType
-        def fakeDaemonize(slf, *args, **kwargs):
-            return slf.function(*args, **kwargs)
-
-        imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inObj, outUrl, session = None):
-            putFiles.append(outUrl)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
-        srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf = False)
-
-        jobUrlPath = 'jobs/types/instance-launch/jobs/1'
-        self.failUnlessEqual(job.get_id(),
-            self.makeUri(client, jobUrlPath))
-
-        #self.failUnlessEqual(node.getInstanceId(), "FAKE000")
-        #self.failUnlessEqual(node.getReservationId(), None)
-        #self.failUnlessEqual(node.getInstanceName(), "instance-foo")
-        #self.failUnlessEqual(node.getInstanceDescription(),
-        #    "just words and stuff")
-        #certFile = os.path.join(self.storagePath, "instances",
-        #    "vmware", "virtcenter.eng.rpath.com", "JeanValjean",
-        #    "vmuuid10", "x509cert")
-        #self.failUnless(os.path.exists(certFile))
-
-        # Enumerate instances
-        response = client.request('GET')
-        hndlr = instances.Handler()
-        nodes = hndlr.parseString(response.read())
-
-        self.failUnlessEqual(len(nodes), 2)
-
-        # Grab the job
-        client = self.newClient(srv, jobUrlPath)
-        response = client.request('GET')
-
-        job = self.getJobFromResponse(response)
-
-        self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
-
-        self.failUnlessEqual([ x.get_content() for x in job.history ],
-            ['Launching instance from image 361d7fa1-d994-31e1-6a3a-438c8d4ebaa7 (type VMWARE_ESX_IMAGE)',
-             'Downloading image', 'Exploding archive',
-             'Uploading image to VMware', 'Registering VM',
-             'Reconfiguring VM', 'Converting VM to template',
-             'Cloning template', 'Uploading initial configuration',
-             'Creating initial configuration disc', 'Launching',
-             'Instance launched', 'Instance(s) running: ', 'Done'])
 
     def testNewInstancesESX_1(self):
         cloudName = 'virtcenter.eng.rpath.com'
@@ -1229,25 +1104,9 @@ class VMwareTest(testbase.TestCase):
             mockedData.vmwareRetrieveServiceContentRequest :
             mockedData.vmwareRetrieveServiceContentResponseESX})
 
-        def fakeDaemonize(slf, *args, **kwargs):
-            return slf.function(*args, **kwargs)
-
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
-
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inObj, outUrl, session = None, method = None,
-                callback=None):
-            putFiles.append((outUrl, method))
-            fout = file(os.devnull, "w")
-            if callback:
-                callback = callback.progress
-            util.copyfileobj(inObj, fout, callback = callback,
-                bufSize = 1024 * 1024)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
         srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId)
+            cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
@@ -1266,213 +1125,19 @@ class VMwareTest(testbase.TestCase):
         job = self.getJobFromResponse(response)
         self.failUnlessEqual([ x.get_content() for x in job.history ],
             ['Launching instance from image aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd (type VMWARE_OVF_IMAGE)',
-            'Downloading image', 'Exploding archive',
-            'Uploading image to VMware',
+            ] + _progress + [
             'Importing OVF descriptor',
-            'Importing OVF: 0% complete',
-            'Importing OVF: 10% complete',
-            'Importing OVF: 20% complete',
-            'Importing OVF: 30% complete',
-            'Importing OVF: 40% complete',
-            'Importing OVF: 50% complete',
-            'Importing OVF: 60% complete',
-            'Importing OVF: 70% complete',
-            'Importing OVF: 80% complete',
-            'Importing OVF: 90% complete',
-            'Importing OVF: 100% complete',
-            'Importing OVF: 100% complete',
             'Reconfiguring VM',
             'Uploading initial configuration',
             'Creating initial configuration disc',
             'Launching', 'Instance launched', 'Instance(s) running: ', 'Done'])
 
-    def testNewInstancesESX35_1(self):
-        cloudName = 'virtcenter.eng.rpath.com'
-        cloudType = vmware.driver.cloudType
-
-        # Mock RetrieveServiceContent to force ESX
-        self._replaceVmwareData({
-            mockedData.vmwareRetrieveServiceContentRequest :
-                mockedData.vmwareRetrieveServiceContentResponseESX35,
-            mockedData.vmwareWaitForUpdatesRequest2 :
-                mockedData.HTTPResponse([
-                    mockedData.vmwareWaitForUpdatesResponseRegisterVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponsePowerOnVM1,
-                ]),
-        })
-
-        def fakeDaemonize(slf, *args, **kwargs):
-            return slf.function(*args, **kwargs)
-
-        imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
-
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inObj, outUrl, session = None):
-            putFiles.append(outUrl)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
-        srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf=False)
-
-        jobUrlPath = 'jobs/types/instance-launch/jobs/1'
-        self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
-
-        # Enumerate instances
-        response = client.request('GET')
-        hndlr = instances.Handler()
-        nodes = hndlr.parseString(response.read())
-
-        self.failUnlessEqual(len(nodes), 2)
-
-        # Grab the job
-        client = self.newClient(srv, jobUrlPath)
-        response = client.request('GET')
-
-        job = self.getJobFromResponse(response)
-        self.failUnlessEqual([ x.get_content() for x in job.history ],
-            ['Launching instance from image 361d7fa1-d994-31e1-6a3a-438c8d4ebaa7 (type VMWARE_ESX_IMAGE)',
-             'Downloading image', 'Exploding archive',
-             'Uploading image to VMware', 'Registering VM',
-             'Reconfiguring VM', 'Uploading initial configuration',
-             'Creating initial configuration disc',
-             'Launching',
-             'Instance launched', 'Instance(s) running: ', 'Done'])
-
-
-    def testNewInstances35RegisterVMTimeout(self):
-        # RBL-4786
-        cloudName = 'virtcenter.eng.rpath.com'
-        cloudType = vmware.driver.cloudType
-        def fakeDaemonize(slf, *args, **kwargs):
-            return slf.function(*args, **kwargs)
-
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inObj, outUrl, session = None, method = None,
-                callback=None):
-            putFiles.append(outUrl)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
-
-        logFilePath = os.path.join(self.workDir, "loginLogFile")
-        from catalogService.libs.viclient import client as vclient
-        origLogin = vclient.VimService.login
-
-        def mockedLogin(cls, *args, **kwargs):
-            file(logFilePath, "a").write("Logging in\n")
-            return origLogin(*args, **kwargs)
-        self.mock(vclient.VimService, 'login', mockedLogin)
-
-        imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
-        try:
-            self._replaceVmwareData({
-                mockedData.vmwareRetrieveServiceContentRequest :
-                    mockedData.vmwareRetrieveServiceContentResponse35,
-                mockedData.vmwareRegisterVMreq :
-                    mockedData.vmwareRegisterVMreqAuthTimeout})
-
-            resp = self.failUnlessRaises(ResponseError,
-                self._setUpNewInstanceTest, cloudName, fakeDaemonize, '',
-                imageId = imageId, asOvf=False)
-            msg = 'FaultException: The session is not authenticated.'
-            self.failUnless(msg in resp.contents,
-                "%s not in %s" % (msg, repr(resp.contents)))
-            # We should see 2 login tries: the original one and the retry
-            self.failUnlessEqual(len(file(logFilePath).readlines()), 2)
-        finally:
-            pass
-
-    def testNewInstances35_4(self):
-        self._replaceVmwareData({
-            mockedData.vmwareRetrieveServiceContentRequest :
-                mockedData.vmwareRetrieveServiceContentResponse35})
-
-        cloudName = 'virtcenter.eng.rpath.com'
-        cloudType = vmware.driver.cloudType
-        def fakeDaemonize(slf, *args, **kwargs):
-            return slf.function(*args, **kwargs)
-
-        self._replaceVmwareData({
-            mockedData.vmwareReqGetVirtualMachineProps1 :
-                mockedData.vmwareResponseGetVirtualMachinePropsWithAnnot,
-            mockedData.vmwareWaitForUpdatesRequest1 :
-                mockedData.HTTPResponse([
-                    mockedData.vmwareWaitForUpdatesResponseRegisterVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponseCloneVM1,
-                    mockedData.vmwareWaitForUpdatesResponseReconfigVM1,
-                    mockedData.vmwareWaitForUpdatesResponsePowerOnVM1,
-                ]),
-        })
-
-        # Mock _putFile so we don't really upload something
-        putFilePath = os.path.join(self.workDir, "putLogFile")
-        def fakePutFile(inObj, outUrl, session = None):
-            file(putFilePath, "a").write("%s\n" % outUrl)
-
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
-
-        imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
-        imageId = '361d7fa1-d994-31e1-6a3a-438c8d4ebaa7'
-        srv, client, job, response = self._setUpNewInstanceTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf=False)
-
-        jobUrlPath = 'jobs/types/instance-launch/jobs/1'
-        self.failUnlessEqual(job.get_id(),
-            self.makeUri(client, jobUrlPath))
-        self.failUnlessEqual(job.get_imageId(),
-            self.makeUri(client, "clouds/vmware/instances/virtcenter.eng.rpath.com/images/" + imageId))
-
-        # Enumerate instances
-        response = client.request('GET')
-        hndlr = instances.Handler()
-        nodes = hndlr.parseString(response.read())
-
-        self.failUnlessEqual(len(nodes), 2)
-
-        # Grab the job
-        client = self.newClient(srv, jobUrlPath)
-        response = client.request('GET')
-
-        job = self.getJobFromResponse(response)
-
-        self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
-
-        self.failUnlessEqual([ x.strip() for x in file(putFilePath) ],
-            [
-            'https://virtcenter.eng.rpath.com/folder/template-some-file-6-1-x86-1/foo.vmx?dcPath=rPath&dsName=nas2-nfs',
-            'https://virtcenter.eng.rpath.com/folder/instance-foo/credentials.iso?dcPath=rPath&dsName=nas2-nfs',
-            ])
-
     def testDeployImage1(self):
         cloudName = 'virtcenter.eng.rpath.com'
-        def fakeDaemonize(slf, *args, **kwargs):
-            slf.postFork()
-            return slf.function(*args, **kwargs)
 
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inUrl, outUrl, session = None, method = None,
-                callback=None):
-            if hasattr(inUrl, 'read'):
-                inObj = inUrl
-            else:
-                inObj = file(inUrl)
-            putFiles.append((outUrl, method))
-            fout = file(os.devnull, "w")
-            if callback:
-                callback = callback.progress
-            util.copyfileobj(inObj, fout, callback = callback,
-                bufSize = 1024 * 1024)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
         srv, client, job, response = self._setUpNewImageTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf = True)
+            cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/image-deployment/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
@@ -1500,21 +1165,9 @@ class VMwareTest(testbase.TestCase):
 
         job = self.getJobFromResponse(response)
         self.failUnlessEqual([ x.get_content() for x in job.history ],
-            ['Running', 'Downloading image', 'Exploding archive',
-            'Uploading image to VMware',
+            ['Running',
+            ] + _progress + [
             'Importing OVF descriptor',
-            'Importing OVF: 0% complete',
-            'Importing OVF: 10% complete',
-            'Importing OVF: 20% complete',
-            'Importing OVF: 30% complete',
-            'Importing OVF: 40% complete',
-            'Importing OVF: 50% complete',
-            'Importing OVF: 60% complete',
-            'Importing OVF: 70% complete',
-            'Importing OVF: 80% complete',
-            'Importing OVF: 90% complete',
-            'Importing OVF: 100% complete',
-            'Importing OVF: 100% complete',
             'Reconfiguring VM', 'Converting VM to template',
             'Image deployed', 'Done'])
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
@@ -1532,37 +1185,18 @@ class VMwareTest(testbase.TestCase):
                 mockedData.vmwareRetrieveServiceContentResponse50})
 
         import pickle
-        orig_deployImageFromFile = vmware.driver._deployImageFromFile
-        invocationFile = os.path.join(self.workDir, "_deployImageFromFile")
-        def mock_deployImageFromFile(slf, *args, **kwargs):
+        orig_deployImageFromStream = vmware.driver._deployImageFromStream
+        invocationFile = os.path.join(self.workDir, "_deployImageFromStream")
+        def mock_deployImageFromStream(slf, *args, **kwargs):
             pickle.dump((args[-4:], kwargs), file(invocationFile, "w"))
-            return orig_deployImageFromFile(slf, *args, **kwargs)
-        self.mock(vmware.driver, '_deployImageFromFile', mock_deployImageFromFile)
+            return orig_deployImageFromStream(slf, *args, **kwargs)
+        self.mock(vmware.driver, '_deployImageFromStream', mock_deployImageFromStream)
 
         cloudName = 'virtcenter.eng.rpath.com'
-        def fakeDaemonize(slf, *args, **kwargs):
-            slf.postFork()
-            return slf.function(*args, **kwargs)
 
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
-        # Mock _putFile so we don't really upload something
-        putFiles = []
-        def fakePutFile(inUrl, outUrl, session = None, method = None,
-                callback=None):
-            if hasattr(inUrl, 'read'):
-                inObj = inUrl
-            else:
-                inObj = file(inUrl)
-            putFiles.append((outUrl, method))
-            fout = file(os.devnull, "w")
-            if callback:
-                callback = callback.progress
-            util.copyfileobj(inObj, fout, callback = callback,
-                bufSize = 1024 * 1024)
-        from catalogService.libs.viclient import vmutils
-        self.mock(vmutils, "_putFile", fakePutFile)
         srv, client, job, response = self._setUpNewImageTest(
-            cloudName, fakeDaemonize, '', imageId = imageId, asOvf = True)
+            cloudName, '', imageId = imageId)
 
         jobUrlPath = 'jobs/types/image-deployment/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
@@ -1590,21 +1224,9 @@ class VMwareTest(testbase.TestCase):
 
         job = self.getJobFromResponse(response)
         self.failUnlessEqual([ x.get_content() for x in job.history ],
-            ['Running', 'Downloading image', 'Exploding archive',
-            'Uploading image to VMware',
+            ['Running',
+            ] + _progress + [
             'Importing OVF descriptor',
-            'Importing OVF: 0% complete',
-            'Importing OVF: 10% complete',
-            'Importing OVF: 20% complete',
-            'Importing OVF: 30% complete',
-            'Importing OVF: 40% complete',
-            'Importing OVF: 50% complete',
-            'Importing OVF: 60% complete',
-            'Importing OVF: 70% complete',
-            'Importing OVF: 80% complete',
-            'Importing OVF: 90% complete',
-            'Importing OVF: 100% complete',
-            'Importing OVF: 100% complete',
             'Reconfiguring VM', 'Converting VM to template',
             'Image deployed', 'Done'])
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
@@ -2186,6 +1808,22 @@ _xmlNewCreds = """
   <password>12345678</password>
 </descriptorData>
 """
+
+_progress = [
+        u'Importing OVF: 0%',
+        u'Importing OVF: 0%',
+        u'Importing OVF: 9%',
+        u'Importing OVF: 18%',
+        u'Importing OVF: 27%',
+        u'Importing OVF: 36%',
+        u'Importing OVF: 45%',
+        u'Importing OVF: 55%',
+        u'Importing OVF: 64%',
+        u'Importing OVF: 73%',
+        u'Importing OVF: 82%',
+        u'Importing OVF: 91%',
+        u'Importing OVF: 100%',
+        ]
 
 if __name__ == "__main__":
     testsuite.main()

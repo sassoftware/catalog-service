@@ -88,12 +88,16 @@ def _makeConnection(url, method, headers = None, bodyStream = None,
         return response
 
 def _putFile(inPath, outUrl, method='PUT', session=None, callback=None):
-    import logging
-    log = logging.getLogger(__name__)
-    log.error('putFile(%r, %r, %r, %r, %r)' % (inPath, outUrl, method, session, callback))
     if hasattr(inPath, 'read'):
         inFile = inPath
-        size = inFile.size
+        if hasattr(inPath, 'size'):
+            size = inFile.size
+        elif hasattr(inPath, 'getvalue'):
+            size = len(inPath.getvalue())
+        elif hasattr(inPath, 'fileno'):
+            size = os.fstat(inPath.fileno()).st_size
+        else:
+            raise TypeError("Can't determine size of file")
     else:
         inFile = open(inPath)
         size = os.fstat(inFile.fileno()).st_size

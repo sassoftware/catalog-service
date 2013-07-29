@@ -25,6 +25,7 @@ import urllib
 import urllib2
 import weakref
 import gzip
+from StringIO import StringIO
 
 from conary.lib import magic, util, sha1helper
 
@@ -1091,6 +1092,8 @@ class BaseDriver(object):
             imageId = os.path.basename(image.getId())
             extension = '.tgz'
             path = os.path.join(tmpDir, '%s%s' % (imageId, extension))
+            with open(path, 'w') as outf:
+                util.copyfileobj(stream, outf)
             return self._deployImageFromFile(job, image, path, *args, **kwargs)
         finally:
             # clean up our mess
@@ -1151,6 +1154,9 @@ class BaseDriver(object):
             size = long(fobj.headers['content-length'])
         elif hasattr(fobj, 'fileno'):
             size = os.fstat(fobj.fileno()).st_size
+        elif isinstance(fobj, StringIO):
+            # testsuite
+            size = len(fobj.getvalue())
         else:
             raise TypeError("Can't determine size of file object")
         def callback(percent):

@@ -23,6 +23,7 @@ testsuite.setup()
 import XenAPI
 
 from conary.lib import util
+import StringIO
 
 import testbase
 
@@ -688,7 +689,7 @@ class HandlerTest(testbase.TestCase):
 </fault>""")
 
     def _setUpNewInstanceTest(self, cloudName, daemonizeFunc, imageName,
-            imageId = None, downloadFileFunc = None):
+            imageId = None, openUrlFunc=None):
         if not imageId:
             imageId = '0903de41206786d4407ff24ab6e972c0d6b801f3'
         cloudType = xenent.driver.cloudType
@@ -697,13 +698,12 @@ class HandlerTest(testbase.TestCase):
         self.mock(xenent.xenentclient, 'HTTPConnection',
             DummyRestClientConnection)
 
-        if downloadFileFunc:
-            fakeDownloadFile = downloadFileFunc
-        else:
-            def fakeDownloadFile(slf, url, destFile, headers = None):
-                file(destFile, "w").write(url)
+        if not openUrlFunc:
+            def fakeOpenUrl(slf, url, headers):
+                return StringIO.StringIO(url)
+            openUrlFunc = fakeOpenUrl
 
-        self.mock(xenent.driver, "downloadFile", fakeDownloadFile)
+        self.mock(xenent.driver, "openUrl", openUrlFunc)
 
         srv = self.newService()
         uri = 'clouds/%s/instances/%s/instances' % (cloudType, cloudName)
@@ -763,7 +763,7 @@ class HandlerTest(testbase.TestCase):
         job = self.getJobFromResponse(response)
         self.failUnlessEqual([ x.get_content() for x in job.history ],
             ['Launching instance from image 0903de41206786d4407ff24ab6e972c0d6b801f3 (type XEN_OVA)',
-             'Downloading image', 'Importing image',
+                'Downloading image: 0%', 'Importing image',
              'Cloning template', 'Attaching credentials', 'Launching',
              'Instance(s) running: VmUuid1', 'Instance VmUuid1: 10.0.0.1',
              'Done'])
@@ -785,10 +785,10 @@ class HandlerTest(testbase.TestCase):
         cloudName = 'xs01.eng.rpath.com'
         cloudType = xenent.driver.cloudType
 
-        def fakeDownloadFile(slf, url, destFile, headers = None):
+        def fakeOpenUrl(slf, url, headers):
             if headers != { 'Cookie' : 'pysid=CookieMonster'}:
                 raise Exception("pysid not passed in")
-            file(destFile, "w").write(url)
+            return StringIO.StringIO(url)
 
         def fakeDaemonize(slf, *args, **kwargs):
             slf.function.im_self.zoneAddresses = [
@@ -809,7 +809,7 @@ class HandlerTest(testbase.TestCase):
         srv, client, job, response = self._setUpNewInstanceTest(
             cloudName, fakeDaemonize, 'some-file-7-1-x86',
             imageId = '0xPrivateImage',
-            downloadFileFunc = fakeDownloadFile)
+            openUrlFunc=fakeOpenUrl)
 
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
@@ -818,7 +818,7 @@ class HandlerTest(testbase.TestCase):
         cloudName = 'xs01.eng.rpath.com'
         cloudType = xenent.driver.cloudType
 
-        def fakeDownloadFile(slf, url, destFile, headers = None):
+        def fakeOpenUrl(slf, url, headers):
             if headers:
                 raise Exception("pysid was passed in")
             raise xenent.xenentclient.errors.DownloadError(
@@ -839,7 +839,7 @@ class HandlerTest(testbase.TestCase):
         srv, client, job, response = self._setUpNewInstanceTest(
             cloudName, fakeDaemonize, 'some-file-7-1-x86',
             imageId = '0xPrivateImage',
-            downloadFileFunc = fakeDownloadFile)
+            openUrlFunc=fakeOpenUrl)
         jobUrlPath = 'jobs/types/instance-launch/jobs/1'
         self.failUnlessEqual(job.get_id(), self.makeUri(client, jobUrlPath))
         job = self.waitForJob(srv, jobUrlPath, "Failed")
