@@ -19,6 +19,9 @@ import testsuite
 testsuite.setup()
 
 import os
+import pprint
+import subprocess
+import tempfile
 import time
 
 from conary_test import rephelp
@@ -577,6 +580,22 @@ class TestCase(testcase.TestCaseWithWorkDir):
                 self.fail("Unexpected state: %s" % status)
             time.sleep(.2)
         raise TimeoutError(job)
+
+    def assertListsEqual(self, a, b):
+        if a == b:
+            return
+        a = ''.join(pprint.pformat(x) + '\n' for x in a)
+        afile = tempfile.NamedTemporaryFile()
+        afile.write(a)
+        afile.flush()
+        b = ''.join(pprint.pformat(x) + '\n' for x in b)
+        bfile = tempfile.NamedTemporaryFile()
+        bfile.write(b)
+        bfile.flush()
+        p = subprocess.Popen(['diff', '-u', afile.name, bfile.name],
+                stdout=subprocess.PIPE)
+        result = p.communicate()[0]
+        self.fail("Lists differ:\n" + result)
 
 class RESTHandler(handler.BaseRESTHandler):
     pass

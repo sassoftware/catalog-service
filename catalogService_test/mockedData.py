@@ -20,12 +20,15 @@ import StringIO
 import itertools
 
 class MultiResponse(object):
-    __slots__ = [ '_idx', '_responses' ]
-    def __init__(self, rlist):
+    def __init__(self, rlist, dbg=0):
         self._responses = rlist
         self.reset()
+        self.dbg = dbg
 
     def getData(self):
+        if self.dbg:
+            import traceback
+            traceback.print_stack()
         data = self._responses[self._idx]
         self._idx += 1
         if isinstance(data, tuple):

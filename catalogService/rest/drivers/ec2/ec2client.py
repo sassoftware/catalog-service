@@ -1414,6 +1414,7 @@ conary-proxies=%s
         conn = self.client
         self._msg(job, "Detaching volume %s" % volumeId)
         conn.detach_volume(volumeId)
+        volume.update(validate=True)
         for i in range(120):
             if volume.status == "available":
                 return True

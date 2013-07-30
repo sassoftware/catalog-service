@@ -251,8 +251,10 @@ class EC2Test(testbase.TestCase):
         def __init__(self, accumulator):
             self._accumulator = accumulator
 
-        def addHistoryEntry(self, *args):
-            self._accumulator.append(args)
+        def addHistoryEntry(self, fmt, *args):
+            if isinstance(fmt, unicode):
+                fmt = fmt.encode('utf8')
+            self._accumulator.append((fmt,) + args)
 
 
     def _setupMocking(self, mockedCalls=None):
@@ -281,6 +283,8 @@ class EC2Test(testbase.TestCase):
             RegisterImage=mockedData.xml_ec2RegisterImage,
             DetachVolume=mockedData.xml_ec2DetachVolume,
             DescribeVolumes=mockedData.MultiResponse([
+                mockedData.xml_ec2DescribeVolumes2,
+                mockedData.xml_ec2DescribeVolumes1,
                 mockedData.xml_ec2DescribeVolumes1,
                 mockedData.xml_ec2DescribeVolumes2,
                 mockedData.xml_ec2DescribeVolumes2, ]),
@@ -355,7 +359,7 @@ class EC2Test(testbase.TestCase):
 """
         ret = drv.deployImageFromUrl(job, img, descriptorDataXml)
         self.assertEquals(ret.id, "ami-decafbad")
-        self.failUnlessEqual(job._accumulator, [
+        self.assertListsEqual(job._accumulator, [
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume',),
@@ -427,7 +431,7 @@ class EC2Test(testbase.TestCase):
 """
         ret = drv.launchSystemSynchronously(job, img, descriptorDataXml)
         self.assertEquals(ret, ["i-decafbad0", "i-decafbad1", ])
-        self.failUnlessEqual(job._accumulator, [
+        self.assertListsEqual(job._accumulator, [
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume',),
