@@ -24,6 +24,7 @@ class CatalogService(PackageRecipe):
         'boto:python',
         'ec2-ami-tools:runtime',
         'glance-client:python',
+        'jobslave:python',
         'python-lxml',
         'make',
         'm2crypto',
