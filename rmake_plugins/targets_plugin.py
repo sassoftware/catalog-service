@@ -51,7 +51,6 @@ class TargetsPlugin(bfp.BaseForwardingPlugin):
         handler.registerHandler(TargetsTestCredentialsHandler)
         handler.registerHandler(TargetsImageListHandler)
         handler.registerHandler(TargetsInstanceListHandler)
-        handler.registerHandler(TargetsInstanceCaptureHandler)
         handler.registerHandler(TargetsImageDeployHandler)
         handler.registerHandler(TargetsSystemLaunchHandler)
         handler.registerHandler(TargetsImageDeployDescriptorHandler)
@@ -63,7 +62,6 @@ class TargetsPlugin(bfp.BaseForwardingPlugin):
             NS.TARGET_TEST_CREDENTIALS: TargetsTestCredentials,
             NS.TARGET_IMAGES_LIST: TargetsImageListTask,
             NS.TARGET_INSTANCES_LIST: TargetsInstanceListTask,
-            NS.TARGET_SYSTEM_CAPTURE: TargetsInstanceCaptureTask,
             NS.TARGET_IMAGE_DEPLOY: TargetsImageDeployTask,
             NS.TARGET_SYSTEM_LAUNCH: TargetsSystemLaunchTask,
             NS.TARGET_IMAGE_DEPLOY_DESCRIPTOR: TargetsImageDeployDescriptorTask,
@@ -117,9 +115,6 @@ class TargetsImageListHandler(BaseHandler):
 
 class TargetsInstanceListHandler(BaseHandler):
     jobType = NS.TARGET_INSTANCES_LIST
-
-class TargetsInstanceCaptureHandler(BaseHandler):
-    jobType = NS.TARGET_SYSTEM_CAPTURE
 
 class TargetsImageDeployHandler(BaseHandler):
     jobType = NS.TARGET_IMAGE_DEPLOY
@@ -338,19 +333,6 @@ class JobProgressTaskHandler(BaseTaskHandler):
         def addHistoryEntry(self, *args):
             self.msgMethod(C.MSG_PROGRESS, ' '.join(args))
 
-class TargetsInstanceCaptureTask(JobProgressTaskHandler):
-    def _run(self):
-        """
-        List target instances
-        """
-        instanceId = self.cmdArgs['instanceId']
-        params = self.cmdArgs['params']
-        # Look at captureSystem to figure out which params are really
-        # used
-        job = self.Job(self.sendStatus)
-        self.driver.captureSystem(job, instanceId, params)
-        imageRef = models.ImageRef(params['image_id'])
-        self.finishCall(imageRef, "Instance captured")
 
 class TargetsImageDeployTask(JobProgressTaskHandler):
     def _run(self):
