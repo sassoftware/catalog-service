@@ -16,9 +16,13 @@
 
 
 import fnmatch
+import httplib
 import operator
 import os
 import StringIO
+import tempfile
+import time
+from conary.lib import util
 
 from catalogService import errors
 from catalogService import storage
@@ -163,6 +167,20 @@ class InstanceStorage(storage.DiskStorage):
     def _generateString(cls, length):
         return baseDriver.BaseDriver.uuidgen()
 
+class CustomVimServiceTransport(httplib.HTTPSConnection):
+    def send(self, buf):
+        df = getattr(self, '_dumpFile', None)
+        if df is None:
+            dumpDir = os.getenv('CATALOG_SERVICE_VMWARE_DUMP_DIR')
+            util.mkdirChain(dumpDir)
+            df = self._dumpFile = tempfile.NamedTemporaryFile(
+                    dir=dumpDir,
+                    prefix="%.3f-" % time.time(),
+                    delete=False)
+        df.write(buf)
+        return httplib.HTTPSConnection.send(self, buf)
+
+
 class VMwareClient(baseDriver.BaseDriver):
     Image = VMwareImage
     cloudType = 'vmware'
@@ -172,7 +190,11 @@ class VMwareClient(baseDriver.BaseDriver):
     credentialsDescriptorXmlData = _credentialsDescriptorXmlData
     # transport is mocked out during testing to simulate talking to
     # an actual server
-    VimServiceTransport = None
+    dumpDir = os.getenv('CATALOG_SERVICE_VMWARE_DUMP_DIR')
+    if dumpDir is None:
+        VimServiceTransport = None
+    else:
+        VimServiceTransport = CustomVimServiceTransport
 
     RBUILDER_BUILD_TYPE = 'VMWARE_ESX_IMAGE'
     # We should prefer OVA over OVF, but vcenter gets upset with
