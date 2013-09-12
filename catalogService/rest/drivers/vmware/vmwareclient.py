@@ -1047,37 +1047,58 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor, numCPUs=1, memoryMB=256):
-        filename = self.getCredentialsIsoFile()
-        dataCenter = self.vicfg.getDatacenter(dataCenterMor).properties['name']
-        dsInfo = self.vicfg.getMOR(dataStoreMor)
-        dataStore = self.client.getDynamicProperty(dsInfo, 'summary').get_element_name()
-        from catalogService.libs import viclient
-        try:
-            self._msg(job, 'Uploading initial configuration')
-            fileobj = open(filename)
-            viclient.vmutils._uploadVMFiles(self.client, [ fileobj ], vmName,
-                dataCenter = dataCenter, dataStore = dataStore)
-        finally:
-            # We use filename below only for the actual name; no need to keep
-            # this file around now
-            os.unlink(filename)
+        from catalogService.libs.viclient import client
+        bootUuid = self.getBootUuid()
 
         dc = self.vicfg.getMOR(dataCenterMor)
         hostFolder = self.client.getMoRefProp(dc, 'hostFolder')
         hostMor = self.client.getFirstDecendentMoRef(hostFolder, 'HostSystem')
         cr = self.vicfg.getMOR(computeResourceMor)
         defaultDevices = self.client.getDefaultDevices(cr, hostMor)
-
-        datastoreVolume = self.client._getVolumeName(dataStore)
         controllerMor = self.client._getIdeController(defaultDevices)
+
+
+        conaryProxies = ' '.join(x.partition(':')[0]
+                for x in self.zoneAddresses)
+        zoneAddresses = ' '.join(self.zoneAddresses)
+        certFile = self.getWbemClientCert()
+        # Load the cert, we need the hash
+        certHash = self.computeX509CertHash(certFile)
+
+        vAppConfigSpec = ns0.VmConfigSpec_Def('').pyclass()
+        vAppConfigSpec.set_element_ovfEnvironmentTransport(['iso', 'com.vmware.guestInfo'])
+        properties = []
+        vAppConfigSpec.set_element_property(properties)
+        propValues = [
+                ('com.sas.app-engine.boot-uuid', bootUuid),
+                ('com.sas.app-engine.conary.proxy', conaryProxies),
+                ('com.sas.app-engine.zone-addresses', zoneAddresses),
+                ('com.sas.app-engine.wbem.cert.hash.0', certHash),
+                ('com.sas.app-engine.wbem.cert.data.0', file(certFile).read()),
+        ]
+        if self._rootSshKeys:
+            propValues.append(('com.sas.app-engine.ssh-keys.root', self._rootSshKeys))
+
+        for idx, (propLabel, propValue) in enumerate(propValues):
+            propSpec = vAppConfigSpec.new_property()
+            properties.append(propSpec)
+            propInfo = propSpec.new_info()
+            propSpec.set_element_info(propInfo)
+            propSpec.set_element_operation('add')
+            propInfo.set_element_id(propLabel)
+            propInfo.set_element_key(idx)
+            propInfo.set_element_label(propLabel)
+            propInfo.set_element_value(propValue)
+            propInfo.set_element_type('string')
+
         try:
-            self._msg(job, 'Creating initial configuration disc')
-            cdromSpec = self.client.createCdromConfigSpec(
-                os.path.basename(filename), vmMor, controllerMor,
-                dataStoreMor, datastoreVolume)
+            self._msg(job, 'Setting initial configuration')
+            cdromSpec = self.client.createCdromConfigSpec_passthrough(vmMor,
+                    controllerMor)
             self.client.reconfigVM(vmMor, dict(deviceChange = [ cdromSpec ],
+                vAppConfig=vAppConfigSpec,
                 numCPUs=numCPUs, memoryMB=memoryMB))
-        except viclient.client.FaultException, e:
+        except client.FaultException, e:
             # We will not fail the request if we could not attach credentials
             # to the instance
-            self.log_exception("Exception trying to attach credentials: %s", e)
+            self.log_exception("Exception trying to set initial configuration: %s", e)

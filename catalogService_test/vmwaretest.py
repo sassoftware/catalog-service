@@ -1020,6 +1020,11 @@ class VMwareTest(testbase.TestCase):
                 bufSize = 1024 * 1024)
         from catalogService.libs.viclient import vmutils
         self.mock(vmutils, "_putFile", fakePutFile)
+        self.mock(vmware.driver, 'getBootUuid', lambda *args: '00000000-0000-0000-0000-00000000b007')
+
+        clientCertFilePath = os.path.join(self.workDir, 'client.cert')
+        file(clientCertFilePath, "w").write(mockedData.x509_cert)
+        self.mock(vmware.driver, 'getWbemClientCert', lambda *args: clientCertFilePath)
 
     def testNewInstances_1(self):
         cloudName = 'virtcenter.eng.rpath.com'
@@ -1088,8 +1093,7 @@ class VMwareTest(testbase.TestCase):
             'Importing OVF descriptor',
             'Reconfiguring VM', 'Converting VM to template',
             'Cloning template',
-            'Uploading initial configuration',
-            'Creating initial configuration disc',
+            'Setting initial configuration',
             'Launching', 'Instance launched', 'Instance(s) running: ', 'Done'])
         self.failUnlessEqual(job.get_statusMessage(), 'Done')
         self.failUnlessEqual([ x.href for x in job.get_resultResource() ],
@@ -1128,8 +1132,7 @@ class VMwareTest(testbase.TestCase):
             ] + _progress + [
             'Importing OVF descriptor',
             'Reconfiguring VM',
-            'Uploading initial configuration',
-            'Creating initial configuration disc',
+            'Setting initial configuration',
             'Launching', 'Instance launched', 'Instance(s) running: ', 'Done'])
 
     def testDeployImage1(self):

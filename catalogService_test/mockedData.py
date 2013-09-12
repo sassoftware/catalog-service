@@ -94,6 +94,24 @@ def xmlEscape(data):
     ret = etree.tostring(element, xml_declaration=None, encoding="UTF-8")[3:-4]
     return ret
 
+x509_cert = """\
+-----BEGIN CERTIFICATE-----
+MIICizCCAXOgAwIBAgIBATANBgkqhkiG9w0BAQUFADAAMB4XDTA5MDYwNDE0NDk1
+MloXDTA5MDYxMTE0NDk1MlowADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
+ggEBAJ1IZaAvkz7wMT41AbdG0IyHLTVsYQ+TmZzf/QO5I0x9bEX/L3gnalR1487M
+grVozAfjKi2DiNG0mSgoflFBbkUmT4Tfr+iaX99MgBX7LqBcGnsj5HwQHgetdhaS
+6yTh5k72hnERZ11g/vmZW0RRNd6bAEUG3Ls8obe91YMYxcoupSURILKxxTSl3bQY
+OThn1WWud5ac+IiJyxpX3OmYViVJBNbYXuxWpxVpfwtRxs2GRG2gIcV4pN2eEszy
+UHiqSNa9hTinc+irPErAyC0bopw59YkHmz/akU3if/I12xiK5LqfcU/R//pQ059a
+5XOQmJ2ElCSGA6wL9X69V/FywhMCAwEAAaMQMA4wDAYDVR0TAQH/BAIwADANBgkq
+hkiG9w0BAQUFAAOCAQEAHXi47wYthgCRmbgIheqCIQNGyWSCFbbZn9Az4NkaAlIn
+bu/LrWx1xb3ekz4iBXyEbBQ6sr4ersA3JOfaJ35I39L5myxG7n4P5Abk9YNS5ZFL
+FzX1QwkX4f6/J+OcysXAn3HiHdNv09QAr0JPCfFPOtrW8lDlu9KnZdt1LCiNEl2z
+fCXKzJKu+F0QSq1IVCLRBGd2kLmeQwNZwPJPeYetyK0T1xuve9PMBmhspl9orCqg
+HV4PwrVMYsEGVLrCuwJJknDY/1daJW/z81DI5tdyYFW9FntRy9UnB785S3vUkDso
+hNwHzg9ZFyHDDWfqYAMrpZ3WKchD1Se6TyGZxan/sA==
+-----END CERTIFICATE-----"""
+
 xml_getAllRegions1 = """\
 <?xml version="1.0"?>
 <DescribeRegionsResponse xmlns="http://ec2.amazonaws.com/doc/2008-12-01/">
@@ -3789,7 +3807,7 @@ Content-Length: 432
 </soapenv:Envelope>
 """
 
-vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>1024</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromIsoBackingInfo"><ns1:fileName>[nas2-nfs]misa-remote-update-4/credentials.iso</ns1:fileName><datastore type="Datastore" xsi:type="ns1:ManagedObjectReference">datastore-18</datastore></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>'
+vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>1024</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromRemotePassthroughBackingInfo"><ns1:deviceName>cdrom</ns1:deviceName><ns1:exclusive>false</ns1:exclusive></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange><vAppConfig xsi:type="ns1:VmConfigSpec"><property><operation>add</operation><info><ns1:key>0</ns1:key><ns1:id>com.sas.app-engine.boot-uuid</ns1:id><ns1:label>com.sas.app-engine.boot-uuid</ns1:label><ns1:type>string</ns1:type><ns1:value>00000000-0000-0000-0000-00000000b007</ns1:value></info></property><property><operation>add</operation><info><ns1:key>1</ns1:key><ns1:id>com.sas.app-engine.conary.proxy</ns1:id><ns1:label>com.sas.app-engine.conary.proxy</ns1:label><ns1:type>string</ns1:type><ns1:value>1.2.3.4 2.3.4.5</ns1:value></info></property><property><operation>add</operation><info><ns1:key>2</ns1:key><ns1:id>com.sas.app-engine.zone-addresses</ns1:id><ns1:label>com.sas.app-engine.zone-addresses</ns1:label><ns1:type>string</ns1:type><ns1:value>1.2.3.4:5678 2.3.4.5:6789</ns1:value></info></property><property><operation>add</operation><info><ns1:key>3</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.hash.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.hash.0</ns1:label><ns1:type>string</ns1:type><ns1:value>543b6ca4</ns1:value></info></property><property><operation>add</operation><info><ns1:key>4</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.data.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.data.0</ns1:label><ns1:type>string</ns1:type><ns1:value>%s</ns1:value></info></property><property><operation>add</operation><info><ns1:key>5</ns1:key><ns1:id>com.sas.app-engine.ssh-keys.root</ns1:id><ns1:label>com.sas.app-engine.ssh-keys.root</ns1:label><ns1:type>string</ns1:type><ns1:value>bleepy</ns1:value></info></property><ns1:ovfEnvironmentTransport>iso</ns1:ovfEnvironmentTransport><ns1:ovfEnvironmentTransport>com.vmware.guestInfo</ns1:ovfEnvironmentTransport></vAppConfig></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>' % x509_cert
 
 vmwareReconfigVMTaskReqTemplate = (
 '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
@@ -5028,18 +5046,9 @@ vmwareRetrievePropertiesVMReq35_hwdev2 = vmwareRetrievePropertiesVMReq35_hwdev.r
 
 
 vmwarePropRespSet1 = """<propSet><name>config.hardware.device</name><val xsi:type="ArrayOfVirtualDevice"><VirtualDevice xsi:type="VirtualIDEController"><key>200</key><deviceInfo><label>IDE 0</label><summary>IDE 0</summary></deviceInfo><busNumber>0</busNumber></VirtualDevice><VirtualDevice xsi:type="VirtualIDEController"><key>201</key><deviceInfo><label>IDE 1</label><summary>IDE 1</summary></deviceInfo><busNumber>1</busNumber></VirtualDevice><VirtualDevice xsi:type="VirtualPS2Controller"><key>300</key><deviceInfo><label>PS2 Controller </label><summary>PS2 Controller</summary></deviceInfo><busNumber>0</busNumber><device>600</device><device>700</device></VirtualDevice><VirtualDevice xsi:type="VirtualPCIController"><key>100</key><deviceInfo><label>PCI Controller </label><summary>PCI Controller</summary></deviceInfo><busNumber>0</busNumber><device>500</device><device>4000</device><device>1000</device></VirtualDevice><VirtualDevice xsi:type="VirtualSIOController"><key>400</key><deviceInfo><label>SIO Controller </label><summary>SIO Controller</summary></deviceInfo><busNumber>0</busNumber></VirtualDevice><VirtualDevice xsi:type="VirtualKeyboard"><key>600</key><deviceInfo><label>Keyboard </label><summary>Keyboard</summary></deviceInfo><controllerKey>300</controllerKey><unitNumber>0</unitNumber></VirtualDevice><VirtualDevice xsi:type="VirtualPointingDevice"><key>700</key><deviceInfo><label>Pointing Device</label><summary>Pointing device; Device</summary></deviceInfo><backing xsi:type="VirtualPointingDeviceDeviceBackingInfo"><deviceName></deviceName><useAutoDetect>false</useAutoDetect><hostPointingDevice>autodetect</hostPointingDevice></backing><controllerKey>300</controllerKey><unitNumber>1</unitNumber></VirtualDevice><VirtualDevice xsi:type="VirtualMachineVideoCard"><key>500</key><deviceInfo><label>Video Card </label><summary>Video Card</summary></deviceInfo><controllerKey>100</controllerKey><unitNumber>0</unitNumber><videoRamSizeInKB>4096</videoRamSizeInKB></VirtualDevice><VirtualDevice xsi:type="VirtualPCNet32"><key>4000</key><deviceInfo><label>Network Adapter 1</label><summary>VM Network</summary></deviceInfo><backing xsi:type="VirtualEthernetCardNetworkBackingInfo"><deviceName>VM Network</deviceName><useAutoDetect>false</useAutoDetect><network type="Network">network-22</network></backing><connectable><startConnected>true</startConnected><allowGuestControl>true</allowGuestControl><connected>true</connected></connectable><controllerKey>100</controllerKey><unitNumber>7</unitNumber><addressType>assigned</addressType><macAddress>00:50:56:b4:31:33</macAddress><wakeOnLanEnabled>true</wakeOnLanEnabled></VirtualDevice><VirtualDevice xsi:type="VirtualLsiLogicController"><key>1000</key><deviceInfo><label>SCSI Controller 0</label><summary>LSI Logic</summary></deviceInfo><controllerKey>100</controllerKey><unitNumber>3</unitNumber><busNumber>0</busNumber><device>2000</device><hotAddRemove>true</hotAddRemove><sharedBus>noSharing</sharedBus><scsiCtlrUnitNumber>7</scsiCtlrUnitNumber></VirtualDevice><VirtualDevice xsi:type="VirtualDisk"><key>2000</key><deviceInfo><label>Hard Disk 1</label><summary>2,183,168 KB</summary></deviceInfo><backing xsi:type="VirtualDiskFlatVer2BackingInfo"><fileName>[nas1-iscsi] misa-remote-update-4/misa-remote-update-4.vmdk</fileName><datastore type="Datastore">datastore-18</datastore><diskMode>persistent</diskMode><split>false</split><writeThrough>true</writeThrough><thinProvisioned>false</thinProvisioned><uuid>6000C290-83ef-1049-4e36-62fc24f0deef</uuid></backing><controllerKey>1000</controllerKey><unitNumber>0</unitNumber><capacityInKB>2183168</capacityInKB><shares><shares>1000</shares><level>normal</level></shares></VirtualDevice></val></propSet><propSet><name>config.name</name><val xsi:type="xsd:string">misa-remote-update-4</val></propSet>"""
-vmwarePropRespSet1Len = 465 + len(vmwarePropRespSet1)
-
 vmwarePropRespSet2 = """<propSet><name>config.uuid</name><val xsi:type="xsd:string">vmuuid10</val></propSet>"""
-vmwarePropRespSet2Len = 465 + len(vmwarePropRespSet2)
 
 vmwareRetrievePropertiesVMResp = """\
-HTTP/1.1 200 OK
-Date: Fri, 22 May 2009 20:33:32 GMT
-Cache-Control: no-cache
-Content-Type: text/xml; charset=utf-8
-Content-Length: %d
-
 <?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -5051,16 +5060,16 @@ Content-Length: %d
 </soapenv:Envelope>
 """
 
-vmwareRetrievePropertiesVMResp2 = (vmwareRetrievePropertiesVMResp %
-    (vmwarePropRespSet1Len, vmwarePropRespSet1)).replace(
-    'vm-4739', 'vm-987')
+vmwareRetrievePropertiesVMResp2 = HTTPResponse(
+    (vmwareRetrievePropertiesVMResp % vmwarePropRespSet1).replace(
+    'vm-4739', 'vm-987'))
 
-vmwareRetrievePropertiesVMResp22 = (vmwareRetrievePropertiesVMResp %
-    (vmwarePropRespSet2Len, vmwarePropRespSet2)).replace(
-    'vm-4739', 'vm-987')
+vmwareRetrievePropertiesVMResp22 = HTTPResponse(
+    (vmwareRetrievePropertiesVMResp % vmwarePropRespSet2).replace(
+    'vm-4739', 'vm-987'))
 
-vmwareRetrievePropertiesVMResp2_hwdev = (vmwareRetrievePropertiesVMResp %
-    (vmwarePropRespSet1Len, vmwarePropRespSet1))
+vmwareRetrievePropertiesVMResp2_hwdev = HTTPResponse(
+    (vmwareRetrievePropertiesVMResp % vmwarePropRespSet1))
 
 vmwareRetrievePropertiesDatacenterVmFolderReq = \
     _vmwareReqRetrievePropertiesSimpleTemplate % dict(
@@ -6497,17 +6506,13 @@ vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
  vmwareRetrievePropertiesHostReq35 : vmwareRetrievePropertiesHostResp,
  vmwareQueryConfigOptionReq : vmwareQueryConfigOptionResp,
  (vmwareRetrievePropertiesVMReq % vmwarePropVMPathSet1) :
-    (vmwareRetrievePropertiesVMResp % (vmwarePropRespSet1Len,
-        vmwarePropRespSet1)),
+    HTTPResponse(vmwareRetrievePropertiesVMResp % vmwarePropRespSet1),
  (vmwareRetrievePropertiesVMReq % vmwarePropVMPathSet2) :
-    (vmwareRetrievePropertiesVMResp % (vmwarePropRespSet2Len,
-        vmwarePropRespSet2)),
+    HTTPResponse(vmwareRetrievePropertiesVMResp % vmwarePropRespSet2),
  (vmwareRetrievePropertiesVMReq35 % vmwarePropVMPathSet1) :
-    (vmwareRetrievePropertiesVMResp % (vmwarePropRespSet1Len,
-        vmwarePropRespSet1)),
+    HTTPResponse(vmwareRetrievePropertiesVMResp % vmwarePropRespSet1),
  (vmwareRetrievePropertiesVMReq35 % vmwarePropVMPathSet2) :
-    (vmwareRetrievePropertiesVMResp % (vmwarePropRespSet2Len,
-        vmwarePropRespSet2)),
+    HTTPResponse(vmwareRetrievePropertiesVMResp % vmwarePropRespSet2),
  vmwareRetrievePropertiesVMReq2 : vmwareRetrievePropertiesVMResp2,
  vmwareRetrievePropertiesVMReq22 : vmwareRetrievePropertiesVMResp22,
  vmwareRetrievePropertiesVMReq35_2 : vmwareRetrievePropertiesVMResp2,
@@ -6515,7 +6520,6 @@ vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
  vmwareRetrievePropertiesVMReq2_hwdev : vmwareRetrievePropertiesVMResp2_hwdev,
  vmwareRetrievePropertiesVMReq2_hwdev2 : vmwareRetrievePropertiesVMResp2_hwdev,
  vmwareRetrievePropertiesVMReq35_hwdev : vmwareRetrievePropertiesVMResp2,
- vmwareRetrievePropertiesVMReq35_hwdev2 : vmwareRetrievePropertiesVMResp2,
  (vmwarePowerOnVMTaskReqTempl % 'vm-4739') :
      vmwarePowerOnVMTaskResp % (436, 'task-51'),
  (vmwarePowerOnVMTaskReqTempl2 % 'vm-1201') :
@@ -6528,20 +6532,3 @@ vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
 DUMMY_CERT = '-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n'
 DUMMY_KEY = '-----BEGIN PRIVATE KEY-----\n-----END PRIVATE KEY-----\n'
 
-x509_cert = """\
------BEGIN CERTIFICATE-----
-MIICizCCAXOgAwIBAgIBATANBgkqhkiG9w0BAQUFADAAMB4XDTA5MDYwNDE0NDk1
-MloXDTA5MDYxMTE0NDk1MlowADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
-ggEBAJ1IZaAvkz7wMT41AbdG0IyHLTVsYQ+TmZzf/QO5I0x9bEX/L3gnalR1487M
-grVozAfjKi2DiNG0mSgoflFBbkUmT4Tfr+iaX99MgBX7LqBcGnsj5HwQHgetdhaS
-6yTh5k72hnERZ11g/vmZW0RRNd6bAEUG3Ls8obe91YMYxcoupSURILKxxTSl3bQY
-OThn1WWud5ac+IiJyxpX3OmYViVJBNbYXuxWpxVpfwtRxs2GRG2gIcV4pN2eEszy
-UHiqSNa9hTinc+irPErAyC0bopw59YkHmz/akU3if/I12xiK5LqfcU/R//pQ059a
-5XOQmJ2ElCSGA6wL9X69V/FywhMCAwEAAaMQMA4wDAYDVR0TAQH/BAIwADANBgkq
-hkiG9w0BAQUFAAOCAQEAHXi47wYthgCRmbgIheqCIQNGyWSCFbbZn9Az4NkaAlIn
-bu/LrWx1xb3ekz4iBXyEbBQ6sr4ersA3JOfaJ35I39L5myxG7n4P5Abk9YNS5ZFL
-FzX1QwkX4f6/J+OcysXAn3HiHdNv09QAr0JPCfFPOtrW8lDlu9KnZdt1LCiNEl2z
-fCXKzJKu+F0QSq1IVCLRBGd2kLmeQwNZwPJPeYetyK0T1xuve9PMBmhspl9orCqg
-HV4PwrVMYsEGVLrCuwJJknDY/1daJW/z81DI5tdyYFW9FntRy9UnB785S3vUkDso
-hNwHzg9ZFyHDDWfqYAMrpZ3WKchD1Se6TyGZxan/sA==
------END CERTIFICATE-----"""

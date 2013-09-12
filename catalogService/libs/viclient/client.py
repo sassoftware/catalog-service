@@ -475,22 +475,30 @@ class VimService(object):
 
         return nicSpec
 
+    def createCdromConfigSpec_passthrough(self, vmmor, controller):
+        vm = self._getVm(vmmor)
+        unitNumber = self._getNextCdromUnitNumber(vm)
+        cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
+        cdSpec.set_element_operation('add')
+
+        cdDeviceBacking = ns0.VirtualCdromRemotePassthroughBackingInfo_Def('').pyclass()
+        cdDeviceBacking.set_element_deviceName('cdrom')
+        cdDeviceBacking.set_element_exclusive(False)
+
+        cdrom = ns0.VirtualCdrom_Def('').pyclass()
+        cdrom.set_element_backing(cdDeviceBacking)
+        cdrom.set_element_key(-1)
+        cdrom.set_element_controllerKey(controller.get_element_key())
+        cdrom.set_element_unitNumber(unitNumber)
+        cdSpec.set_element_device(cdrom)
+        return cdSpec
+
     def createCdromConfigSpec(self, filename, vmmor, controller, datastoreRef,
                 datastoreVolume):
-        vmmor = _strToMor(vmmor, 'VirtualMachine')
+        vm = self._getVm(vmmor)
+        unitNumber = self._getNextCdromUnitNumber(vm)
+        vmName = vm['config.name']
         datastoreRef = _strToMor(datastoreRef, 'Datastore')
-        # Grab the VM's configuration
-        vm = self.getVirtualMachines(['config.hardware.device', 'config.name'],
-            root = vmmor)
-        vmName = vm[vmmor]['config.name']
-        devices = vm[vmmor]['config.hardware.device']
-        devices = devices.get_element_VirtualDevice()
-        cdromUnitNumbers = [ x.get_element_unitNumber()
-                for x in devices if x.typecode.type[1] == 'VirtualCdrom' ]
-        if not cdromUnitNumbers:
-            unitNumber = 0
-        else:
-            unitNumber = max(cdromUnitNumbers) + 1
 
         cdSpec = ns0.VirtualDeviceConfigSpec_Def('').pyclass()
         cdSpec.set_element_operation('add')
@@ -506,6 +514,24 @@ class VimService(object):
         cdrom.set_element_unitNumber(unitNumber)
         cdSpec.set_element_device(cdrom)
         return cdSpec
+
+    def _getVm(self, vmmor):
+        vmmor = _strToMor(vmmor, 'VirtualMachine')
+        # Grab the VM's configuration
+        vms = self.getVirtualMachines(['config.hardware.device', 'config.name'],
+            root = vmmor)
+        return vms[vmmor]
+
+    def _getNextCdromUnitNumber(self, vm):
+        devices = vm['config.hardware.device']
+        devices = devices.get_element_VirtualDevice()
+        cdromUnitNumbers = [ x.get_element_unitNumber()
+                for x in devices if x.typecode.type[1] == 'VirtualCdrom' ]
+        if not cdromUnitNumbers:
+            unitNumber = 0
+        else:
+            unitNumber = max(cdromUnitNumbers) + 1
+        return unitNumber
 
     def disconnectCdrom(self, vmmor, cdrom):
         cdrom.get_element_connectable().set_element_connected(False)
