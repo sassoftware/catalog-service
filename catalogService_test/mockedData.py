@@ -1061,6 +1061,16 @@ xml_newInstance6 = """\
     <extraGunk>0</extraGunk>
   </securityGroups>
   <userData>my user data</userData>
+  <tags list="true">
+    <item>
+        <name>field1</name>
+        <value>value1</value>
+    </item>
+    <item>
+        <name>field2</name>
+        <value>value2</value>
+    </item>
+  </tags>
 </newInstance>
 """
 
@@ -1134,6 +1144,16 @@ xml_newImageVMware1 = """\
   <dataStore-domain-c5>datastore-18</dataStore-domain-c5>
   <resourcePool-domain-c5>resgroup-50</resourcePool-domain-c5>
   <diskProvisioning>thin</diskProvisioning>
+  <tags list="true">
+    <item>
+        <name>field1</name>
+        <value>value1</value>
+    </item>
+    <item>
+        <name>field2</name>
+        <value>value2</value>
+    </item>
+  </tags>
 </newImage>
 """
 

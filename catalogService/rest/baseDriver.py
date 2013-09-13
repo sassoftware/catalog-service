@@ -905,8 +905,7 @@ class BaseDriver(object):
         return self._nodeFactory.newInstanceLaunchJob(job)
 
     def getLaunchInstanceParameters(self, image, descriptorData):
-        params = dict((x.getName(), x.getValue())
-            for x in descriptorData.getFields())
+        params = self._descriptorDataAsDict(descriptorData)
         if params.get('instanceName') is None:
             params['instanceName'] = self.getInstanceNameFromImage(image)
         if params.get('instanceDescription') is None:
@@ -916,10 +915,23 @@ class BaseDriver(object):
         return params
 
     def getDeployImageParameters(self, image, descriptorData):
-        params = dict((x.getName(), x.getValue())
-            for x in descriptorData.getFields())
+        params = self._descriptorDataAsDict(descriptorData)
         # Make sure we use the right image id
         params.update(imageId = image.getImageId())
+        return params
+
+    @classmethod
+    def _descriptorDataAsDict(cls, descriptorData):
+        params = {}
+        fields = descriptorData.getFields()
+        for field in fields:
+            if hasattr(field, 'getValue'):
+                fieldName = field.getName()
+                params[fieldName] = field.getValue()
+            else:
+                fieldName = field._nodeDescriptor.name
+                vals = params[fieldName] = []
+                vals.extend(cls._descriptorDataAsDict(x) for x in field)
         return params
 
     def getNewInstanceParameters(self, job, image, descriptorData, launchParams):

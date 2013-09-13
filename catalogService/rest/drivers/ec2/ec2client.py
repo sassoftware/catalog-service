@@ -720,6 +720,8 @@ conary-proxies=%s
             if reqInstDescription:
                 self._tagResource(job, inst, 'Description',
                         reqInstDescription + suffix)
+            for tagDict in launchParams.get('tags', []):
+                self._tagResource(job, inst, tagDict['name'], tagDict['value'])
 
     def _launchInstancesHelper(self, job, image, launchParams):
         imageId = launchParams.pop('imageId')
@@ -945,6 +947,7 @@ conary-proxies=%s
             ],
             type = "str",
             constraints = dict(constraintName = 'length', value = 256))
+        self.addTagsDescriptor(descr)
         return descr
 
     def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
@@ -955,6 +958,36 @@ conary-proxies=%s
         descr.setDisplayName(title)
         descr.addDescription(title)
         self.drvImageDeploymentDescriptorCommonFields(descr)
+        self.addTagsDescriptor(descr)
+        return descr
+
+    def addTagsDescriptor(self, descr):
+        kvdesc = descr.__class__()
+        kvdesc.setId("tag")
+        # XXX there is a bug in the UI, it looks like it hardcodes
+        # 'item' here
+        #kvdesc.setRootElement('tag')
+        kvdesc.setRootElement('item')
+        kvdesc.setDisplayName("Additional tag")
+        kvdesc.addDescription("Additional tag")
+        # Constraints documented here:
+        # http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html
+        kvdesc.addDataField('name', type="str", required=True,
+                descriptions="Tag name",
+                constraints=[
+                    dict(constraintName='length', value=127)
+                    ])
+        kvdesc.addDataField('value', type="str", required=True,
+                descriptions="Tag value",
+                constraints=[
+                    dict(constraintName='length', value=255)
+                    ])
+        descr.addDataField('tags', type=descr.ListType(kvdesc),
+                descriptions="Additional tags",
+                constraints=[
+                    dict(constraintName="uniqueKey", value="name"),
+                    dict(constraintName="maxLength", value="9"),
+                    ])
         return descr
 
     class ImageData(baseDriver.BaseDriver.ImageData):
@@ -1259,6 +1292,8 @@ conary-proxies=%s
         if imageName is None:
             imageName = "%s_%s" % (image.getBaseFileName(), image.getBuildId())
         self._tagResource(job, img, 'Name', imageName)
+        for tagDict in extraParams.get('tags', []):
+            self._tagResource(job, img, tagDict['name'], tagDict['value'])
         return amiId
 
     def _tagResource(self, job, resource, tagName, tagValue):
