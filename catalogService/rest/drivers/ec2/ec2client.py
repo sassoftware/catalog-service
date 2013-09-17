@@ -1390,8 +1390,9 @@ conary-proxies=%s
         # Add snapshot hash to image name as well, in case we want to
         # re-register later
         snapshotHash = snapshot.id.rsplit('-', 1)[-1]
-        name = "%s_%s-%s" % (image.getBaseFileName(), image.getBuildId(),
-                snapshotHash)
+        name = "%s-%s_%s-%s" % (image.getBaseFileName(),
+                time.strftime("%Y%m%d%H%M", time.gmtime()),
+                image.getBuildId(), snapshotHash)
         bdm[devName] = bec2.blockdevicemapping.BlockDeviceType(
                 snapshot_id=snapshot.id, delete_on_termination=True)
         architecture = image.getArchitecture() or "x86"
