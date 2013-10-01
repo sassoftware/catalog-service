@@ -602,7 +602,7 @@ class HandlerTest(testbase.TestCase):
             ['imageId', 'instanceName', 'instanceDescription',
              'instanceType', 'availabilityZone',
              'minCount', 'maxCount', 'keyName',
-             'securityGroups', 'remoteIp', 'userData'])
+             'securityGroups', 'remoteIp', 'userData', 'tags'])
         ftypes = [ df.type for df in dsc.getDataFields() ]
         self.failUnlessEqual([ ftypes[0], ftypes[1], ftypes[2],
                 ftypes[5], ftypes[6], ftypes[9],
@@ -640,13 +640,13 @@ class HandlerTest(testbase.TestCase):
                     ('build-cluster', {None: 'private group for rMake build cluster in ec2'})
                 ]
             ])
-        expMultiple = [None, None, None, None, None, None, None, None, True, None, None]
+        expMultiple = [None, None, None, None, None, None, None, None, True, None, None, None]
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, None, True, True, None, True, None, None] )
+            [ True, True, None, True, None, True, True, None, True, None, None, None] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, None, None, None, None, True, None] )
+            [ True, None, None, None, None, None, None, None, None, True, None, None] )
         prefix = self.makeUri(client, "help/targets/drivers/%s/launch/" % self.cloudType)
         self.failUnlessEqual([ df.helpAsDict for df in dsc.getDataFields() ],
             [
@@ -660,11 +660,12 @@ class HandlerTest(testbase.TestCase):
                 {None: prefix + 'keyPair.html'},
                 {None: prefix + 'securityGroups.html'},
                 {},
-                {None: prefix + 'userData.html'}
+                {None: prefix + 'userData.html'},
+                {},
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
             [None, None, None, 'm1.small', None, 1, 1, None,
-                ['SAS Demo'], None, None])
+                ['SAS Demo'], None, None, None])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
             [
@@ -680,7 +681,8 @@ class HandlerTest(testbase.TestCase):
                 {None: 'SSH Key Pair', 'fr_FR' : 'Paire de clefs' },
                 {None: 'Security Groups', 'fr_FR' : u"Groupes de sécurité"},
                 {None: 'Remote IP address allowed to connect (if security group is catalog-default)'},
-                {None: 'User Data', 'fr_FR' : 'Data utilisateur'}])
+                {None: 'User Data', 'fr_FR' : 'Data utilisateur'},
+                {None: 'Additional tags'},])
         self.failUnlessEqual([ df.constraintsPresentation for df in dsc.getDataFields() ],
             [
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
@@ -693,6 +695,7 @@ class HandlerTest(testbase.TestCase):
                 [], [],
                 [{'constraintName': 'length', 'value': 128}],
                 [{'constraintName': 'length', 'value': 256}],
+                [{'constraintName': 'maxLength', 'value': 9}],
             ])
 
     def testNewInstances(self):
