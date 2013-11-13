@@ -905,6 +905,14 @@ class VMwareClient(baseDriver.BaseDriver):
             # annotation field for now
             reconfigVmParams['annotation'] = "rba-uuid: %s" % uuid
 
+        conaryProxies = ' '.join(x.partition(':')[0]
+                for x in self.zoneAddresses)
+        zoneAddresses = ' '.join(self.zoneAddresses)
+
+        vAppConfig = self.client.getMoRefProp(vmMor, 'config.vAppConfig')
+        reconfigVmParams['vAppConfig'] = self._setVappConfig(vAppConfig,
+                conaryProxies=conaryProxies, zoneAddresses=zoneAddresses)
+
         if reconfigVmParams:
             self._msg(job, 'Reconfiguring VM')
             self.client.reconfigVM(vmMor, reconfigVmParams)
@@ -1045,6 +1053,65 @@ class VMwareClient(baseDriver.BaseDriver):
         self._msg(job, 'Instance launched')
         return uuid
 
+    def _setVappConfig(self, currentVAppConfig, bootUuid=None,
+            conaryProxies=None, zoneAddresses=None,
+            certHash=None, certData=None, rootSshKeys=None):
+        if currentVAppConfig is not None and hasattr(currentVAppConfig, '_property'):
+            currentProperties = currentVAppConfig.get_element_property()
+        else:
+            currentProperties = []
+        currentPropMap = dict((x.Label, x) for x in currentProperties)
+        currentPropKeys = set(x.Key for x in currentProperties)
+
+        vAppConfigSpec = ns0.VmConfigSpec_Def('').pyclass()
+        vAppConfigSpec.set_element_ovfEnvironmentTransport(['iso', 'com.vmware.guestInfo'])
+        properties = []
+        vAppConfigSpec.set_element_property(properties)
+        propValues = [
+            ('com.sas.app-engine.boot-uuid', 'string', '', bootUuid),
+            # Proxies and zones will have the right values set as
+            # default too
+            ('com.sas.app-engine.conary.proxy', 'string',
+                conaryProxies, conaryProxies),
+            ('com.sas.app-engine.zone-addresses', 'string',
+                zoneAddresses, zoneAddresses),
+            ('com.sas.app-engine.wbem.cert.hash.0', 'string', '', certHash),
+            ('com.sas.app-engine.wbem.cert.data.0', 'string', '', certData),
+            ('com.sas.app-engine.ssh-keys.root', 'string', '', rootSshKeys),
+            ('com.sas.app-engine.update-on-boot', 'boolean', 'False', 'False'),
+        ]
+        for idx, (propLabel, propType, defaultValue, propValue) in enumerate(propValues):
+            if propValue is None:
+                propValue = (defaultValue or '')
+            prop = currentPropMap.get(propLabel)
+            if prop:
+                # If nothing changed, don't bother
+                if (prop.get_element_type() == propType and
+                        prop.get_element_value() == propValue and
+                        prop.get_element_defaultValue() == defaultValue):
+                    continue
+                operation = 'edit'
+                propKey = prop.Key
+            else:
+                operation = 'add'
+                propKey = idx
+                # Find a unique key
+                while propKey in currentPropKeys:
+                    propKey += 1
+                currentPropKeys.add(propKey)
+            propSpec = vAppConfigSpec.new_property()
+            properties.append(propSpec)
+            propInfo = propSpec.new_info()
+            propSpec.set_element_info(propInfo)
+            propSpec.set_element_operation(operation)
+            propInfo.set_element_id(propLabel)
+            propInfo.set_element_key(propKey)
+            propInfo.set_element_label(propLabel)
+            propInfo.set_element_value(propValue)
+            propInfo.set_element_defaultValue(defaultValue)
+            propInfo.set_element_type(propType)
+        return vAppConfigSpec
+
     def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
             computeResourceMor, numCPUs=1, memoryMB=256):
         from catalogService.libs.viclient import client
@@ -1057,7 +1124,6 @@ class VMwareClient(baseDriver.BaseDriver):
         defaultDevices = self.client.getDefaultDevices(cr, hostMor)
         controllerMor = self.client._getIdeController(defaultDevices)
 
-
         conaryProxies = ' '.join(x.partition(':')[0]
                 for x in self.zoneAddresses)
         zoneAddresses = ' '.join(self.zoneAddresses)
@@ -1065,31 +1131,11 @@ class VMwareClient(baseDriver.BaseDriver):
         # Load the cert, we need the hash
         certHash = self.computeX509CertHash(certFile)
 
-        vAppConfigSpec = ns0.VmConfigSpec_Def('').pyclass()
-        vAppConfigSpec.set_element_ovfEnvironmentTransport(['iso', 'com.vmware.guestInfo'])
-        properties = []
-        vAppConfigSpec.set_element_property(properties)
-        propValues = [
-                ('com.sas.app-engine.boot-uuid', bootUuid),
-                ('com.sas.app-engine.conary.proxy', conaryProxies),
-                ('com.sas.app-engine.zone-addresses', zoneAddresses),
-                ('com.sas.app-engine.wbem.cert.hash.0', certHash),
-                ('com.sas.app-engine.wbem.cert.data.0', file(certFile).read()),
-        ]
-        if self._rootSshKeys:
-            propValues.append(('com.sas.app-engine.ssh-keys.root', self._rootSshKeys))
-
-        for idx, (propLabel, propValue) in enumerate(propValues):
-            propSpec = vAppConfigSpec.new_property()
-            properties.append(propSpec)
-            propInfo = propSpec.new_info()
-            propSpec.set_element_info(propInfo)
-            propSpec.set_element_operation('add')
-            propInfo.set_element_id(propLabel)
-            propInfo.set_element_key(idx)
-            propInfo.set_element_label(propLabel)
-            propInfo.set_element_value(propValue)
-            propInfo.set_element_type('string')
+        vAppConfig = self.client.getMoRefProp(vmMor, 'config.vAppConfig')
+        vAppConfigSpec = self._setVappConfig(vAppConfig, bootUuid=bootUuid,
+                conaryProxies=conaryProxies, zoneAddresses=zoneAddresses,
+                certHash=certHash, certData=file(certFile).read(),
+                rootSshKeys=self._rootSshKeys)
 
         try:
             self._msg(job, 'Setting initial configuration')

@@ -18,6 +18,14 @@
 
 import StringIO
 import itertools
+from lxml import etree
+
+def _E(tag, attributes={}, elements=[], text=None):
+    ret = etree.Element(tag, **attributes)
+    if text is not None:
+        ret.text = unicode(text)
+    ret.extend(elements)
+    return ret
 
 class MultiResponse(object):
     def __init__(self, rlist, dbg=0):
@@ -94,7 +102,7 @@ def xmlEscape(data):
     ret = etree.tostring(element, xml_declaration=None, encoding="UTF-8")[3:-4]
     return ret
 
-x509_cert = """\
+x509_cert = """\'
 -----BEGIN CERTIFICATE-----
 MIICizCCAXOgAwIBAgIBATANBgkqhkiG9w0BAQUFADAAMB4XDTA5MDYwNDE0NDk1
 MloXDTA5MDYxMTE0NDk1MlowADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
@@ -2875,15 +2883,21 @@ _vmwareRespRetrievePropertiesTemplate = (
  '</soapenv:Envelope>'
 )
 
-_vmwareReturnValSimpleTemplate = (
+_vmwareReturnValSimpleTemplate0 = (
   '<returnval>'
     '<obj type="%(klass)s">%(value)s</obj>'
     '<propSet>'
       '<name>%(path)s</name>'
-      '<val type="%(rklass)s" xsi:type="%(rtype)s">%(propval)s</val>'
+      '<val type="%(rklass)s"{extraValAttrs}>%(propval)s</val>'
     '</propSet>'
   '</returnval>'
 )
+
+_vmwareReturnValSimple1Template = _vmwareReturnValSimpleTemplate0.format(
+    extraValAttrs='')
+
+_vmwareReturnValSimpleTemplate = _vmwareReturnValSimpleTemplate0.format(
+    extraValAttrs=' xsi:type="%(rtype)s"')
 
 vmwareReqGetVirtualMachineProps1 = _vmwareReqRetrievePropertiesTemplate % (
    '<propSet xsi:type="ns1:PropertySpec">'
@@ -3827,7 +3841,7 @@ Content-Length: 432
 </soapenv:Envelope>
 """
 
-vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>1024</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromRemotePassthroughBackingInfo"><ns1:deviceName>cdrom</ns1:deviceName><ns1:exclusive>false</ns1:exclusive></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange><vAppConfig xsi:type="ns1:VmConfigSpec"><property><operation>add</operation><info><ns1:key>0</ns1:key><ns1:id>com.sas.app-engine.boot-uuid</ns1:id><ns1:label>com.sas.app-engine.boot-uuid</ns1:label><ns1:type>string</ns1:type><ns1:value>00000000-0000-0000-0000-00000000b007</ns1:value></info></property><property><operation>add</operation><info><ns1:key>1</ns1:key><ns1:id>com.sas.app-engine.conary.proxy</ns1:id><ns1:label>com.sas.app-engine.conary.proxy</ns1:label><ns1:type>string</ns1:type><ns1:value>1.2.3.4 2.3.4.5</ns1:value></info></property><property><operation>add</operation><info><ns1:key>2</ns1:key><ns1:id>com.sas.app-engine.zone-addresses</ns1:id><ns1:label>com.sas.app-engine.zone-addresses</ns1:label><ns1:type>string</ns1:type><ns1:value>1.2.3.4:5678 2.3.4.5:6789</ns1:value></info></property><property><operation>add</operation><info><ns1:key>3</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.hash.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.hash.0</ns1:label><ns1:type>string</ns1:type><ns1:value>543b6ca4</ns1:value></info></property><property><operation>add</operation><info><ns1:key>4</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.data.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.data.0</ns1:label><ns1:type>string</ns1:type><ns1:value>%s</ns1:value></info></property><property><operation>add</operation><info><ns1:key>5</ns1:key><ns1:id>com.sas.app-engine.ssh-keys.root</ns1:id><ns1:label>com.sas.app-engine.ssh-keys.root</ns1:label><ns1:type>string</ns1:type><ns1:value>bleepy</ns1:value></info></property><ns1:ovfEnvironmentTransport>iso</ns1:ovfEnvironmentTransport><ns1:ovfEnvironmentTransport>com.vmware.guestInfo</ns1:ovfEnvironmentTransport></vAppConfig></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>' % x509_cert
+vmwareReconfigVMTaskReq2 = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:ReconfigVM_Task><_this type="VirtualMachine" xsi:type="ns1:ManagedObjectReference">vm-4739</_this><spec><ns1:numCPUs>1</ns1:numCPUs><ns1:memoryMB>1024</ns1:memoryMB><deviceChange xsi:type="ns1:VirtualDeviceConfigSpec"><operation>add</operation><device xsi:type="ns1:VirtualCdrom"><ns1:key>-1</ns1:key><backing xsi:type="ns1:VirtualCdromRemotePassthroughBackingInfo"><ns1:deviceName>cdrom</ns1:deviceName><ns1:exclusive>false</ns1:exclusive></backing><ns1:controllerKey>200</ns1:controllerKey><ns1:unitNumber>0</ns1:unitNumber></device></deviceChange><vAppConfig xsi:type="ns1:VmConfigSpec"><property><operation>edit</operation><info><ns1:key>0</ns1:key><ns1:id>com.sas.app-engine.boot-uuid</ns1:id><ns1:label>com.sas.app-engine.boot-uuid</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue></ns1:defaultValue><ns1:value>00000000-0000-0000-0000-00000000b007</ns1:value></info></property><property><operation>edit</operation><info><ns1:key>1</ns1:key><ns1:id>com.sas.app-engine.conary.proxy</ns1:id><ns1:label>com.sas.app-engine.conary.proxy</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue>1.2.3.4 2.3.4.5</ns1:defaultValue><ns1:value>1.2.3.4 2.3.4.5</ns1:value></info></property><property><operation>edit</operation><info><ns1:key>2</ns1:key><ns1:id>com.sas.app-engine.zone-addresses</ns1:id><ns1:label>com.sas.app-engine.zone-addresses</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue>1.2.3.4:5678 2.3.4.5:6789</ns1:defaultValue><ns1:value>1.2.3.4:5678 2.3.4.5:6789</ns1:value></info></property><property><operation>add</operation><info><ns1:key>3</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.hash.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.hash.0</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue></ns1:defaultValue><ns1:value>543b6ca4</ns1:value></info></property><property><operation>add</operation><info><ns1:key>4</ns1:key><ns1:id>com.sas.app-engine.wbem.cert.data.0</ns1:id><ns1:label>com.sas.app-engine.wbem.cert.data.0</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue></ns1:defaultValue><ns1:value>%s</ns1:value></info></property><property><operation>add</operation><info><ns1:key>5</ns1:key><ns1:id>com.sas.app-engine.ssh-keys.root</ns1:id><ns1:label>com.sas.app-engine.ssh-keys.root</ns1:label><ns1:type>string</ns1:type><ns1:defaultValue></ns1:defaultValue><ns1:value>bleepy</ns1:value></info></property><property><operation>add</operation><info><ns1:key>6</ns1:key><ns1:id>com.sas.app-engine.update-on-boot</ns1:id><ns1:label>com.sas.app-engine.update-on-boot</ns1:label><ns1:type>boolean</ns1:type><ns1:defaultValue>False</ns1:defaultValue><ns1:value>False</ns1:value></info></property><ns1:ovfEnvironmentTransport>iso</ns1:ovfEnvironmentTransport><ns1:ovfEnvironmentTransport>com.vmware.guestInfo</ns1:ovfEnvironmentTransport></vAppConfig></spec></ns1:ReconfigVM_Task></SOAP-ENV:Body></SOAP-ENV:Envelope>' % x509_cert
 
 vmwareReconfigVMTaskReqTemplate = (
 '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
@@ -3874,6 +3888,76 @@ _vmwareReconfigVMTaskReq5 = (vmwareReconfigVMTaskReqTemplate % dict(
             '<ns1:addressType>generated</ns1:addressType>'
           '</device>'
         '</deviceChange>'
+        '<vAppConfig xsi:type="ns1:VmConfigSpec">'
+          '<property>'
+            '<operation>edit</operation>'
+            '<info>'
+              '<ns1:key>1</ns1:key>'
+              '<ns1:id>com.sas.app-engine.conary.proxy</ns1:id>'
+              '<ns1:label>com.sas.app-engine.conary.proxy</ns1:label>'
+              '<ns1:type>string</ns1:type>'
+              '<ns1:defaultValue>1.2.3.4 2.3.4.5</ns1:defaultValue>'
+              '<ns1:value>1.2.3.4 2.3.4.5</ns1:value>'
+            '</info>'
+          '</property>'
+          '<property>'
+            '<operation>edit</operation>'
+            '<info>'
+              '<ns1:key>2</ns1:key>'
+              '<ns1:id>com.sas.app-engine.zone-addresses</ns1:id>'
+              '<ns1:label>com.sas.app-engine.zone-addresses</ns1:label>'
+              '<ns1:type>string</ns1:type>'
+              '<ns1:defaultValue>1.2.3.4:5678 2.3.4.5:6789</ns1:defaultValue>'
+              '<ns1:value>1.2.3.4:5678 2.3.4.5:6789</ns1:value>'
+            '</info>'
+          '</property>'
+          '<property>'
+            '<operation>add</operation>'
+            '<info>'
+              '<ns1:key>3</ns1:key>'
+              '<ns1:id>com.sas.app-engine.wbem.cert.hash.0</ns1:id>'
+              '<ns1:label>com.sas.app-engine.wbem.cert.hash.0</ns1:label>'
+              '<ns1:type>string</ns1:type>'
+              '<ns1:defaultValue></ns1:defaultValue>'
+              '<ns1:value></ns1:value>'
+            '</info>'
+          '</property>'
+          '<property>'
+            '<operation>add</operation>'
+            '<info>'
+              '<ns1:key>4</ns1:key>'
+              '<ns1:id>com.sas.app-engine.wbem.cert.data.0</ns1:id>'
+              '<ns1:label>com.sas.app-engine.wbem.cert.data.0</ns1:label>'
+              '<ns1:type>string</ns1:type>'
+              '<ns1:defaultValue></ns1:defaultValue>'
+              '<ns1:value></ns1:value>'
+            '</info>'
+          '</property>'
+          '<property>'
+            '<operation>add</operation>'
+            '<info>'
+              '<ns1:key>5</ns1:key>'
+              '<ns1:id>com.sas.app-engine.ssh-keys.root</ns1:id>'
+              '<ns1:label>com.sas.app-engine.ssh-keys.root</ns1:label>'
+              '<ns1:type>string</ns1:type>'
+              '<ns1:defaultValue></ns1:defaultValue>'
+              '<ns1:value></ns1:value>'
+            '</info>'
+          '</property>'
+          '<property>'
+            '<operation>add</operation>'
+            '<info>'
+              '<ns1:key>6</ns1:key>'
+              '<ns1:id>com.sas.app-engine.update-on-boot</ns1:id>'
+              '<ns1:label>com.sas.app-engine.update-on-boot</ns1:label>'
+              '<ns1:type>boolean</ns1:type>'
+              '<ns1:defaultValue>False</ns1:defaultValue>'
+              '<ns1:value>False</ns1:value>'
+            '</info>'
+          '</property>'
+          '<ns1:ovfEnvironmentTransport>iso</ns1:ovfEnvironmentTransport>'
+          '<ns1:ovfEnvironmentTransport>com.vmware.guestInfo</ns1:ovfEnvironmentTransport>'
+        '</vAppConfig>'
     )
 ))
 
@@ -3998,6 +4082,81 @@ vmwareRetrievePropertiesVMNetworkResp1 = HTTPResponse("""\
 </soapenv:Body>
 </soapenv:Envelope>
 """)
+
+vmwareRetrievePropertiesVMvAppConfigReq1 = \
+    _vmwareReqRetrievePropertiesSimpleTemplate % dict(
+        klass = 'VirtualMachine', path = 'config.vAppConfig', value = 'vm-987')
+
+vmwareRetrievePropertiesVMvAppConfigReq2 = \
+    _vmwareReqRetrievePropertiesSimpleTypedTemplate % dict(
+        klass = 'VirtualMachine', path = 'config.vAppConfig', value = 'vm-987',
+        rklass = "ns1:ManagedObjectReference")
+
+vmwareRetrievePropertiesVMvAppConfigReq3 = \
+    _vmwareReqRetrievePropertiesSimpleTemplate % dict(
+        klass = 'VirtualMachine', path = 'config.vAppConfig', value = 'vm-4739')
+
+vmwareRetrievePropertiesVMvAppConfigReq4 = \
+    _vmwareReqRetrievePropertiesSimpleTypedTemplate % dict(
+        klass = 'VirtualMachine', path = 'config.vAppConfig', value = 'vm-4739',
+        rklass = "ns1:ManagedObjectReference")
+
+_product0 = _E('product', elements = [
+    _E('key', text=0),
+    _E('classId'),
+    _E('instanceId'),
+    _E('name', text='skag-k2-x86_64'),
+    _E('vendor', text='SAS'),
+    _E('version'),
+    _E('fullVersion'),
+    _E('productUrl'),
+    _E('appUrl'),
+    ])
+
+_ipAssignment0 = _E('ipAssignment', elements = [
+    _E('ipAllocationPolicy', text='fixedPolicy'),
+    _E('supportedIpProtocol', text='IPv4'),
+    _E('ipProtocol', text='IPv4'),
+])
+
+def _property(key, label, type, defaultValue, value):
+    el = _E('property', elements = [
+        _E('key', text=key),
+        _E('classId'),
+        _E('instanceId'),
+        _E('id', text=label),
+        _E('category'),
+        _E('label', text=label),
+        _E('type', text=type),
+        _E('userConfigurable', text="true"),
+        _E('defaultValue', text=defaultValue),
+        _E('value', text=value),
+        _E('description'),
+        ])
+    return el
+
+vmwareRetrievePropertiesVMvAppConfigResp1 = HTTPResponse(
+    _vmwareRespRetrievePropertiesTemplate % (
+      _vmwareReturnValSimple1Template % dict(
+        klass = 'VirtualMachine',
+        path = 'config.vAppConfig',
+        value = 'vm-897',
+        rklass = 'VmConfigInfo',
+        propval = ''.join(etree.tostring(x)
+            for x in [ _product0,
+                _property(0, 'com.sas.app-engine.boot-uuid', 'string', '', ''),
+                _property(1, 'com.sas.app-engine.conary.proxy', 'string', '', ''),
+                _property(2, 'com.sas.app-engine.zone-addresses', 'string', 'a', 'b'),
+                _ipAssignment0,
+                _E('installBootRequired', text='false'),
+                _E('installBootStopDelay', text='0'),
+                ]),
+            )
+    ).replace('val type', 'val xsi:type')
+)
+
+vmwareRetrievePropertiesVMvAppConfigResp2 = HTTPResponse(
+    vmwareRetrievePropertiesVMvAppConfigResp1.data.replace('vm-897', 'vm-4739'))
 
 vmwareRetrievePropertiesDVSConfigReq = _vmwareReqRetrievePropertiesSimpleTemplate % \
     dict(klass = 'DistributedVirtualPortgroup',
@@ -6461,6 +6620,18 @@ vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
     vmwareRetrievePropertiesTaskResp,
  (vmwareRetrievePropertiesTaskReq % 'task-6536'):
     vmwareRetrievePropertiesTaskResp,
+
+  vmwareRetrievePropertiesVMvAppConfigReq1 :
+      vmwareRetrievePropertiesVMvAppConfigResp1,
+
+  vmwareRetrievePropertiesVMvAppConfigReq2 :
+      vmwareRetrievePropertiesVMvAppConfigResp1,
+
+  vmwareRetrievePropertiesVMvAppConfigReq3 :
+      vmwareRetrievePropertiesVMvAppConfigResp2,
+
+  vmwareRetrievePropertiesVMvAppConfigReq4 :
+      vmwareRetrievePropertiesVMvAppConfigResp2,
 
   vmwareRetrievePropertiesDVSConfigReq :
     vmwareRetrievePropertiesDVSConfigResp,
