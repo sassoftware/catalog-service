@@ -1361,13 +1361,10 @@ conary-proxies=%s
         instances = conn.get_all_instances(instance_ids=[myInstanceId])
         instance = instances[0].instances[0]
 
-        devName, internalDev = self._findOpenBlockDevice(instance)
         vol = self._createVolume(job, size=volumeSize, zone=instance.placement)
         self._msg(job, "Created EBS volume %s" % vol.id)
         try:
-            self._msg(job, "Attaching EBS volume")
-            vol.attach(instance.id, devName)
-
+            internalDev = self._attachVolume(job, instance, vol)
             stream = self.streamProgressWrapper(job, stream,
                     "Writing filesystem image")
             try:
@@ -1381,6 +1378,32 @@ conary-proxies=%s
         finally:
             self._msg(job, 'Deleting volume %s' % vol.id)
             conn.delete_volume(vol.id)
+
+    def _attachVolume(self, job, instance, vol):
+        timeout = 4
+        devNum = 0
+        while 1:
+            try:
+                devName, internalDev, devNum = self._findOpenBlockDevice(
+                        instance, devNum)
+                if devName is not None:
+                    self._msg(job, "Attaching EBS volume as %s" % devName)
+                    vol.attach(instance.id, devName)
+                    return internalDev
+                # This will queue up image deployments
+                self._msg(job, "No available device found; waiting %s seconds" % timeout)
+                time.sleep(timeout)
+                timeout *= 2
+                instance = self.client.get_all_instances(
+                        instance_ids=[instance.id])[0].instances[0]
+                devNum = 0
+                continue
+            except EC2ResponseError, e:
+                # APPENG-2951: we may attempt to use a device already in use
+                if self._getErrorCode(e) != 'InvalidParameterValue':
+                    raise
+                devNum += 1
+                continue
 
     def _registerEBSBackedImage(self, job, image, snapshot):
         self._msg(job, "Registering EBS-backed image")
@@ -1470,13 +1493,13 @@ conary-proxies=%s
         return instanceId
 
     @classmethod
-    def _findOpenBlockDevice(cls, instance):
+    def _findOpenBlockDevice(cls, instance, start):
         bmap = instance.block_device_mapping
-        for i in range(15):
+        for i in range(start, 15):
             devName = "/dev/sd%s" % chr(ord('f') + i)
             if devName not in bmap:
-                return devName, '/dev/xvd%s' % chr(ord('j') + i)
-        return None, None
+                return devName, '/dev/xvd%s' % chr(ord('j') + i), i
+        return None, None, None
 
     def _getFilesystemImage(self, job, image, stream):
         compressed = 'z'
