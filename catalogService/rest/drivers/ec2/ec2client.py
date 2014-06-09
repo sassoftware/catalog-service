@@ -282,6 +282,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <allowFileContent>true</allowFileContent>
       <help href='configuration/certificateData.html'/>
+      <multiline>true</multiline>
     </field>
     <field>
       <name>certificateKeyData</name>
@@ -299,6 +300,7 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <allowFileContent>true</allowFileContent>
       <help href='configuration/certificateKeyData.html'/>
+      <multiline>true</multiline>
     </field>
     <field>
       <name>s3Bucket</name>

@@ -607,6 +607,9 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
             [ True, None, None, None, None, None, None, None, None, None, None,
                 None, None, None, None, ] )
+        self.failUnlessEqual([ df.multiline for df in dsc.getDataFields() ],
+            [ None, None, None, None, None, True, None, None, None, None, None,
+                None, None, None, None, ] )
         self.failUnlessEqual([ df.descriptions.asDict()
                 for df in dsc.getDataFields() ],
             [

@@ -348,6 +348,7 @@ class VMwareClient(baseDriver.BaseDriver):
                 ('launch/rootSshKeys.html', None)
             ],
             type = 'str',
+            multiline = True,
             constraints = dict(constraintName = 'length', value = 4096))
 
     def _drvPopulateDescriptorFromTarget(self, descr):

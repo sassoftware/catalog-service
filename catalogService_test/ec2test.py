@@ -1112,6 +1112,8 @@ conary-proxies=%s
             ['str'] * len(dataFields[:3]))
         self.failUnlessEqual([ df.type for df in dataFields[4:] ],
             ['str'] * len(dataFields[4:]))
+        self.assertEquals([ df.multiline for df in dataFields ],
+                [None, None, None, None, None, None, None, True, True, None])
         self.failUnlessEqual(
             [ (x.key, x.descriptions.asDict()) for x in  dataFields[3].type ],
             [
