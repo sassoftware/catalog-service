@@ -330,7 +330,7 @@ class EC2Test(testbase.TestCase):
         orig_findOpenBlockDevice = drv._findOpenBlockDevice
         def mock_findOpenBlockDevice(*args, **kwargs):
             ret = orig_findOpenBlockDevice(*args, **kwargs)
-            return ret[0], devFile.name
+            return ret[0], devFile.name, 1
         self.mock(drv, '_findOpenBlockDevice', mock_findOpenBlockDevice)
 
         self.mock(drv, '_writeFilesystemImage', lambda *args, **kwargs: None)
@@ -362,7 +362,7 @@ class EC2Test(testbase.TestCase):
         self.assertListsEqual(job._accumulator, [
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
-            ('Attaching EBS volume',),
+            ('Attaching EBS volume as /dev/sdf',),
             ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached',),
@@ -434,7 +434,7 @@ class EC2Test(testbase.TestCase):
         self.assertListsEqual(job._accumulator, [
             ('Creating EBS volume',),
             ('Created EBS volume vol-decafbad',),
-            ('Attaching EBS volume',),
+            ('Attaching EBS volume as /dev/sdf',),
             ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached',),
