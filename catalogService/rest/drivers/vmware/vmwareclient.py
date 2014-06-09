@@ -306,7 +306,17 @@ class VMwareClient(baseDriver.BaseDriver):
         descr.setDisplayName('VMware Image Upload Parameters')
         descr.addDescription('VMware Image Upload Parameters')
         self.drvImageDeploymentDescriptorCommonFields(descr)
+        self._imageDeploymentSpecifcDescriptorFields(descr, extraArgs=extraArgs)
         return self._drvPopulateDescriptorFromTarget(descr)
+
+    def _imageDeploymentSpecifcDescriptorFields(self, descr, extraArgs=None):
+        descr.addDataField(
+            'updateOnBoot',
+            descriptions = 'Update on boot',
+            help = [
+                ('launch/updateOnBoot.html', None)
+            ],
+            type = 'bool', default=False)
 
     def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName('VMware Launch Parameters')
@@ -350,6 +360,13 @@ class VMwareClient(baseDriver.BaseDriver):
             type = 'str',
             multiline = True,
             constraints = dict(constraintName = 'length', value = 4096))
+        descr.addDataField(
+            'updateOnBoot',
+            descriptions = 'Update on boot',
+            help = [
+                ('launch/updateOnBoot.html', None)
+            ],
+            type = 'bool', default=False)
 
     def _drvPopulateDescriptorFromTarget(self, descr):
         targetConfig = self.getTargetConfiguration()
@@ -854,7 +871,8 @@ class VMwareClient(baseDriver.BaseDriver):
     def _deployImageFromStream(self, job, image, stream, dataCenter,
                              dataStore, computeResource, resourcePool, vmName,
                              uuid, network, diskProvisioning,
-                             vmFolder=None, asTemplate=False):
+                             vmFolder=None, asTemplate=False,
+                             updateOnBoot=None):
 
         logger = lambda *x: self._msg(job, *x)
         dc = self.vicfg.getDatacenter(dataCenter)
@@ -912,7 +930,8 @@ class VMwareClient(baseDriver.BaseDriver):
 
         vAppConfig = self.client.getMoRefProp(vmMor, 'config.vAppConfig')
         reconfigVmParams['vAppConfig'] = self._setVappConfig(vAppConfig,
-                conaryProxies=conaryProxies, zoneAddresses=zoneAddresses)
+                conaryProxies=conaryProxies, zoneAddresses=zoneAddresses,
+                updateOnBoot=updateOnBoot)
 
         if reconfigVmParams:
             self._msg(job, 'Reconfiguring VM')
@@ -946,6 +965,7 @@ class VMwareClient(baseDriver.BaseDriver):
         network = ppop('network')
         vmFolder = ppop('vmFolder')
         diskProvisioning = ppop('diskProvisioning', None)
+        updateOnBoot = ppop('updateOnBoot', None)
 
         newImageId = self.instanceStorageClass._generateString(32)
         useTemplate = not self.client.isESX()
@@ -965,7 +985,8 @@ class VMwareClient(baseDriver.BaseDriver):
                                dataStore, computeResource,
                                resourcePool, vmName, uuid, network,
                                diskProvisioning,
-                               vmFolder=vmFolder, asTemplate = useTemplate)
+                               vmFolder=vmFolder, asTemplate = useTemplate,
+                               updateOnBoot=updateOnBoot)
         self._msg(job, 'Image deployed')
         return image.getImageId()
 
@@ -999,6 +1020,7 @@ class VMwareClient(baseDriver.BaseDriver):
         diskProvisioning = ppop('diskProvisioning', None)
         vmCPUs = ppop('vmCPUs')
         vmMemory = ppop('vmMemory')
+        updateOnBoot = ppop('updateOnBoot', None)
         self._rootSshKeys = ppop('rootSshKeys', None)
 
         vm = None
@@ -1045,7 +1067,8 @@ class VMwareClient(baseDriver.BaseDriver):
         try:
             self._attachCredentials(job, instanceName, vmMor, dataCenter,
                     dataStore, computeResource,
-                    numCPUs=vmCPUs, memoryMB=vmMemory)
+                    numCPUs=vmCPUs, memoryMB=vmMemory,
+                    updateOnBoot=updateOnBoot)
         except Exception, e:
             self.log_exception("Exception attaching credentials: %s" % e)
         self._msg(job, 'Launching')
@@ -1056,7 +1079,7 @@ class VMwareClient(baseDriver.BaseDriver):
 
     def _setVappConfig(self, currentVAppConfig, bootUuid=None,
             conaryProxies=None, zoneAddresses=None,
-            certHash=None, certData=None, rootSshKeys=None):
+            certHash=None, certData=None, rootSshKeys=None, updateOnBoot=None):
         if currentVAppConfig is not None and hasattr(currentVAppConfig, '_property'):
             currentProperties = currentVAppConfig.get_element_property()
         else:
@@ -1079,7 +1102,8 @@ class VMwareClient(baseDriver.BaseDriver):
             ('com.sas.app-engine.wbem.cert.hash.0', 'string', '', certHash),
             ('com.sas.app-engine.wbem.cert.data.0', 'string', '', certData),
             ('com.sas.app-engine.ssh-keys.root', 'string', '', rootSshKeys),
-            ('com.sas.app-engine.update-on-boot', 'boolean', 'False', 'False'),
+            ('com.sas.app-engine.update-on-boot', 'boolean', 'False',
+                str(bool(updateOnBoot))),
         ]
         for idx, (propLabel, propType, defaultValue, propValue) in enumerate(propValues):
             if propValue is None:
@@ -1114,7 +1138,7 @@ class VMwareClient(baseDriver.BaseDriver):
         return vAppConfigSpec
 
     def _attachCredentials(self, job, vmName, vmMor, dataCenterMor, dataStoreMor,
-            computeResourceMor, numCPUs=1, memoryMB=256):
+            computeResourceMor, numCPUs=1, memoryMB=256, updateOnBoot=None):
         from catalogService.libs.viclient import client
         bootUuid = self.getBootUuid()
 
@@ -1136,7 +1160,8 @@ class VMwareClient(baseDriver.BaseDriver):
         vAppConfigSpec = self._setVappConfig(vAppConfig, bootUuid=bootUuid,
                 conaryProxies=conaryProxies, zoneAddresses=zoneAddresses,
                 certHash=certHash, certData=file(certFile).read(),
-                rootSshKeys=self._rootSshKeys)
+                rootSshKeys=self._rootSshKeys,
+                updateOnBoot=updateOnBoot)
 
         try:
             self._msg(job, 'Setting initial configuration')
