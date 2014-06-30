@@ -421,21 +421,6 @@ class VimService(object):
         diskSpec.set_element_device(disk)
         return diskSpec
 
-    def _getDatastoreRef(self, configTarget, datastoreName):
-        # determine the data store to use
-        datastoreRef = None
-        for vdsInfo in configTarget.get_element_datastore():
-            dsSummary = vdsInfo.get_element_datastore()
-            if (dsSummary.get_element_name() == datastoreName
-                or not datastoreName):
-                if dsSummary.get_element_accessible():
-                    datastoreName = dsSummary.get_element_name()
-                    datastoreRef = dsSummary.get_element_datastore()
-                    return datastoreRef, datastoreName
-                if datastoreName:
-                    raise RuntimeError('Specified Datastore is not accessible')
-        raise RuntimeError('No Datastore found on host')
-
     def _getIdeController(self, defaultDevices):
         # Find the IDE controller
         for dev in defaultDevices:
@@ -588,106 +573,69 @@ class VimService(object):
         @return list of selection specs
         """
         # Recurse through all ResourcePools
-        rpToRp = ns0.TraversalSpec_Def('').pyclass()
-        rpToRp.set_element_type('ResourcePool')
-        rpToRp.set_element_path('resourcePool')
-        rpToRp.set_element_skip(False)
-        rpToRpSpec = rpToRp.new_selectSet()
-        rpToRpSpec.set_element_name('rpToRp')
-        rpToVmSpec = rpToRp.new_selectSet()
-        rpToVmSpec.set_element_name('rpToVm')
-        rpToRp.set_element_selectSet([ rpToRpSpec, rpToVmSpec ])
-        rpToRp.set_element_name('rpToRp')
-
+        rpToRp = self.TraversalSpec('rpToRp', 'ResourcePool', 'resourcePool',
+                ['rpToRp', 'rpToVm'])
         # Recurse through all ResourcePools
-        rpToVm = ns0.TraversalSpec_Def('').pyclass()
-        rpToVm.set_element_type('ResourcePool')
-        rpToVm.set_element_path('vm')
-        rpToVm.set_element_skip(False)
-        rpToVm.set_element_selectSet([])
-        rpToVm.set_element_name('rpToVm')
+        rpToVm = self.TraversalSpec('rpToVm', 'ResourcePool', 'vm', [])
 
         # Traversal through ResourcePool branch
-        crToRp = ns0.TraversalSpec_Def('').pyclass()
-        crToRp.set_element_type('ComputeResource')
-        crToRp.set_element_path('resourcePool')
-        crToRp.set_element_skip(False)
-        crToRpSpec = crToRp.new_selectSet()
-        crToRpSpec.set_element_name('rpToRp')
-        crToVmSpec = crToRp.new_selectSet()
-        crToVmSpec.set_element_name('rpToVm')
-        crToRp.set_element_selectSet([ crToRpSpec, crToVmSpec ])
-        crToRp.set_element_name('crToRp')
+        crToRp = self.TraversalSpec('crToRp', 'ComputeResource', 'resourcePool',
+                ['rpToRp', 'rpToVm'])
 
         # Traversal through host branch
-        crToH = ns0.TraversalSpec_Def('').pyclass()
-        crToH.set_element_type('ComputeResource')
-        crToH.set_element_path('host')
-        crToH.set_element_skip(False)
-        crToH.set_element_selectSet([])
-        crToH.set_element_name('crToH')
+        crToH = self.TraversalSpec('crToH', 'ComputeResource', 'host', [])
 
         # Traversal through hostFolder branch
-        dcToHf = ns0.TraversalSpec_Def('').pyclass()
-        dcToHf.set_element_type('Datacenter')
-        dcToHf.set_element_path('hostFolder')
-        dcToHf.set_element_skip(False)
-        dcToHfSpec = dcToHf.new_selectSet()
-        dcToHfSpec.set_element_name('visitFolders')
-        dcToHf.set_element_selectSet([ dcToHfSpec ])
-        dcToHf.set_element_name('dcToHf')
+        dcToHf = self.TraversalSpec('dcToHf', 'Datacenter', 'hostFolder',
+                ['visitFolders'])
 
         # Traversal through vmFolder branch
-        dcToVmf = ns0.TraversalSpec_Def('').pyclass()
-        dcToVmf.set_element_type('Datacenter')
-        dcToVmf.set_element_path('vmFolder')
-        dcToVmf.set_element_skip(False)
-        dcToVmfSpec = dcToVmf.new_selectSet()
-        dcToVmfSpec.set_element_name('visitFolders')
-        dcToVmf.set_element_selectSet([ dcToVmfSpec ])
-        dcToVmf.set_element_name('dcToVmf')
+        dcToVmf = self.TraversalSpec('dcToVmf', 'Datacenter', 'vmFolder',
+                ['visitFolders'])
 
         # Recurse through networkFolder branch
-        dcToNetwork = ns0.TraversalSpec_Def('').pyclass()
-        dcToNetwork.set_element_type('Datacenter')
-        dcToNetwork.set_element_path('networkFolder')
-        dcToNetwork.set_element_skip(False)
-        dcToNetworkSpec = dcToNetwork.new_selectSet()
-        dcToNetworkSpec.set_element_name('visitFolders')
-        dcToNetwork.set_element_selectSet([ dcToNetworkSpec ])
-        dcToNetwork.set_element_name('dcToNetwork')
+        dcToNetwork = self.TraversalSpec('dcToNetwork', 'Datacenter',
+                'networkFolder', ['visitFolders'])
 
         # Recurse through all Hosts
-        hToVm = ns0.TraversalSpec_Def('').pyclass()
-        hToVm.set_element_type('HostSystem')
-        hToVm.set_element_path('vm')
-        hToVm.set_element_skip(False)
-        hToVmSpec = hToVm.new_selectSet()
-        hToVmSpec.set_element_name('visitFolders')
-        hToVm.set_element_selectSet([ hToVmSpec ])
-        hToVm.set_element_name('HToVm')
+        hToVm = self.TraversalSpec('HToVm', 'HostSystem', 'vm',
+                ['visitFolders'])
 
         # Recurse through the folders
-        visitFolders = ns0.TraversalSpec_Def('').pyclass()
-        visitFolders.set_element_type('Folder')
-        visitFolders.set_element_path('childEntity')
-        visitFolders.set_element_skip(False)
-        specNames =  ['visitFolders', 'dcToHf', 'dcToVmf', 'crToH',
-                     'crToRp', 'HToVm', 'rpToVm' ]
-        specs = [ visitFolders, dcToVmf, dcToHf, crToH, crToRp,
-                  rpToRp, hToVm, rpToVm ]
-        if self.vmwareVersion >= (4, 0, 0):
-            specNames.append('dcToNetwork')
-            specs.append(dcToNetwork)
+        visitFolders = self.TraversalSpec('visitFolders', 'Folder',
+                'childEntity', [])
+        # We set selectSet to the empty list; we'll fix it once we figure out
+        # the whole set
 
-        l = []
-        for specName in specNames:
-            spec = visitFolders.new_selectSet()
-            spec.set_element_name(specName)
-            l.append(spec)
-        visitFolders.set_element_selectSet(l)
-        visitFolders.set_element_name('visitFolders')
-        return specs
+        # XXX rpToRp may not be needed here, it's not part of
+        # src/com/vmware/vim25/mo/util/PropertyCollectorUtil.java
+        retSpecs = [ visitFolders, dcToHf, dcToVmf, crToH, crToRp, rpToRp,
+                hToVm, rpToVm ]
+
+        if self.vmwareVersion >= (4, 0, 0):
+            retSpecs.append(dcToNetwork)
+
+        visitFolders.set_element_selectSet(
+                [ self.SelectionSpec(x.get_element_name()) for x in retSpecs ])
+        return retSpecs
+
+    @classmethod
+    def TraversalSpec(cls, name, type, path, selectSet):
+        ts = ns0.TraversalSpec_Def('').pyclass()
+        ts.set_element_name(name)
+        ts.set_element_type(type)
+        ts.set_element_path(path)
+        ts.set_element_skip(False)
+        ts.set_element_selectSet([ cls.SelectionSpec(s) for s in selectSet ])
+        return ts
+
+    @classmethod
+    def SelectionSpec(cls, name):
+        if not isinstance(name, basestring):
+            return name
+        ss = ns0.SelectionSpec_Def('').pyclass()
+        ss.set_element_name(name)
+        return ss
 
     def buildPropertySpecArray(self, typeinfo):
         """
@@ -956,6 +904,9 @@ class VimService(object):
 
     def getProperties(self, propsWanted, root=None):
         data = self.getContentsRecursively(None, root, propsWanted, True)
+        return self.dataToArray(data)
+
+    def dataToArray(self, data):
         ret = {}
         for datum in data:
             mor = datum.get_element_obj()
