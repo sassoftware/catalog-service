@@ -3129,6 +3129,45 @@ vmwareReqGetVirtualMachineProps2 = vmwareReqGetVirtualMachineProps1.replace(
     '<obj type="Folder">group-d1</obj>',
     '<obj type="VirtualMachine">vm-1201</obj>')
 
+vmwareReqGetFolderTraversal1 = _vmwareReqRetrievePropertiesTemplate % (
+        '<propSet xsi:type="ns1:PropertySpec">'
+          '<ns1:type>Folder</ns1:type>'
+          '<ns1:all>false</ns1:all>'
+          '<ns1:pathSet>name</ns1:pathSet>'
+          '<ns1:pathSet>childEntity</ns1:pathSet>'
+          '<ns1:pathSet>childType</ns1:pathSet>'
+          '<ns1:pathSet>parent</ns1:pathSet>'
+        '</propSet>'
+        '<objectSet>'
+          '<obj type="Folder" xsi:type="ns1:ManagedObjectReference">group-s24</obj>'
+          '<ns1:skip>false</ns1:skip>'
+          '<selectSet xsi:type="ns1:TraversalSpec">'
+            '<ns1:name>visitStoragePods</ns1:name>'
+            '<ns1:type>StoragePod</ns1:type>'
+            '<ns1:path>childEntity</ns1:path>'
+            '<ns1:skip>false</ns1:skip>'
+          '</selectSet>'
+          '<selectSet xsi:type="ns1:TraversalSpec">'
+            '<ns1:name>visitFolders</ns1:name>'
+            '<ns1:type>Folder</ns1:type>'
+            '<ns1:path>childEntity</ns1:path>'
+            '<ns1:skip>false</ns1:skip>'
+            '<selectSet xsi:type="ns1:SelectionSpec">'
+              '<ns1:name>visitFolders</ns1:name>'
+            '</selectSet>'
+            '<selectSet xsi:type="ns1:SelectionSpec">'
+              '<ns1:name>visitStoragePods</ns1:name>'
+            '</selectSet>'
+          '</selectSet>'
+        '</objectSet>'
+)
+
+vmwareReqGetFolderTraversal21 = vmwareReqGetFolderTraversal1.replace('group-s24',
+        'group-s00001')
+
+vmwareReqGetFolderTraversal22 = vmwareReqGetFolderTraversal1.replace('group-s24',
+        'group-s00002')
+
 vmwareResponseGetVirtualMachineProps = HTTPResponse(
  '<?xml version="1.0" encoding="UTF-8"?>\n'
  '<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"\n xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"\n xmlns:xsd="http://www.w3.org/2001/XMLSchema"\n xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
@@ -3167,6 +3206,171 @@ vmwareResponseGetVirtualMachineProps = HTTPResponse(
  '</soapenv:Envelope>'
  # END RESPONSE - get virtual machine props
 )
+
+vmwareResponseGetFolderTraversal1 = HTTPResponse("""\
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soapenv:Body>
+    <RetrievePropertiesResponse xmlns="urn:vim25">
+      <returnval>
+        <obj type="Folder">group-s24</obj>
+        <propSet>
+          <name>childEntity</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="StoragePod" xsi:type="ManagedObjectReference">group-p00001</ManagedObjectReference>
+            <ManagedObjectReference type="StoragePod" xsi:type="ManagedObjectReference">group-p00002</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-16</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-563</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Folder</string>
+            <string xsi:type="xsd:string">Datastore</string>
+            <string xsi:type="xsd:string">StoragePod</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">datastore</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Datacenter" xsi:type="ManagedObjectReference">datacenter-2</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="StoragePod">group-p00001</obj>
+        <propSet>
+          <name>childEntity</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Datastore</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">pdtesx</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-s24</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="StoragePod">group-p00002</obj>
+        <propSet>
+          <name>childEntity</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Datastore</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">pdtinfra</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-s24</val>
+        </propSet>
+      </returnval>
+    </RetrievePropertiesResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+""")
+
+vmwareResponseGetFolderTraversal21 = HTTPResponse("""\
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <soapenv:Body>
+    <RetrievePropertiesResponse xmlns="urn:vim25">
+      <returnval>
+        <obj type="Folder">group-s00001</obj>
+        <propSet>
+          <name>childEntity</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="StoragePod" xsi:type="ManagedObjectReference">group-p00011</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-100</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-101</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-102</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Folder</string>
+            <string xsi:type="xsd:string">Datastore</string>
+            <string xsi:type="xsd:string">StoragePod</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">datastore</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Datacenter" xsi:type="ManagedObjectReference">datacenter-2</val>
+        </propSet>
+      </returnval>
+      <returnval>
+        <obj type="StoragePod">group-p00011</obj>
+        <propSet>
+          <name>childEntity</name>
+          <val xsi:type="ArrayOfManagedObjectReference">
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-101</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
+          </val>
+        </propSet>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Datastore</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">pdtesx</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-s00001</val>
+        </propSet>
+      </returnval>
+    </RetrievePropertiesResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+""")
+
+# No valid clusters for s00002
+vmwareResponseGetFolderTraversal22 = HTTPResponse(
+    vmwareResponseGetFolderTraversal21.data.replace('s00001', 's00002').replace(
+    'datastore-10', 'datastore-20').replace(
+        '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-201</ManagedObjectReference>',
+        '')
+    )
 
 vmwareResponseGetVirtualMachinePropsWithAnnot = HTTPResponse(
     vmwareResponseGetVirtualMachineProps.data.replace(
@@ -3220,6 +3424,7 @@ vmwareRetrievePropertiesHostResp = HTTPResponse(data="""\
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-18</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-20</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
           </val>
         </propSet>
         <propSet>
@@ -3271,6 +3476,7 @@ vmwareRetrievePropertiesHostResp = HTTPResponse(data="""\
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-559</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
           </val>
         </propSet>
         <propSet>
@@ -3540,6 +3746,7 @@ vmwareRetrievePropertiesHostResp = HTTPResponse(data="""\
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>
             <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>
+            <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>
           </val>
         </propSet>
         <propSet>
@@ -4210,6 +4417,7 @@ vmwareRetrievePropertiesReq1 = vmwareReqGetVirtualMachineProps1.replace(
     '<ns1:pathSet>hostFolder</ns1:pathSet>'
     '<ns1:pathSet>vmFolder</ns1:pathSet>'
     '<ns1:pathSet>datastore</ns1:pathSet>'
+    '<ns1:pathSet>datastoreFolder</ns1:pathSet>'
     '<ns1:pathSet>network</ns1:pathSet>'
    '</propSet>'
    '<propSet xsi:type="ns1:PropertySpec">'
@@ -4262,6 +4470,7 @@ vmwareRetrievePropertiesReq35 = vmwareReqGetVirtualMachineProps1.replace(
     '<ns1:pathSet>hostFolder</ns1:pathSet>'
     '<ns1:pathSet>vmFolder</ns1:pathSet>'
     '<ns1:pathSet>datastore</ns1:pathSet>'
+    '<ns1:pathSet>datastoreFolder</ns1:pathSet>'
     '<ns1:pathSet>network</ns1:pathSet>'
    '</propSet>'
    '<propSet xsi:type="ns1:PropertySpec">'
@@ -4316,6 +4525,7 @@ vmwareRetrievePropertiesResp2 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-100</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-101</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-102</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>'
           '</val>'
         '</propSet>'
         '<propSet>'
@@ -4358,6 +4568,7 @@ vmwareRetrievePropertiesResp2 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-200</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-201</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-202</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>'
           '</val>'
         '</propSet>'
         '<propSet>'
@@ -4542,7 +4753,12 @@ vmwareRetrievePropertiesResp2 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-100</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-101</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-102</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>'
           '</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>datastoreFolder</name>'
+          '<val type="Folder" xsi:type="ManagedObjectReference">group-s00001</val>'
         '</propSet>'
         '<propSet>'
           '<name>hostFolder</name>'
@@ -4573,7 +4789,12 @@ vmwareRetrievePropertiesResp2 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-200</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-201</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-202</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>'
           '</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>datastoreFolder</name>'
+          '<val type="Folder" xsi:type="ManagedObjectReference">group-s00002</val>'
         '</propSet>'
         '<propSet>'
           '<name>hostFolder</name>'
@@ -4937,7 +5158,12 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-565</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-887</ManagedObjectReference>'
             '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-884</ManagedObjectReference>'
+            '<ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-401</ManagedObjectReference>'
           '</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>datastoreFolder</name>'
+          '<val type="Folder" xsi:type="ManagedObjectReference">group-s24</val>'
         '</propSet>'
         '<propSet>'
           '<name>hostFolder</name>'
@@ -6048,6 +6274,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>NFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6069,6 +6296,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6090,6 +6318,29 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
+      </datastore>
+      <capability>
+        <directoryHierarchySupported>true</directoryHierarchySupported>
+        <rawDiskMappingsSupported>true</rawDiskMappingsSupported>
+        <perFileThinProvisioningSupported>true</perFileThinProvisioningSupported>
+      </capability>
+      <maxFileSize>274877906944</maxFileSize>
+      <mode>readWrite</mode>
+    </datastore>
+    <datastore>
+      <name>nas3-iscsi</name>
+      <datastore>
+        <datastore type="Datastore">datastore-401</datastore>
+        <name>nas3-iscsi</name>
+        <url>sanfs://vmfs_uuid:47e71a7f-82d08548-2178-00188b3fb778/</url>
+        <capacity>9999999999999</capacity>
+        <freeSpace>9999999999999</freeSpace>
+        <uncommitted>999</uncommitted>
+        <accessible>true</accessible>
+        <multipleHostAccess>true</multipleHostAccess>
+        <type>VMFS</type>
+        <maintenanceMode>inMaintenance</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6111,6 +6362,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6132,6 +6384,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6153,6 +6406,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6174,6 +6428,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6195,6 +6450,7 @@ vmwareQueryConfigTargetResp1 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>false</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6366,6 +6622,7 @@ vmwareQueryConfigTargetResp10 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6386,6 +6643,7 @@ vmwareQueryConfigTargetResp10 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6406,6 +6664,7 @@ vmwareQueryConfigTargetResp10 = HTTPResponse("""\
         <accessible>true</accessible>
         <multipleHostAccess>true</multipleHostAccess>
         <type>VMFS</type>
+        <maintenanceMode>normal</maintenanceMode>
       </datastore>
       <capability>
         <directoryHierarchySupported>true</directoryHierarchySupported>
@@ -6555,6 +6814,9 @@ vmwareReqGetVirtualMachineProps1 : vmwareResponseGetVirtualMachineProps,
 vmwareReqGetVirtualMachineProps35 : vmwareResponseGetVirtualMachineProps,
 vmwareReqGetVirtualMachineProps2 : vmwareResponseGetVirtualMachineProps,
 vmwareReqGetVirtualMachineProps35_2 : vmwareResponseGetVirtualMachineProps,
+vmwareReqGetFolderTraversal1 : vmwareResponseGetFolderTraversal1,
+vmwareReqGetFolderTraversal21 : vmwareResponseGetFolderTraversal21,
+vmwareReqGetFolderTraversal22 : vmwareResponseGetFolderTraversal22,
 
  (vmwareFindVmByUuidReq % '50344408-f9b7-3927-417b-14258d839e26') :
     (vmwareFindVmByUuidResp % 'vm-1201'),

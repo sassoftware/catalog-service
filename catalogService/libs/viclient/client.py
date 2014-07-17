@@ -14,8 +14,10 @@
 # limitations under the License.
 #
 
+import fnmatch
 import sys
 import time
+import weakref
 from collections import namedtuple
 from conary.lib.util import SavedException
 
@@ -41,20 +43,110 @@ def _strToMor(smor, mortype=None):
         mor.set_attribute_type(mortype)
     return mor
 
-class ComputeResource(object):
-    __slots__ = [ 'obj', 'configTarget', 'properties', 'resourcePools' ]
-    def __init__(self, obj, properties, configTarget, resourcePools):
+class BaseStorage(object):
+    __slots__ = []
+
+    @classmethod
+    def _filterStorage(cls, iterable, filterExp=None):
+        for obj in iterable:
+            if filterExp is None or fnmatch.fnmatch(obj.name, filterExp):
+                yield obj
+
+    def getStorageMostFreeSpace(self, filterExp=None):
+        return max(self._filterStorage(self.datastoresActive, filterExp),
+                key=lambda x: x.freeSpace)
+
+    def getStorageLeastOvercommitted(self, filterExp=None):
+        return max(self._filterStorage(
+            (x for x in self.datastoresActive if x.uncommitted is not None),
+            filterExp),
+            key=lambda x: x.freeSpace - x.uncommitted)
+
+class ComputeResource(BaseStorage):
+    __slots__ = [ 'obj', 'configTarget', 'properties', 'resourcePools', '_dc',
+            '_storage', ]
+    def __init__(self, obj, properties, configTarget, resourcePools, dataCenter=None):
         self.obj = obj
         self.properties = properties
         self.configTarget = configTarget
         self.resourcePools = resourcePools
+        if dataCenter is None:
+            self._dc = None
+        else:
+            self._dc = weakref.proxy(dataCenter)
+        self._storage = None
+
+    @property
+    def dc(self):
+        return self._dc
+
+    def getStorageByMor(self, mor):
+        for stg in self.storage:
+            if stg.mor == mor:
+                return stg
+        return None
+
+    @property
+    def storage(self):
+        """
+        Return all storage available for this compute resource
+        """
+        if self._storage is not None:
+            return self._storage
+        dc = self._dc
+        crDsSet = set(self.properties['datastore'])
+        self._storage = storage = []
+        dsMorToDsInfoMap = dict(
+                (x.get_element_datastore().get_element_datastore(),
+                    x)
+                for x in self.configTarget.get_element_datastore())
+        for dsCluster in dc.datastoreClusters.values():
+            dsClusterDatastores = set(x.mor for x in dsCluster.datastores)
+            common = dsClusterDatastores.intersection(crDsSet)
+            if not common:
+                continue
+            # Fetch datastore info objects
+            dsInfoList = [ dsMorToDsInfoMap[x] for x in common ]
+            # Some datastores from the storage pod may not be available to
+            # this compute resource. Filter only the ones that do belong here.
+            newCluster = DatastoreCluster(dsCluster.mor, dsCluster.name,
+                    [ self.DatastoreFromVirtualMachineDatastoreInfo(x)
+                        for x in dsInfoList ])
+            storage.append(newCluster)
+
+        for dsMor in self.properties['datastore']:
+            dsInfo = dsMorToDsInfoMap[dsMor]
+            storage.append(self.DatastoreFromVirtualMachineDatastoreInfo(dsInfo))
+
+        return storage
+
+    @property
+    def datastoresActive(self):
+        return [ x for x in self.storage if x.isWritable ]
+
+    @classmethod
+    def DatastoreFromVirtualMachineDatastoreInfo(cls, vmdi):
+        dsSummary = vmdi.get_element_datastore()
+        uncommitted = None
+        if hasattr(dsSummary, '_uncommitted'):
+            uncommitted = dsSummary.get_element_uncommitted()
+        return Datastore(vmdi.get_element_datastore().get_element_datastore(),
+                name=dsSummary.get_element_name(),
+                mode=vmdi.get_element_mode(),
+                freeSpace=dsSummary.get_element_freeSpace(),
+                capacity=dsSummary.get_element_capacity(),
+                uncommitted=uncommitted,
+                maintenanceMode=dsSummary.get_element_maintenanceMode())
 
 class Datacenter(object):
-    __slots__ = [ 'obj', 'crs', 'properties' ]
+    __slots__ = [ 'obj', 'crs', 'properties', '_datastores',
+            '_datastoreClusters', '__weakref__', ]
     def __init__(self, obj, properties):
         self.crs = []
         self.obj = obj
         self.properties = properties
+        self._datastores = {}
+        self._datastoreClusters = {}
 
     def addComputeResource(self, cr):
         self.crs.append(cr)
@@ -62,11 +154,128 @@ class Datacenter(object):
     def getComputeResources(self):
         return self.crs
 
+    def iterValidComputeResources(self):
+        for cr in self.crs:
+            cfg = cr.configTarget
+            if cfg is None:
+                continue
+            if not cr.datastoresActive:
+                # None of the datastores are available, so skip
+                continue
+            yield cr
+
     def getComputeResource(self, objref):
         for cr in self.crs:
             if str(cr.obj) == objref:
                 return cr
         return None
+
+    def findStorage(self, srv):
+        datastores = self.properties['datastore']
+        datastoreFolderMoRef = self.properties['datastoreFolder']
+        self._datastores = {}
+        self._datastoreClusters = {}
+        propsWanted = {
+                'Folder' : [
+                    'name',
+                    'childEntity',
+                    'childType',
+                    'parent',
+                    ],
+                }
+        foldersToDatastores = srv.dataToArray(srv.getContentsRecursively(
+            None, datastoreFolderMoRef, propsWanted,
+            selectionSpecs=srv.buildDatastoreFolderTraversal()))
+        # All datastores available to this datacenter
+        for datastoreMor in datastores:
+            ds = Datastore(mor=datastoreMor)
+            self._datastores[datastoreMor] = ds
+        # Start walking the folder, looking for storage pods
+        pods = []
+        foldersStack = [ datastoreFolderMoRef ]
+        while foldersStack:
+            folder = foldersStack.pop()
+            entries = foldersToDatastores[folder]['childEntity']
+            pods.extend(x for x in entries
+                    if x.get_attribute_type() == 'StoragePod')
+            folders = [ x for x in entries
+                    if x.get_attribute_type() == 'Folder' ]
+            folders.reverse()
+            foldersStack.extend(folders)
+        for podMor in pods:
+            pod = foldersToDatastores[podMor]
+            dsMors = pod['childEntity']
+            dsList = [ self._datastores[x] for x in dsMors ]
+            dsc = DatastoreCluster(podMor, pod['name'], dsList)
+            self._datastoreClusters[podMor] = dsc
+
+    @property
+    def datastores(self):
+        return self._datastores
+
+    @property
+    def datastoreClusters(self):
+        return self._datastoreClusters
+
+class _Slotted(object):
+    __slots__ = []
+    def _init(self, slots, args, kwargs):
+        # Stuff kwargs with None when a value wasn't specified
+        for propName in slots:
+            kwargs.setdefault(propName, None)
+        for propName, propVal in zip(slots, args):
+            setattr(self, propName, propVal)
+            kwargs.pop(propName, None)
+        for propName, propVal in kwargs.items():
+            setattr(self, propName, propVal)
+
+class Datastore(_Slotted):
+    __slots__ = [ 'mor', 'name', 'mode', 'capacity', 'freeSpace', 'uncommitted', 'maintenanceMode' ]
+    def __init__(self, *args, **kwargs):
+        self._init(self.__slots__, args, kwargs)
+
+    def __repr__(self):
+        return "<%s object at 0x%x; name=%s, mor=%s>" % (
+                self.__class__.__name__, id(self), self.name, self.mor)
+
+    @property
+    def isWritable(self):
+        return self.mode == 'readWrite' and self.maintenanceMode == 'normal'
+
+class DatastoreCluster(_Slotted, BaseStorage):
+    __slots__ = [ 'mor', 'name', 'datastores', ]
+    def __init__(self, *args, **kwargs):
+        self._init(self.__slots__, args, kwargs)
+
+    @property
+    def datastoresActive(self):
+        return [ x for x in self.datastores if x.isWritable ]
+
+    @property
+    def isWritable(self):
+        return bool(len(self.datastoresActive))
+
+    @property
+    def freeSpace(self):
+        return sum(x.freeSpace for x in self.datastoresActive)
+
+    @property
+    def uncommitted(self):
+        return sum(x.uncommitted for x in self.datastoresActive
+                if x.uncommitted is not None)
+
+    @property
+    def capacity(self):
+        dsList = self.datastoresActive
+        unknown = [ x.capacity for x in dsList if x.capacity is None ]
+        if unknown:
+            return None
+        return sum(x.capacity for x in dsList)
+
+    def __repr__(self):
+        return "<%s object at 0x%x; name=%s, mor=%s, datastores=%s>" % (
+                self.__class__.__name__, id(self), self.name, self.mor,
+                self.datastores)
 
 class Network(object):
     __slots__ = [ 'mor', 'props' ]
@@ -618,6 +827,14 @@ class VimService(object):
         visitFolders.set_element_selectSet(
                 [ self.SelectionSpec(x.get_element_name()) for x in retSpecs ])
         return retSpecs
+
+    def buildDatastoreFolderTraversal(self):
+        specs = []
+        specs.append(self.TraversalSpec('visitStoragePods', 'StoragePod',
+            'childEntity', []))
+        specs.append(self.TraversalSpec('visitFolders', 'Folder',
+            'childEntity', ['visitFolders', 'visitStoragePods']))
+        return specs
 
     @classmethod
     def TraversalSpec(cls, name, type, path, selectSet):
@@ -1228,6 +1445,7 @@ class VimService(object):
                                                     'hostFolder',
                                                     'vmFolder',
                                                     'datastore',
+                                                    'datastoreFolder',
                                                     'network' ],
                                     'Folder': ['name', 'parent', 'childType', ],
                                     'HostSystem': [ 'name',
@@ -1369,11 +1587,13 @@ class VimService(object):
             # resource pool objects
             crRps = dict(x for x in props.iteritems() if x[0] in crRpMors)
             # nowe we can create some objects that are easier to deal with
-            cr = ComputeResource(cr, crProps, configTarget, crRps)
+            cr = ComputeResource(cr, crProps, configTarget, crRps,
+                    dataCenter=dataCenter)
             dataCenter.addComputeResource(cr)
 
         for dc in hostFolderToDataCenter.values():
             vicfg.addDatacenter(dc)
+            dc.findStorage(self)
         vicfg.updateNamemap(nameMap)
         vicfg.setProperties(props)
         for mor, props in networks.items():

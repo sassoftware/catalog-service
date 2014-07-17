@@ -15,7 +15,6 @@
 #
 
 
-import fnmatch
 import httplib
 import operator
 import os
@@ -247,30 +246,6 @@ class VMwareClient(baseDriver.BaseDriver):
         self._paramsFromDescriptorData(params, descriptorData)
         return params
 
-    def _filterDataStore_cond(self, cr, filterExp):
-        """
-        Filter out read-only datastores and the ones not matching filterExp
-        """
-
-        cfg = cr.configTarget
-        for ds in cfg.get_element_datastore():
-            if hasattr(ds, '_mode') and ds.get_element_mode() == 'readOnly':
-                # Read-only datastore. Can't launch on it
-                continue
-            name = ds.get_element_name()
-            if not fnmatch.fnmatch(name, filterExp):
-                continue
-            yield ds
-
-    def _filterDataStore_mostFreeSpace(self, cr, filterExp):
-        return max(self._filterDataStore_cond(cr, filterExp),
-            key = lambda x: x.get_element_datastore().get_element_freeSpace())
-
-    def _filterDataStore_leastOvercommitted(self, cr, filterExp):
-        return max(self._filterDataStore_cond(cr, filterExp),
-            key = lambda x: (x.get_element_datastore().get_element_freeSpace()
-                - x.get_element_datastore().get_element_uncommitted()))
-
     def _paramsFromDescriptorData(self, params, descriptorData):
         getField = descriptorData.getField
         dataCenter = getField('dataCenter')
@@ -282,19 +257,23 @@ class VMwareClient(baseDriver.BaseDriver):
         dc = vicfg.getDatacenter(dataCenter)
         crObj = dc.getComputeResource(cr)
         dataStoreSelection = getField('dataStoreSelection-%s' % cr)
+        dsObj = None
         if dataStoreSelection == ('dataStoreManual-%s' % cr):
             dataStore = getField('dataStore-%s' % cr)
+            dsObj = crObj.getStorageByMor(dataStore)
         elif dataStoreSelection == ('dataStoreFreeSpace-%s' % cr):
             filterExp = getField('%s-filter' % dataStoreSelection)
-            ds = self._filterDataStore_mostFreeSpace(crObj, filterExp)
-            dataStore = ds.get_element_datastore().get_element_datastore()
+            dsObj = crObj.getStorageMostFreeSpace(filterExp)
         elif dataStoreSelection == ('dataStoreLeastOvercommitted-%s' % cr):
             filterExp = getField('%s-filter' % dataStoreSelection)
-            ds = self._filterDataStore_leastOvercommitted(crObj, filterExp)
-            dataStore = ds.get_element_datastore().get_element_datastore()
+            dsObj = crObj.getStorageLeastOvercommitted(filterExp)
+        if hasattr(dsObj, 'getStorageMostFreeSpace'):
+            # if a datacluster was picked, choose the datastore with the most
+            # free space inside it
+            dsObj = dsObj.getStorageMostFreeSpace()
         params.update(dict(
             dataCenter = dataCenter,
-            dataStore = dataStore,
+            dataStore = dsObj.mor,
             computeResource = cr,
             resourcePool = rp,
             network = network,
@@ -409,16 +388,10 @@ class VMwareClient(baseDriver.BaseDriver):
             if not dcNetworks:
                 # SUP-4625
                 continue
-            crs = dc.getComputeResources()
-            validCrs = {}
-            for cr in crs:
-                cfg = cr.configTarget
-                if cfg is None:
-                    continue
-                validCrs[cr] = dc
+            validCrs = list(dc.iterValidComputeResources())
             if not validCrs:
                 continue
-            crToDc.update(validCrs)
+            crToDc.update((cr, dc) for cr in validCrs)
             validDatacenters.append(dc)
 
             folders = vicfg.getVmFolderLabelsForTree(dc.properties['vmFolder'])
@@ -447,8 +420,8 @@ class VMwareClient(baseDriver.BaseDriver):
                                type = descr.EnumeratedType(
                 descr.ValueWithDescription(
                 x.obj, descriptions=x.properties['name'])
-                for x in crs),
-                               default = crs[0].obj,
+                for x in validCrs),
+                               default = validCrs[0].obj,
                                conditional = descr.Conditional(
                                     fieldName='dataCenter',
                                     operator='eq',
@@ -476,7 +449,6 @@ class VMwareClient(baseDriver.BaseDriver):
                         fieldValue=dc.obj))
 
         for cr, dc in crToDc.items():
-            cfg = cr.configTarget
             dataStores = []
 
             dsSelection = [
@@ -514,16 +486,9 @@ class VMwareClient(baseDriver.BaseDriver):
                         )
 
             parentFieldName = dsSelection[-1][0]
-            for ds in cfg.get_element_datastore():
-                if hasattr(ds, '_mode') and ds.get_element_mode() == 'readOnly':
-                    # Read-only datastore. Can't launch on it
-                    continue
-                name = ds.get_element_name()
-                dsSummary = ds.get_element_datastore()
-                free = dsSummary.get_element_freeSpace()
-                dsDesc = '%s - %s free' %(name, formatSize(free))
-                dsMor = ds.get_element_datastore().get_element_datastore()
-                dataStores.append((dsMor, dsDesc))
+            for ds in cr.datastoresActive:
+                dsDesc = '%s - %s free' % (ds.name, formatSize(ds.freeSpace))
+                dataStores.append((ds.mor, dsDesc))
             descr.addDataField('dataStore-%s' %cr.obj,
                                descriptions = 'Data Store',
                                required = True,

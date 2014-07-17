@@ -654,7 +654,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
             [None, None, None, 1, 1024, None, False, 'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
              'dataStoreFreeSpace-domain-c5', '*', '*',
-             'datastore-18', 'resgroup-50'])
+             'group-p00002', 'resgroup-50'])
         df = dsc.getDataField('network-datacenter-2')
         self.failUnlessEqual( [ x.descriptions.asDict() for x in df.type ],
             [ {None : 'Engineering lab'} ] )
@@ -804,7 +804,7 @@ class VMwareTest(testbase.TestCase):
             'datacenter-10', 'group-v10', 'domain-c10', 'group-v20', 'domain-c20',
             'network-10', 'network-20',
             'dataStoreFreeSpace-domain-c10', '*', '*',
-            'datastore-101',
+            'group-p00011',
             'dataStoreFreeSpace-domain-c20', '*', '*',
             'datastore-201',
             'resgroup-100', 'resgroup-200'])
@@ -844,6 +844,7 @@ class VMwareTest(testbase.TestCase):
                 ],
                 'String', 'String',
                 [
+                    ('group-p00011', {None: 'pdtesx - 381  GiB free'}),
                     ('datastore-101', {None: 'datastore 101 - 381  GiB free'}),
                     ('datastore-102', {None: 'datastore 102 - 381  GiB free'}),
                 ],
