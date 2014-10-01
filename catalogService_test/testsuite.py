@@ -19,23 +19,13 @@
 import os
 import sys
 
-from testrunner import suite, testhandler
+from testrunner import suite
+
+
 class Suite(suite.TestSuite):
     # Boilerplate. We need these values saved in the caller module
     testsuite_module = sys.modules[__name__]
-    suiteClass = testhandler.ConaryTestSuite
     topLevelStrip = 1
-
-    execPathVarNames = [
-        'CONARY_PATH',
-        'CATALOG_SERVICE_PATH',
-        'JOB_PATH',
-        'MODELS_PATH',
-        'RESTLIB_PATH',
-        'SMARTFORM_PATH',
-        'STORAGE_PATH',
-        'XMLLIB_PATH',
-    ]
 
     def setupPaths(self):
         testPath = os.getenv('TEST_PATH')
@@ -48,11 +38,14 @@ class Suite(suite.TestSuite):
         return testPath
 
     def setupSpecific(self):
-        # ensure mocked modules come first absolutely
-        self.pathManager.updatePaths(os.getenv('MOCKED_MODULES'))
+        from catalogService_test import mockedModules
+        self.pathManager.updatePaths(
+                os.path.dirname(os.path.abspath(mockedModules.__file__)))
+
 
     def getCoverageDirs(self, handler, environ):
-        return [ self.pathManager.getCoveragePath('CATALOG_SERVICE_PATH') ]
+        import catalogService
+        return [ catalogService ]
 
     def getCoverageExclusions(self, handler, environ):
         return [ 'catalogService/libs/viclient_vendor',

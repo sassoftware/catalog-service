@@ -24,7 +24,6 @@ testsuite.setup()
 import copy
 import gzip
 import httplib
-import httplib2
 import json
 import io
 import os
@@ -1145,21 +1144,6 @@ class MockedClientData(object):
         if isinstance(body, dict):
             body = json.dumps(body)
         return status, headers, body
-
-class NovaClientClass(dopenstack.openstackclient.NovaClient):
-    class HTTPClient(nvclient.HTTPClient):
-        MockedData = None
-        def request(self, url, method, *args, **kwargs):
-            body = kwargs.get('body')
-            path = httplib2.urlparse.urlsplit(url).path
-            resp = self.MockedData.getResponse(method, path, body=body)
-            return resp
-
-    def __init__(self, username, api_key, project_id, auth_url, timeout=None):
-        dopenstack.openstackclient.NovaClient.__init__(self, username, api_key,
-                project_id, auth_url, timeout=None)
-        self.client = self.HTTPClient(username, api_key,
-                project_id, auth_url, timeout=timeout)
 
 class TestAdapter(Radapters.HTTPAdapter):
     def __init__(self):

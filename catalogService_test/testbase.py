@@ -401,8 +401,7 @@ class TestCase(testcase.TestCaseWithWorkDir):
     def setUp(self):
         testcase.TestCaseWithWorkDir.setUp(self)
         helpDir = os.path.join(
-            os.environ['CATALOG_SERVICE_PATH'],
-            'catalogService',
+            os.path.dirname(handler.__file__),
             'rest')
 
         buildData = BuildData.buildData.copy()
@@ -475,7 +474,7 @@ class TestCase(testcase.TestCaseWithWorkDir):
         self.schemaDir = ""
         from smartform import descriptor
         schemaFile = "descriptor-%s.xsd" % descriptor.BaseDescriptor.version
-        schemaDir = os.path.join(os.environ['SMARTFORM_PATH'], 'xsd')
+        schemaDir = os.path.join(os.path.realpath(os.path.dirname(descriptor.__file__)), '..', 'xsd')
         if not os.path.exists(os.path.join(schemaDir, schemaFile)):
             # Not running from a checkout
             schemaDir = descriptor._BaseClass.schemaDir

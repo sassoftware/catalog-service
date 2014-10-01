@@ -19,13 +19,12 @@
 import os
 import sys
 
-from testrunner import suite, testhandler
+from testrunner import suite
 
 
 class Suite(suite.TestSuite):
     # Boilerplate. We need these values saved in the caller module
     testsuite_module = sys.modules[__name__]
-    suiteClass = testhandler.ConaryTestSuite
     topLevelStrip = 0
 
     def setupSpecific(self):
