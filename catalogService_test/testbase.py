@@ -372,7 +372,7 @@ class BuildData(object):
                     fileName = 'some-file-98-1-x86.tar.gz',
                     downloadUrl = 'http://test.rpath.local2/downloadImage?id=198',
                     targetImages = [
-                        ('openstack', 'openstack1.eng.rpath.com', '2'),
+                        ('openstack', 'openstack1.eng.rpath.com', '9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f'),
                     ],
                     fileId = 198,
                 )],

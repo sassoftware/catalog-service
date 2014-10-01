@@ -25,17 +25,18 @@ from catalogService.rest.models import instances
 from conary.lib import util
 
 try:
+    from keystoneclient.auth.identity import v2 as v2_auth
+    from keystoneclient.client import Client as KeystoneClient
+    from keystoneclient.session import Session as KeystoneSession
     from novaclient.v1_1.client import Client as NovaClient
-    from glance.client import V1Client as GlanceClient
+    from glanceclient import Client as GlanceClient
 except ImportError:
     NovaClient = None #pyflakes=ignore
-    GlanceClient = None #pyflakes=ignore
 
 class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
 
-NOVA_PORT = 8774
-GLANCE_PORT = 9292
+NOVA_PORT = 5000
 
 # This is provided by the nova api
 #class OpenStack_InstanceTypes(instances.InstanceTypes):
@@ -79,25 +80,6 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <help href='configuration/novaPortNumber.html'/>
     </field>
     <field>
-      <name>glance_server</name>
-      <descriptions>
-        <desc>Glance Server</desc>
-      </descriptions>
-      <type>str</type>
-      <required>true</required>
-      <help href='configuration/glanceServerName.html'/>
-    </field>
-    <field>
-      <name>glance_port</name>
-      <descriptions>
-        <desc>Glance Port</desc>
-      </descriptions>
-      <type>int</type>
-      <required>true</required>
-      <default>%(glance_port)s</default>
-      <help href='configuration/glancePortNumber.html'/>
-    </field>
-    <field>
       <name>alias</name>
       <descriptions>
         <desc>Name</desc>
@@ -115,8 +97,17 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
       <help href='configuration/description.html'/>
     </field>
+    <field>
+      <name>project_name</name>
+      <descriptions>
+        <desc>Project Name</desc>
+      </descriptions>
+      <type>str</type>
+      <required>true</required>
+      <help href='configuration/project_name.html'/>
+    </field>
   </dataFields>
-</descriptor>""" % dict(nova_port=NOVA_PORT, glance_port=GLANCE_PORT)
+</descriptor>""" % dict(nova_port=NOVA_PORT, )
 
 # User Name
 # Auth Token
@@ -144,9 +135,9 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
       <required>true</required>
     </field>
     <field>
-      <name>auth_token</name>
+      <name>password</name>
       <descriptions>
-        <desc>Auth Token</desc>
+        <desc>Password</desc>
       </descriptions>
       <type>str</type>
       <constraints>
@@ -165,7 +156,8 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
 # http://glance.openstack.org/client.html
 # http://pypi.python.org/pypi/python-novaclient
 class ConsolidatedClient(object):
-    def __init__(self, nova_client, glance_client):
+    def __init__(self, keystone_client, nova_client, glance_client):
+        self.keystone = keystone_client
         self.nova = nova_client
         self.glance = glance_client
 
@@ -179,15 +171,12 @@ class OpenStackClient(baseDriver.BaseDriver):
     RBUILDER_BUILD_TYPE = 'RAW_HD_IMAGE'
 
     NovaClientClass = NovaClient
-    GlanceClientClass = GlanceClient
+    KEYSTONE_API_VERSION = '2.0'
+    GLANCE_CLIENT_VERSION = '1'
 
     @classmethod
     def isDriverFunctional(cls):
-        return (cls.NovaClientClass is not None) and (cls.GlanceClientClass is not None)
-
-    # Right now 1.1 is the only version that is supported
-    def _openstack_api_version(self):
-        return 'v1.1'
+        return cls.NovaClientClass is not None
 
     getImageIdFromMintImage = baseDriver.BaseDriver._getImageIdFromMintImage_local
 
@@ -195,18 +184,34 @@ class OpenStackClient(baseDriver.BaseDriver):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        glanceServer = cloudConfig.get('glance_server', server)
-        glancePort = int(cloudConfig.get('glance_port', GLANCE_PORT))
-        api_version = self._openstack_api_version()
-        authUrl = "http://%s:%s/%s/" % (server, port, api_version)
+        authUrl = "http://%s:%s" % (server, port)
+        projectName = cloudConfig['project_name']
         try:
-            # password is a ProtectedString, we have to convert to string
-            novaClient = self.NovaClientClass(credentials['username'],
-                                    credentials['auth_token'],
-                                    project_id=None,
-                                    auth_url=authUrl)
-            glanceClient = self.GlanceClientClass(glanceServer, port=glancePort)
-            clients = ConsolidatedClient(novaClient, glanceClient)
+            session = KeystoneSession()
+            keystoneCli = KeystoneClient(self.KEYSTONE_API_VERSION,
+                    tenant_name=projectName,
+                    auth_url=authUrl,
+                    username=credentials['username'],
+                    password=credentials['password'],
+                    session=session)
+            auth = v2_auth.Password(
+                    keystoneCli.auth_url,
+                    username=credentials['username'],
+                    password=credentials['password'])
+            session.auth = auth
+            keystoneCli.authenticate()
+            auth.auth_ref = keystoneCli.auth_ref
+            novaCli = self.NovaClientClass(auth_token=keystoneCli.auth_token,
+                    project_id=projectName,
+                    auth_url=keystoneCli.auth_url,
+                    session=session)
+            endpoint = session.get_endpoint(service_type="image")
+            glanceCli = GlanceClient(self.GLANCE_CLIENT_VERSION,
+                    endpoint=endpoint,
+                    project_id=projectName,
+                    token=keystoneCli.auth_token,
+                    session=session)
+            clients = ConsolidatedClient(keystoneCli, novaCli, glanceCli)
         except Exception, e:
             raise errors.PermissionDenied(message =
                     "Error initializing client: %s" % (e, ))
@@ -231,18 +236,24 @@ class OpenStackClient(baseDriver.BaseDriver):
         client = self.client.nova
         return sorted(client.flavors.list(), key=self.sortKey)
 
-    # TODO: figure this out.  It is an option launch param.
-    def _get_ipgroups(self):
-        client = self.client.nova
-        return sorted( client.ipgroup.list(), key=self.sortKey )
+    def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
+        descr.setDisplayName("OpenStack Launch Parameters")
+        descr.addDescription("OpenStack Launch Parameters")
+        self.drvImageDeploymentDescriptorCommonFields(descr)
+        self._imageDeploymentSpecifcDescriptorFields(descr, extraArgs=extraArgs)
+        return self._drvPopulateDescriptorFromTarget(descr)
 
-    # This also takes optional "ipgroup", "meta", and "files", 
-    # see novaclient/servers.py, ignoring for now.  TODO: really ignore?
     def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("OpenStack Launch Parameters")
         descr.addDescription("OpenStack Launch Parameters")
         self.drvLaunchDescriptorCommonFields(descr)
+        self._launchSpecificDescriptorFields(descr, extraArgs=extraArgs)
+        return self._drvPopulateDescriptorFromTarget(descr)
 
+    def _drvPopulateDescriptorFromTarget(self, descr):
+        pass
+
+    def _launchSpecificDescriptorFields(self, descr, extraArgs=None):
         targetFlavors = self._get_flavors()
         if not targetFlavors:
             raise errors.CatalogError("No instance flavors defined")
@@ -255,9 +266,11 @@ class OpenStackClient(baseDriver.BaseDriver):
                             ],
                             type = descr.EnumeratedType(flavors),
                             default=flavors[0].key,
-                            readonly=True,
                             )
         return descr
+
+    def _imageDeploymentSpecifcDescriptorFields(self, descr, **kwargs):
+        pass
 
     # TODO: remove when novaclient has caught up to v1.1.
     # This pulls a resource id from from a resource ref url
@@ -284,14 +297,17 @@ class OpenStackClient(baseDriver.BaseDriver):
         servers = sorted(client.servers.list(), key=self.sortKey)
         for server in servers:
             instanceId = str(server.id)
-            imageRef = self._idFromRef(server.imageRef)
+            imageRef = self._idFromRef(server.image['id'])
             image = imagesMap.get(imageRef)
             if image:
                 imageId = image.id
             else:
                 imageId = None
-            publicDnsName = self._getServerAddressByType(server, 'public')
-            privateDnsName = self._getServerAddressByType(server, 'private')
+            publicDnsName = privateDnsName = None
+            if server.networks.values():
+                addrList = server.networks.values()[0]
+                if addrList:
+                    publicDnsName = privateDnsName = addrList[0]
             inst = self._nodeFactory.newInstance(id = instanceId,
                 imageId = imageId,
                 instanceId = instanceId,
@@ -326,6 +342,22 @@ class OpenStackClient(baseDriver.BaseDriver):
         params['srUuid'] = srUuid
         return params
 
+    def deployImageProcess(self, job, image, auth, **params):
+        # RCE-1751: always redeploy.
+        if 0 and image.getIsDeployed():
+            self._msg(job, "Image is already deployed")
+            return image.getImageId()
+
+        ppop = params.pop
+        imageName = ppop('imageName')
+
+        cloudConfig = self.getTargetConfiguration()
+        nameLabel = image.getLongName()
+        nameDescription = image.getBuildDescription()
+
+        self._deployImage(job, image, auth, imageName=imageName)
+        self._msg(job, 'Image deployed')
+        return image.getImageId()
 
     def launchInstanceProcess(self, job, image, auth, **launchParams):
         ppop = launchParams.pop
@@ -337,8 +369,10 @@ class OpenStackClient(baseDriver.BaseDriver):
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
-        self._deployImage(job, image, auth)
-        imageId = image.getInternalTargetId()
+        if not image.getIsDeployed():
+            imageId = self._deployImage(job, image, auth, imageName=instanceName)
+        else:
+            imageId = getattr(image, 'opaqueId')
 
         job.addHistoryEntry('Launching')
         instId = self._launchInstanceOnTarget(instanceName, imageId, flavorRef)
@@ -373,11 +407,15 @@ class OpenStackClient(baseDriver.BaseDriver):
         return self.filterImages(imageIdsFilter, ret)
 
     @classmethod
-    def _getLinkRel(cls, obj, rel):
-        for link in obj.links:
+    def _getLinkRelFromList(cls, list, rel):
+        for link in list:
             if link['rel'] == rel:
                 return link['href']
         return None
+
+    @classmethod
+    def _getLinkRel(cls, obj, rel):
+        return cls._getLinkRelFromList(obj.links, rel)
 
     def _getImageDiskFormat(self):
         return 'raw'
@@ -388,17 +426,15 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _getImagePublic(self):
         return True
 
-    def _importImage(self, imageMetadata, fileObj):
-        glanceImage = self.client.glance.add_image(imageMetadata, fileObj)
-        return str(glanceImage['id'])
+    def _importImage(self, job, imageMetadata, fileObj):
+        job.addHistoryEntry('Creating image')
+        glanceImage = self.client.glance.images.create(**imageMetadata)
+        job.addHistoryEntry('Uploading image content')
+        glanceImage.update(data=fileObj)
+        return str(glanceImage.id)
 
-    def _deployImage(self, job, image, auth):
-        if image.getIsDeployed():
-            return image.getImageId()
-
-        tmpDir = tempfile.mkdtemp(prefix="openstack-download-")
-        path = self.downloadImage(job, image, tmpDir, auth=auth)
-        # Expect the image to be gzip
+    def _deployImageFromFile(self, job, image, path, *args, **kwargs):
+        imageName = kwargs.get('imageName', image.getShortName())
         try:
             job.addHistoryEntry('Uncompressing image')
             logger = lambda *x: self._msg(job, *x)
@@ -412,12 +448,11 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageDiskFormat = self._getImageDiskFormat()
             imageContainerFormat = self._getImageContainerFormat()
             imagePublic = self._getImagePublic()
-            imageName = image.getShortName()
             imageMetadata = {'name':imageName, 'disk_format':imageDiskFormat, 
                     'container_format':imageContainerFormat, 'is_public':imagePublic}
-            imageId = self._importImage(imageMetadata, fobj)
+            imageId = self._importImage(job, imageMetadata, fobj)
         finally:
-            util.rmtree(tmpDir, ignore_errors = True)
+            pass
         return imageId
 
     def _launchInstanceOnTarget(self, name, imageRef, flavorRef):
