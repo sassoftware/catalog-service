@@ -543,7 +543,7 @@ proxy_pass = pass
 
         self._mockRequest(s3kwargs = dict(
             PUT = {
-                None : (409, '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>BucketAlreadyExists</Code><Message>The requested bucket name is not available. The bucket namespace is shared by all users of the system. Please select a different name and try again.</Message><BucketName>foonly</BucketName><RequestId>9475636DFF559A9B</RequestId><HostId>a7paJwA7n8i+tMHAW0WwbQfN85Ss7NNOGtA/A0xGHmMsmGajE8fWdYOCMza9WJQs</HostId></Error>'),
+                '*' : (409, '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>BucketAlreadyExists</Code><Message>The requested bucket name is not available. The bucket namespace is shared by all users of the system. Please select a different name and try again.</Message><BucketName>foonly</BucketName><RequestId>9475636DFF559A9B</RequestId><HostId>a7paJwA7n8i+tMHAW0WwbQfN85Ss7NNOGtA/A0xGHmMsmGajE8fWdYOCMza9WJQs</HostId></Error>'),
             },
             GET = {
                 None : (403, '<?xml version="1.0" encoding="UTF-8"?>\n<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>foonly</Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>')
@@ -1309,13 +1309,17 @@ class MockedRequest(object):
 
 class MockedS3Request(MockedRequest):
     data = dict(
-        PUT = { None : 200 },
+        PUT = { None : 200, '*' : (200, '') },
+        HEAD = { None : (200, '') },
     )
 
     def _get_response(self, action, params, path, args, kwargs):
-        if action not in self.data or path not in self.data[action]:
+        if action not in self.data:
             raise Exception("Shouldn't have tried this method", action)
-        data = self.data[action][path]
+        actionData = self.data[action]
+        if path not in actionData and '*' not in actionData:
+            raise Exception("Shouldn't have tried this method", action)
+        data = actionData.get(path, actionData.get('*'))
         if isinstance(data, tuple):
             status, data = data
         else:
