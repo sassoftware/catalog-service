@@ -21,7 +21,6 @@ class CatalogService(PackageRecipe):
 
     buildRequires = [
         'amiconfig:python',
-        'boto:python',
         'ec2-ami-tools:runtime',
         'python-glanceclient',
         'jobslave:python',
@@ -29,6 +28,7 @@ class CatalogService(PackageRecipe):
         'make',
         'm2crypto',
         'pywbem:python',
+        'python-boto',
         'python-devel',
         'python-novaclient',
         'rmake3:python',

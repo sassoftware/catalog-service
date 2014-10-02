@@ -94,19 +94,42 @@ class EC2_InstanceTypes(instances.InstanceTypes):
     "EC2 Instance Types"
 
     idMap = [
-        ('m1.small', "M1 Small"),
-        ('m1.medium', "M1 Medium"),
-        ('m1.large', "M1 Large"),
-        ('m1.xlarge', "M1 Extra Large"),
-        ('m2.xlarge', "M2 High Memory Extra Large"),
-        ('m2.2xlarge', "M2 High Memory Double Extra Large"),
-        ('m2.4xlarge', "M2 High Memory Quadruple Extra Large"),
-        ('c1.medium', "C1 High-CPU Medium"),
-        ('c1.xlarge', "C1 High-CPU Extra Large"),
-        ('hi1.4xlarge', "High I/O Quadruple Extra Large"),
+        ('m3.medium', 'M3 Medium'),
+        ('m3.large', 'M3 Large'),
+        ('m3.xlarge', 'M3 Extra Large'),
+        ('m3.2xlarge', 'M3 Double Extra Large'),
+        ('c3.large', 'C3 Compute Optimized Large'),
+        ('c3.xlarge', 'C3 Compute Optimized Extra Large'),
+        ('c3.2xlarge', 'C3 Compute Optimized Double Extra Large'),
+        ('c3.4xlarge', 'C3 Compute Optimized Quadruple Extra Large'),
+        ('c3.8xlarge', 'C3 Compute Optimized Eight Extra Large'),
+        ('g2.2xlarge', 'G2 GPU-Optimized Double Extra Large'),
+        ('r3.xlarge', 'R3 Memory Optimized Extra Large'),
+        ('r3.2xlarge', 'R3 Memory Optimized Double Extra Large'),
+        ('r3.4xlarge', 'R3 Memory Optimized Quadruple Extra Large'),
+        ('r3.8xlarge', 'R3 Memory Optimized Eight Extra Large'),
+        ('i2.xlarge', 'I2 Storage Optimized Extra Large'),
+        ('i2.2xlarge', 'I2 Storage Optimized Double Extra Large'),
+        ('i2.4xlarge', 'I2 Storage Optimized Quadruple Extra Large'),
+        ('i2.8xlarge', 'I2 Storage Optimized Eight Extra Large'),
         ('hs1.8xlarge', "High Storage Eight Extra Large"),
+        ('m1.small', "(OLD) M1 Small"),
+        ('m1.medium', "(OLD) M1 Medium"),
+        ('m1.large', "(OLD) M1 Large"),
+        ('m1.xlarge', "(OLD) M1 Extra Large"),
+        ('m2.xlarge', "(OLD) M2 High Memory Extra Large"),
+        ('m2.2xlarge', "(OLD) M2 High Memory Double Extra Large"),
+        ('m2.4xlarge', "(OLD) M2 High Memory Quadruple Extra Large"),
+        ('c1.medium', "(OLD) C1 High-CPU Medium"),
+        ('c1.xlarge', "(OLD) C1 High-CPU Extra Large"),
+        ('hi1.4xlarge', "(OLD) High I/O Quadruple Extra Large"),
     ]
-    idMapEBS = [ ('t1.micro', "Micro") ] + idMap
+    idMapEBS = [
+            ('t2.micro', "T2 Micro"),
+            ('t2.small', "T2 Small"),
+            ('t2.medium', "T2 Medium"),
+            ('t1.micro', "T1 Micro"),
+            ] + idMap
 
 class XRegionInfo(bec2.regioninfo.RegionInfo):
     def __init__(self, name=None, endpoint=None, s3Endpoint=None,

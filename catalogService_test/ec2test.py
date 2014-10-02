@@ -647,17 +647,35 @@ proxy_pass = pass
             for ftype in [ ftypes[3], ftypes[4], ftypes[7], ftypes[8] ] ],
             [
                 [
-                    ('m1.small', {None: 'M1 Small'}),
-                    ('m1.medium', {None: 'M1 Medium'}),
-                    ('m1.large', {None: 'M1 Large'}),
-                    ('m1.xlarge', {None: 'M1 Extra Large'}),
-                    ('m2.xlarge', {None: 'M2 High Memory Extra Large'}),
-                    ('m2.2xlarge', {None: 'M2 High Memory Double Extra Large'}),
-                    ('m2.4xlarge', {None: 'M2 High Memory Quadruple Extra Large'}),
-                    ('c1.medium', {None: 'C1 High-CPU Medium'}),
-                    ('c1.xlarge', {None: 'C1 High-CPU Extra Large'}),
-                    ('hi1.4xlarge', {None: 'High I/O Quadruple Extra Large'}),
+                    ('m3.medium', {None: 'M3 Medium'}),
+                    ('m3.large', {None: 'M3 Large'}),
+                    ('m3.xlarge', {None: 'M3 Extra Large'}),
+                    ('m3.2xlarge', {None: 'M3 Double Extra Large'}),
+                    ('c3.large', {None: 'C3 Compute Optimized Large'}),
+                    ('c3.xlarge', {None: 'C3 Compute Optimized Extra Large'}),
+                    ('c3.2xlarge', {None: 'C3 Compute Optimized Double Extra Large'}),
+                    ('c3.4xlarge', {None: 'C3 Compute Optimized Quadruple Extra Large'}),
+                    ('c3.8xlarge', {None: 'C3 Compute Optimized Eight Extra Large'}),
+                    ('g2.2xlarge', {None: 'G2 GPU-Optimized Double Extra Large'}),
+                    ('r3.xlarge', {None: 'R3 Memory Optimized Extra Large'}),
+                    ('r3.2xlarge', {None: 'R3 Memory Optimized Double Extra Large'}),
+                    ('r3.4xlarge', {None: 'R3 Memory Optimized Quadruple Extra Large'}),
+                    ('r3.8xlarge', {None: 'R3 Memory Optimized Eight Extra Large'}),
+                    ('i2.xlarge', {None: 'I2 Storage Optimized Extra Large'}),
+                    ('i2.2xlarge', {None: 'I2 Storage Optimized Double Extra Large'}),
+                    ('i2.4xlarge', {None: 'I2 Storage Optimized Quadruple Extra Large'}),
+                    ('i2.8xlarge', {None: 'I2 Storage Optimized Eight Extra Large'}),
                     ('hs1.8xlarge', {None: 'High Storage Eight Extra Large'}),
+                    ('m1.small', {None: '(OLD) M1 Small'}),
+                    ('m1.medium', {None: '(OLD) M1 Medium'}),
+                    ('m1.large', {None: '(OLD) M1 Large'}),
+                    ('m1.xlarge', {None: '(OLD) M1 Extra Large'}),
+                    ('m2.xlarge', {None: '(OLD) M2 High Memory Extra Large'}),
+                    ('m2.2xlarge', {None: '(OLD) M2 High Memory Double Extra Large'}),
+                    ('m2.4xlarge', {None: '(OLD) M2 High Memory Quadruple Extra Large'}),
+                    ('c1.medium', {None: '(OLD) C1 High-CPU Medium'}),
+                    ('c1.xlarge', {None: '(OLD) C1 High-CPU Extra Large'}),
+                    ('hi1.4xlarge', {None: '(OLD) High I/O Quadruple Extra Large'})
                 ],
                 [
                     ('us-east-1a', {None: 'us-east-1a'}),
@@ -702,7 +720,7 @@ proxy_pass = pass
                 {},
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 'm1.small', None, 1, 1, None, ['catalog-default'], None, None, None])
+            [None, None, None, 'm3.medium', None, 1, 1, None, ['catalog-default'], None, None, None])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
             [
