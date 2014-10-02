@@ -1330,7 +1330,7 @@ class MockedHttpConnection(object):
     def set_debuglevel(self, level):
         pass
 
-def mockedProxySsl(slf):
+def mockedProxySsl(slf, host=None, port=None):
     fout = file(slf._proxyFile, "w")
     fout.write("%s = %s\n" % ("proxy", slf.proxy))
     fout.write("%s = %s\n" % ("proxy_port", slf.proxy_port))
