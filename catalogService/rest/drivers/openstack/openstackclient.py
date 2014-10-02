@@ -369,8 +369,10 @@ class OpenStackClient(baseDriver.BaseDriver):
         nameLabel = image.getLongName()
         nameDescription = image.getBuildDescription()
 
+        imageName = image.getBaseFileName()
+
         if not image.getIsDeployed():
-            imageId = self._deployImage(job, image, auth, imageName=instanceName)
+            imageId = self._deployImage(job, image, auth, imageName=imageName)
         else:
             imageId = getattr(image, 'opaqueId')
 
