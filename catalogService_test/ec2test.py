@@ -105,7 +105,7 @@ class HandlerTest(testbase.TestCase):
                 # proxy_ssl. We need to make this method static, so it gets
                 # the real Connection object passed into it as slf
                 slf._pool.clean()
-                slf.get_http_connection(slf.host, slf.is_secure)
+                slf.get_http_connection(slf.host, slf.port, slf.is_secure)
                 return DummyEC2Req.reqobj.mockedMakeRequest(*args, **kwargs)
 
         self.mock(EC2Connection, 'make_request',
