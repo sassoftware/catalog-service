@@ -58,6 +58,8 @@ class MockedResponse(object):
         self.headers = self.msg = {}
     def read(self, amt=None):
         return self._io.read(amt)
+    def getheaders(self):
+        return self.headers
     def getheader(self, name, default=None):
         return self.headers.get(name, default)
     def close(self):
