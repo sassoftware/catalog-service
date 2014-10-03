@@ -130,7 +130,7 @@ _credentialsDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <descriptions>
           <desc>Field must contain between 1 and 32 characters</desc>
         </descriptions>
-        <length>255</length>
+        <length>32</length>
       </constraints>
       <required>true</required>
     </field>
