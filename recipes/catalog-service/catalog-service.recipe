@@ -31,6 +31,7 @@ class CatalogService(PackageRecipe):
         'pywbem:python',
         'python-devel',
         'python-novaclient:python',
+        'python-requests',
         'rmake3:python',
         'rpath-job:python',
         'rpath-models:python',
