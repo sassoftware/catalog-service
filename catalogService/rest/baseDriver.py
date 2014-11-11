@@ -23,6 +23,7 @@ import time
 import traceback
 import urllib
 import urllib2
+import requests
 import weakref
 import gzip
 from StringIO import StringIO
@@ -1125,8 +1126,7 @@ class BaseDriver(object):
         return None, None
 
     def openUrl(self, url, headers):
-        req = urllib2.Request(url, headers = headers or {})
-        resp = urllib2.urlopen(req)
+        resp = Request(url, headers=headers)
         if resp.headers['Content-Type'].startswith("text/html"):
             # We should not get HTML content out of rbuilder - most likely
             # a private project to which we don't have access
@@ -1715,5 +1715,74 @@ class Archive(object):
                 if member.name.endswith(extension):
                     yield member
 
+class Request(object):
+    __slots__ = ['session', '_resp', '_bytesRead', '_url',
+            '_lastRangeResp', ]
+    def __init__(self, url, headers=None):
+        self.session = requests.Session()
+        self.session.stream = True
+        self.session.verify = False
+        self.session.headers.update(headers or {})
+        self._bytesRead = 0
+        self._url = url
+        self._lastRangeResp = None
+        self._resp = self.session.get(self._url)
+
+    @property
+    def headers(self):
+        # This won't work with range requests, but by then we shouldn't need
+        # to know the content length anymore
+        return self._resp.headers
+
+    def read(self, amt=None, **kwargs):
+        if amt == 0:
+            return ''
+        if self._lastRangeResp is not None:
+            # Once we've switched to range requests, we stay with them
+            assert amt is not None
+            return self._rangeRead(amt)
+        fp = self._resp.raw
+        if amt is None:
+            # No benefit from range requests here
+            ret = fp.read(amt=amt, **kwargs)
+            self._bytesRead += len(ret)
+            return ret
+        try:
+            ret = fp.read(amt=amt, **kwargs)
+            self._bytesRead += len(ret)
+            return ret
+        except requests.exceptions.RequestException:
+            # XXX Qualify exception that should trigger a content range req
+            return self._rangeRead(amt)
+
+    def _rangeRead(self, amt):
+        self._resp = None
+        amtToRead = amt
+        timeout = 1.1
+        while 1:
+            headers = dict(Range="bytes=%d-%d" % (self._bytesRead,
+                self._bytesRead + amtToRead - 1))
+            resp = self._lastRangeResp = self.session.get(self._url,
+                    headers=headers)
+            if resp.status_code == 200:
+                raise ValueError("Expected Partial Content, got 200")
+            if resp.status_code != 206:
+                # XXX We may have to retry in some cases. Stop for now
+                raise ValueError("Expected Partial Content, got %d" %
+                        resp.status_code)
+            try:
+                ret = resp.raw.read(amtToRead)
+                self._bytesRead += len(ret)
+                return ret
+            except requests.exceptions.RequestException:
+                # Decrease number of bytes to read, and try again
+                amtToRead = amtToRead // 2
+                if not amtToRead:
+                    raise
+                time.sleep(timeout)
+                timeout **= 2
+
+    def close(self):
+        return self._resp.raw.close()
 
 BaseDriver.Archive = Archive
