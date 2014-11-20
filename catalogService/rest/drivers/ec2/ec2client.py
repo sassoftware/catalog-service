@@ -726,8 +726,8 @@ conary-proxies=%s
         self._msg(job, "Tagging instances")
         reqInstName = launchParams.get('instanceName')
         reqInstDescription = launchParams.get('instanceDescription')
-        reservations = self.client.get_all_instances(instanceIds)
         for i in range(60):
+            reservations = self.client.get_all_instances(instanceIds)
             if reservations:
                 break
             self._msg(job, "Waiting for reservation")
