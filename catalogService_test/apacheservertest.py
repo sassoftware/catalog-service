@@ -55,6 +55,7 @@ class ApacheServerTest(testbase.TestCase):
         return a
 
     def test1(self):
+        raise testsuite.SkipTestException("Apache no longer actively used")
         uri = 'clouds/ec2/instances'
         srv = self.newService()
         client = self.newClient(srv, uri)
