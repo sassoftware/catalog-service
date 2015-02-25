@@ -556,12 +556,12 @@ class HandlerTest(testbase.TestCase):
         self.failUnlessEqual(dsc.getDescriptions(), {None : 'OpenStack Launch Parameters'})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
             ['imageId', 'instanceName', 'instanceDescription',
-             'flavor', ])
+             'flavor', 'floatingIp', ])
         ftypes = [ df.type for df in dsc.getDataFields() ]
         self.failUnlessEqual([ ftypes[0], ftypes[1], ftypes[2]],
             ['str', 'str', 'str', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[3], ] ],
+            for ftype in [ ftypes[3], ftypes[4], ] ],
             [
                 [
                     ('1', {None: 'm1.tiny'}),
@@ -570,14 +570,24 @@ class HandlerTest(testbase.TestCase):
                     ('4', {None: 'm1.large'}),
                     ('5', {None: 'm1.xlarge'}),
                 ],
+                [
+                    ('new floating ip-SAS Network (VLAN0000)',
+                        {None: '[New floating IP in SAS Network (VLAN0000)]'}),
+                    ('new floating ip-SAS Network (VLAN0001)',
+                        {None: '[New floating IP in SAS Network (VLAN0001)]'}),
+                    ('4130b5d0-0df4-4df5-9ba1-000000000010',
+                        {None: '10.10.10.100 in pool SAS Network (VLAN0001)'}),
+                    ('4130b5d0-0df4-4df5-9ba1-000000000000',
+                        {None: '10.20.10.100 in pool SAS Network (VLAN0000)'}),
+                ],
             ])
-        expMultiple = [None, None, None, None,]
+        expMultiple = [None, None, None, None, None]
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True,] )
+            [ True, True, None, True, True, ] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None,] )
+            [ True, None, None, None, None, ] )
         prefix = self.makeUri(client, "help/targets/drivers/%s/launch/" % self.cloudType)
         self.failUnlessEqual([ df.helpAsDict for df in dsc.getDataFields() ],
             [
@@ -585,9 +595,10 @@ class HandlerTest(testbase.TestCase):
                 {None: prefix + 'instanceName.html'},
                 {None: prefix + 'instanceDescription.html'},
                 {None: prefix + 'flavor.html'},
+                {None: prefix + 'floatingIp.html'},
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, '1', ])
+            [None, None, None, '1', 'new floating ip-SAS Network (VLAN0000)'])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
             [
@@ -595,12 +606,14 @@ class HandlerTest(testbase.TestCase):
                 {None: 'Instance Name'},
                 {None: 'Instance Description'},
                 {None: 'Flavor'},
+                {None: 'Floating IP'},
             ])
         self.failUnlessEqual([ df.constraintsPresentation for df in dsc.getDataFields() ],
             [
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
                 [{'constraintName': 'length', 'value': 32}],
                 [{'constraintName': 'length', 'value': 128}],
+                [],
                 [],
             ])
 
@@ -882,6 +895,47 @@ class CannedData(object):
               'updated': '2014-08-27T15:48:14Z'}]
             }))
 
+    floatingIpPools_list = (200, dict(body={
+        'floating_ip_pools' : [
+            {'name' : 'SAS Network (VLAN0000)'},
+            {'name' : 'SAS Network (VLAN0001)'},
+        ]
+        }))
+
+    floatingIps_list = (200, dict(body={
+        'floating_ips' : [
+            {'fixed_ip': None,
+             'id': '4130b5d0-0df4-4df5-9ba1-000000000000',
+             'instance_id': None,
+             'ip': '10.20.10.100',
+             'pool': 'SAS Network (VLAN0000)'},
+            {'fixed_ip': '192.168.20.101',
+             'id': '4130b5d0-0df4-4df5-9ba1-000000000001',
+             'instance_id': 'bbbbbbbb-76dc-43a1-b846-000000000001',
+             'ip': '10.20.10.101',
+             'pool': 'SAS Network (VLAN0000)'},
+            {'fixed_ip': None,
+             'id': '4130b5d0-0df4-4df5-9ba1-000000000010',
+             'instance_id': None,
+             'ip': '10.10.10.100',
+             'pool': 'SAS Network (VLAN0001)'},
+            {'fixed_ip': '192.168.10.101',
+             'id': '4130b5d0-0df4-4df5-9ba1-000000000011',
+             'instance_id': 'bbbbbbbb-76dc-43a1-b846-000000000011',
+             'ip': '10.10.10.101',
+             'pool': 'SAS Network (VLAN0001)'},
+        ]
+        }))
+    floatingIps_create = (200, dict(body={
+        'floating_ip' : {
+             'fixed_ip': None,
+             'id': '4130b5d0-0df4-4df5-9ba1-000000000002',
+             'instance_id': None,
+             'ip': '10.20.10.102',
+             'pool': 'SAS Network (VLAN0000)',
+             },
+        }))
+
     servers_listDetailed = (200, dict(body={
 'servers': [{'OS-DCF:diskConfig': 'MANUAL',
                'OS-EXT-AZ:availability_zone': 'nova',
@@ -969,6 +1023,9 @@ class CannedData(object):
         srv['addresses']['public'] = [
             dict(version=4, addr="10.100.100.%s" % (i+100)),
         ]
+
+    servers_add_floating_ip = (200, dict(body={
+        }))
 
     flavors_listDetailed = (200, dict(body={
         'flavors': [
@@ -1095,6 +1152,9 @@ class MockedClientData(object):
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/detail' : dict(
             GET = CannedData.images_listDetailed,
         ),
+        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9/action' : dict(
+            POST = CannedData.servers_add_floating_ip,
+            ),
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/detail' : dict(
             GET = mockedData.MultiResponse([
                 CannedData.servers_listDetailed,
@@ -1105,6 +1165,13 @@ class MockedClientData(object):
         ),
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/detail' : dict(
             GET = CannedData.flavors_listDetailed,
+        ),
+        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ips' : dict(
+            GET = CannedData.floatingIps_list,
+            POST = CannedData.floatingIps_create,
+        ),
+        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ip-pools' : dict(
+            GET = CannedData.floatingIpPools_list,
         ),
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers' : dict(
             POST = CannedData.server_create,

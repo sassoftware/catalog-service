@@ -37,6 +37,8 @@ class OpenStack_Image(images.BaseImage):
     "OpenStack Image"
 
 NOVA_PORT = 5000
+CATALOG_NEW_FLOATING_IP = "new floating ip-"
+CATALOG_NEW_FLOATING_IP_DESC = "[New floating IP in {pool}]"
 
 # This is provided by the nova api
 #class OpenStack_InstanceTypes(instances.InstanceTypes):
@@ -267,7 +269,39 @@ class OpenStackClient(baseDriver.BaseDriver):
                             type = descr.EnumeratedType(flavors),
                             default=flavors[0].key,
                             )
+        fpList = self._cliGetFloatingIps()
+        descr.addDataField('floatingIp',
+            descriptions = 'Floating IP',
+            required = True,
+            help = [
+                ('launch/floatingIp.html', None)
+            ],
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x['id'], descriptions = x['label'])
+                for x in fpList),
+            default=fpList[0]['id'],
+        )
         return descr
+
+    def _cliGetFloatingIps(self):
+        cli = self.client.nova
+        pools = cli.floating_ip_pools.list()
+        objs = cli.floating_ips.list()
+        unassigned = [
+                dict(
+                    id=CATALOG_NEW_FLOATING_IP + x.name,
+                    label=CATALOG_NEW_FLOATING_IP_DESC.format(pool=x.name),
+                    pool=x.name)
+                for x in pools ]
+        for obj in objs:
+            if obj.instance_id:
+                continue
+            unassigned.append(dict(id=obj.id,
+                label= "%s in pool %s" % (obj.ip, obj.pool),
+                pool=obj.pool,
+                ip=obj.ip))
+        unassigned.sort(key=lambda x: x.get('ip'))
+        return unassigned
 
     def _imageDeploymentSpecifcDescriptorFields(self, descr, **kwargs):
         pass
@@ -364,6 +398,12 @@ class OpenStackClient(baseDriver.BaseDriver):
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
         flavorRef = ppop('flavor')
+        floatingIp = ppop('floatingIp')
+        if floatingIp.startswith(CATALOG_NEW_FLOATING_IP):
+            poolName = floatingIp[len(CATALOG_NEW_FLOATING_IP):]
+            floatingIp = self.client.nova.floating_ips.create(pool=poolName)
+        else:
+            floatingIp = self.client.nova.floating_ips.get(floatingIp)
 
         cloudConfig = self.getTargetConfiguration()
         nameLabel = image.getLongName()
@@ -377,7 +417,8 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageId = getattr(image, 'opaqueId')
 
         job.addHistoryEntry('Launching')
-        instId = self._launchInstanceOnTarget(instanceName, imageId, flavorRef)
+        instId = self._launchInstanceOnTarget(instanceName, imageId, flavorRef,
+                floatingIp)
         return [ instId ]
 
     @classmethod
@@ -457,7 +498,8 @@ class OpenStackClient(baseDriver.BaseDriver):
             pass
         return imageId
 
-    def _launchInstanceOnTarget(self, name, imageRef, flavorRef):
+    def _launchInstanceOnTarget(self, name, imageRef, flavorRef, floatingIp):
         client = self.client.nova
         server = client.servers.create(name, imageRef, flavorRef) # ipGroup, etc
+        server.add_floating_ip(floatingIp)
         return str(server.id)
