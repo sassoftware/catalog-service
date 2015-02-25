@@ -16,13 +16,12 @@
 
 
 import os
-import tempfile
+import time
 
 from catalogService import errors
 from catalogService.rest import baseDriver
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
-from conary.lib import util
 
 try:
     from keystoneclient.auth.identity import v2 as v2_auth
@@ -331,17 +330,22 @@ class OpenStackClient(baseDriver.BaseDriver):
         servers = sorted(client.servers.list(), key=self.sortKey)
         for server in servers:
             instanceId = str(server.id)
-            imageRef = self._idFromRef(server.image['id'])
-            image = imagesMap.get(imageRef)
-            if image:
-                imageId = image.id
-            else:
-                imageId = None
+            imageId = None
+            imgobj = server.image
+            if imgobj:
+                imageRef = self._idFromRef(imgobj['id'])
+                image = imagesMap.get(imageRef)
+                if image:
+                    imageId = image.id
             publicDnsName = privateDnsName = None
-            if server.networks.values():
-                addrList = server.networks.values()[0]
-                if addrList:
-                    publicDnsName = privateDnsName = addrList[0]
+            if server.addresses.values():
+                addrList = server.addresses.values()[0]
+                floatingAddrs = [ x['addr'] for x in addrList if x['OS-EXT-IPS:type'] == 'floating' ]
+                fixedAddrs = [ x['addr'] for x in addrList if x['OS-EXT-IPS:type'] == 'fixed' ]
+                if floatingAddrs:
+                    publicDnsName = floatingAddrs[0]
+                if fixedAddrs:
+                    privateDnsName = fixedAddrs[0]
             inst = self._nodeFactory.newInstance(id = instanceId,
                 imageId = imageId,
                 instanceId = instanceId,
@@ -417,8 +421,8 @@ class OpenStackClient(baseDriver.BaseDriver):
             imageId = getattr(image, 'opaqueId')
 
         job.addHistoryEntry('Launching')
-        instId = self._launchInstanceOnTarget(instanceName, imageId, flavorRef,
-                floatingIp)
+        instId = self._launchInstanceOnTarget(job, instanceName, imageId,
+                flavorRef, floatingIp)
         return [ instId ]
 
     @classmethod
@@ -498,8 +502,14 @@ class OpenStackClient(baseDriver.BaseDriver):
             pass
         return imageId
 
-    def _launchInstanceOnTarget(self, name, imageRef, flavorRef, floatingIp):
+    def _launchInstanceOnTarget(self, job, name, imageRef, flavorRef, floatingIp):
         client = self.client.nova
         server = client.servers.create(name, imageRef, flavorRef) # ipGroup, etc
+        for i in range(20):
+            if server.status == 'ACTIVE':
+                break
+            job.addHistoryEntry('Waiting for server to become active')
+            time.sleep(2*i + 1)
+            server = client.servers.get(server)
         server.add_floating_ip(floatingIp)
         return str(server.id)

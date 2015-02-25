@@ -324,7 +324,7 @@ class HandlerTest(testbase.TestCase):
         # Normally we should only get one instance, but the call is mocked
         self.failUnlessEqual(node.getInstanceId(), instanceId)
         self.failUnlessEqual(node.getInstanceName(), 'vincent1')
-        self.failUnlessEqual(node.getPublicDnsName(), '10.210.1.12')
+        self.failUnlessEqual(node.getPublicDnsName(), '10.124.16.51')
         self.failUnlessEqual(node.getPrivateDnsName(), '10.210.1.12')
 
     def testGetInstance2(self):
@@ -936,6 +936,47 @@ class CannedData(object):
              },
         }))
 
+    server_get = (200, dict(body={
+        'server' : {
+              'OS-DCF:diskConfig': 'MANUAL',
+               'OS-EXT-AZ:availability_zone': 'nova',
+               'OS-EXT-STS:power_state': 1,
+               'OS-EXT-STS:task_state': None,
+               'OS-EXT-STS:vm_state': 'active',
+               'OS-SRV-USG:launched_at': '2014-09-30T13:32:48.000000',
+               'OS-SRV-USG:terminated_at': None,
+               'accessIPv4': '',
+               'accessIPv6': '',
+               'addresses': {'pdt-network1': [{'OS-EXT-IPS-MAC:mac_addr': 'fa:16:3e:31:f6:70',
+                                                 'OS-EXT-IPS:type': 'fixed',
+                                                 'addr': '10.210.1.11',
+                                                 'version': 4}]},
+               'config_drive': '',
+               'created': '2014-09-30T13:31:58Z',
+               'flavor': {'id': '2',
+                           'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
+                                       'rel': 'bookmark'}]},
+               'hostId': '07d94005d463e0fbaeb2dd75bdc36762f93eaea4e6dd92354441aea0',
+               'id': '37208896-004b-4291-bab7-5cd89fcf71b9',
+               'image': {'id': 'a17f23b5-15e8-48f0-974f-fd0e6b659739',
+                          'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
+                                      'rel': 'bookmark'}]},
+               'key_name': None,
+               'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+                           'rel': 'self'},
+                          {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+                           'rel': 'bookmark'}],
+               'metadata': {},
+               'name': 'jules1',
+               'os-extended-volumes:volumes_attached': [],
+               'progress': 0,
+               'security_groups': [{'name': 'default'}],
+               'status': 'ACTIVE',
+               'tenant_id': '44a04a897db842a49ff3f13cf5759a97',
+               'updated': '2014-09-30T13:32:49Z',
+               'user_id': 'Mihai Ibanescu'
+            }}))
+
     servers_listDetailed = (200, dict(body={
 'servers': [{'OS-DCF:diskConfig': 'MANUAL',
                'OS-EXT-AZ:availability_zone': 'nova',
@@ -987,10 +1028,20 @@ class CannedData(object):
                'OS-SRV-USG:terminated_at': None,
                'accessIPv4': '',
                'accessIPv6': '',
-               'addresses': {'pdt-network1': [{'OS-EXT-IPS-MAC:mac_addr': 'fa:16:3e:31:f6:70',
-                                                 'OS-EXT-IPS:type': 'fixed',
-                                                 'addr': '10.210.1.11',
-                                                 'version': 4}]},
+               'addresses': {'pdt-network1': [
+                            {
+                                'OS-EXT-IPS-MAC:mac_addr': 'fa:16:3e:31:f6:70',
+                                'OS-EXT-IPS:type': 'fixed',
+                                'addr': '10.210.1.11',
+                                'version': 4,
+                                },
+                            {
+                                'OS-EXT-IPS-MAC:mac_addr': 'fa:16:3e:31:f6:70',
+                                'OS-EXT-IPS:type': 'floating',
+                                'addr': '10.100.1.11',
+                                'version': 4,
+                                },
+                            ]},
                'config_drive': '',
                'created': '2014-09-30T13:31:58Z',
                'flavor': {'id': '2',
@@ -1021,7 +1072,10 @@ class CannedData(object):
         servers_listDetailed[0], copy.deepcopy(servers_listDetailed[1]))
     for i, srv in enumerate(servers_listDetailedWithNetwork[1]['body']['servers']):
         srv['addresses']['public'] = [
-            dict(version=4, addr="10.100.100.%s" % (i+100)),
+                { 'version' : 4, 'addr' : "10.210.100.%s" % (i+100),
+                    'OS-EXT-IPS:type': 'fixed'},
+                { 'version' : 4, 'addr' : "10.100.100.%s" % (i+100),
+                    'OS-EXT-IPS:type': 'floating'},
         ]
 
     servers_add_floating_ip = (200, dict(body={
@@ -1161,6 +1215,7 @@ class MockedClientData(object):
                 CannedData.servers_listDetailed,
                 CannedData.servers_listDetailedWithNetwork,
                 CannedData.servers_listDetailedWithNetwork,
+                CannedData.servers_listDetailedWithNetwork,
             ]),
         ),
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/detail' : dict(
@@ -1176,6 +1231,9 @@ class MockedClientData(object):
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers' : dict(
             POST = CannedData.server_create,
         ),
+        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9' : dict(
+            GET = CannedData.server_get,
+            ),
         'http://openstack1.eng.rpath.com:9292/v1/images' : dict(
             POST = CannedData.glance_images_create,
             ),
