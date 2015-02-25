@@ -268,6 +268,15 @@ class OpenStackClient(baseDriver.BaseDriver):
                             type = descr.EnumeratedType(flavors),
                             default=flavors[0].key,
                             )
+        descr.addDataField("keyName",
+            descriptions = [ ("SSH Key Pair", None), ("Paire de clefs", "fr_FR") ],
+            help = [
+                ("launch/keyPair.html", None)
+            ],
+            type = descr.EnumeratedType(
+                descr.ValueWithDescription(x[0], descriptions = x[1])
+                for x in self._cliGetKeyPairs()
+            ))
         fpList = self._cliGetFloatingIps()
         descr.addDataField('floatingIp',
             descriptions = 'Floating IP',
@@ -301,6 +310,14 @@ class OpenStackClient(baseDriver.BaseDriver):
                 ip=obj.ip))
         unassigned.sort(key=lambda x: x.get('ip'))
         return unassigned
+
+    def _cliGetKeyPairs(self):
+        try:
+            rs = self.client.nova.keypairs.list()
+        except:
+            raise
+        return [ (x.id, x.name) for x in rs ]
+
 
     def _imageDeploymentSpecifcDescriptorFields(self, descr, **kwargs):
         pass
@@ -408,6 +425,7 @@ class OpenStackClient(baseDriver.BaseDriver):
             floatingIp = self.client.nova.floating_ips.create(pool=poolName)
         else:
             floatingIp = self.client.nova.floating_ips.get(floatingIp)
+        keyName = ppop('keyName', None)
 
         cloudConfig = self.getTargetConfiguration()
         nameLabel = image.getLongName()
@@ -422,7 +440,7 @@ class OpenStackClient(baseDriver.BaseDriver):
 
         job.addHistoryEntry('Launching')
         instId = self._launchInstanceOnTarget(job, instanceName, imageId,
-                flavorRef, floatingIp)
+                flavorRef, keyName, floatingIp)
         return [ instId ]
 
     @classmethod
@@ -502,9 +520,10 @@ class OpenStackClient(baseDriver.BaseDriver):
             pass
         return imageId
 
-    def _launchInstanceOnTarget(self, job, name, imageRef, flavorRef, floatingIp):
+    def _launchInstanceOnTarget(self, job, name, imageRef, flavorRef, keyName, floatingIp):
         client = self.client.nova
-        server = client.servers.create(name, imageRef, flavorRef) # ipGroup, etc
+        server = client.servers.create(name, imageRef, flavorRef,
+                key_name=keyName) # ipGroup, etc
         for i in range(20):
             if server.status == 'ACTIVE':
                 break

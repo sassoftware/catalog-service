@@ -1110,6 +1110,7 @@ xml_newInstanceOpenStackTempl = """\
   <instanceName>%(instanceName)s</instanceName>
   <instanceDescription>%(instanceDescription)s</instanceDescription>
   <flavor>%(flavor)s</flavor>
+  <keyName>%(keyName)s</keyName>
 </newInstance>
 """
 

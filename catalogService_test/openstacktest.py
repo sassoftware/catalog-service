@@ -556,12 +556,12 @@ class HandlerTest(testbase.TestCase):
         self.failUnlessEqual(dsc.getDescriptions(), {None : 'OpenStack Launch Parameters'})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
             ['imageId', 'instanceName', 'instanceDescription',
-             'flavor', 'floatingIp', ])
+             'flavor', 'keyName', 'floatingIp', ])
         ftypes = [ df.type for df in dsc.getDataFields() ]
         self.failUnlessEqual([ ftypes[0], ftypes[1], ftypes[2]],
             ['str', 'str', 'str', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[3], ftypes[4], ] ],
+            for ftype in [ ftypes[3], ftypes[4], ftypes[5], ] ],
             [
                 [
                     ('1', {None: 'm1.tiny'}),
@@ -570,6 +570,10 @@ class HandlerTest(testbase.TestCase):
                     ('4', {None: 'm1.large'}),
                     ('5', {None: 'm1.xlarge'}),
                 ],
+                [
+                    ('jean_valjean', {None: 'jean_valjean'}),
+                    ('insp_javert', {None: 'insp_javert'}),
+                    ],
                 [
                     ('new floating ip-SAS Network (VLAN0000)',
                         {None: '[New floating IP in SAS Network (VLAN0000)]'}),
@@ -581,13 +585,13 @@ class HandlerTest(testbase.TestCase):
                         {None: '10.20.10.100 in pool SAS Network (VLAN0000)'}),
                 ],
             ])
-        expMultiple = [None, None, None, None, None]
+        expMultiple = [None, None, None, None, None, None]
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, True, ] )
+            [ True, True, None, True, None, True,] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, ] )
+            [ True, None, None, None, None, None, ] )
         prefix = self.makeUri(client, "help/targets/drivers/%s/launch/" % self.cloudType)
         self.failUnlessEqual([ df.helpAsDict for df in dsc.getDataFields() ],
             [
@@ -595,10 +599,11 @@ class HandlerTest(testbase.TestCase):
                 {None: prefix + 'instanceName.html'},
                 {None: prefix + 'instanceDescription.html'},
                 {None: prefix + 'flavor.html'},
+                {None: prefix + 'keyPair.html'},
                 {None: prefix + 'floatingIp.html'},
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, '1', 'new floating ip-SAS Network (VLAN0000)'])
+            [None, None, None, '1', None, 'new floating ip-SAS Network (VLAN0000)'])
 
         self.failUnlessEqual([ df.descriptions.asDict() for df in dsc.getDataFields() ],
             [
@@ -606,6 +611,7 @@ class HandlerTest(testbase.TestCase):
                 {None: 'Instance Name'},
                 {None: 'Instance Description'},
                 {None: 'Flavor'},
+                {None: 'SSH Key Pair', 'fr_FR': 'Paire de clefs'},
                 {None: 'Floating IP'},
             ])
         self.failUnlessEqual([ df.constraintsPresentation for df in dsc.getDataFields() ],
@@ -613,6 +619,7 @@ class HandlerTest(testbase.TestCase):
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
                 [{'constraintName': 'length', 'value': 32}],
                 [{'constraintName': 'length', 'value': 128}],
+                [],
                 [],
                 [],
             ])
@@ -624,7 +631,8 @@ class HandlerTest(testbase.TestCase):
         imageId = '0000000000000000000000000000000000000001'
         requestXml = _t(mockedData.xml_newInstanceOpenStackTempl % dict(
             imageId=imageId, flavor=1, instanceName="newinst34",
-            instanceDescription="newinst34 description",))
+            instanceDescription="newinst34 description",
+            keyName='jean_valjean',))
 
         client = self.newClient(srv, uri)
         response = client.request('POST', requestXml)
@@ -721,7 +729,8 @@ class HandlerTest(testbase.TestCase):
         if requestXml is None:
             requestXml = _t(mockedData.xml_newInstanceOpenStackTempl % dict(
                 imageId=imageId, flavor=1, instanceName="newinst34",
-                instanceDescription="newinst34 description",))
+                instanceDescription="newinst34 description",
+                keyName='jean_valjean',))
         client = self.newClient(srv, uri)
         response = client.request('POST', requestXml)
 
@@ -1155,6 +1164,21 @@ class CannedData(object):
                'vcpus': 8}
             ]}))
 
+    keypairs_list = (200, dict(body={
+        'keypairs' : [
+            {'keypair' : {
+                'public_key' : "ssh-rsa AAAABB",
+                'name' : 'jean_valjean',
+                'fingerprint' : '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00',
+                }},
+            {'keypair' : {
+                'public_key' : "ssh-rsa AAAACC",
+                'name' : 'insp_javert',
+                'fingerprint' : '00:00:00:00:00:00:00:00:00:00:00:00:00:00:11:11',
+                }},
+            ],
+        }))
+
     glance_images_create = (201, dict(body={
         "image": {
             "status": "active",
@@ -1221,6 +1245,9 @@ class MockedClientData(object):
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/detail' : dict(
             GET = CannedData.flavors_listDetailed,
         ),
+        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-keypairs' : dict(
+            GET = CannedData.keypairs_list,
+            ),
         'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ips' : dict(
             GET = CannedData.floatingIps_list,
             POST = CannedData.floatingIps_create,
