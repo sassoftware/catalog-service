@@ -129,6 +129,11 @@ class EC2_InstanceTypes(instances.InstanceTypes):
             ('t2.small', "T2 Small"),
             ('t2.medium', "T2 Medium"),
             ('t1.micro', "T1 Micro"),
+            ('c4.large', 'C4 Compute Optimized Large'),
+            ('c4.xlarge', 'C4 Compute Optimized Extra Large'),
+            ('c4.2xlarge', 'C4 Compute Optimized Double Extra Large'),
+            ('c4.4xlarge', 'C4 Compute Optimized Quadruple Extra Large'),
+            ('c4.8xlarge', 'C4 Compute Optimized Eight Extra Large'),
             ] + idMap
 
 class XRegionInfo(bec2.regioninfo.RegionInfo):
