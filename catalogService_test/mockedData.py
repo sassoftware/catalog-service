@@ -1089,12 +1089,164 @@ xml_newInstance7 = xml_newInstance1.replace('ami-0435d06d', 'ami-afa642c6')
 xml_newImage_EC2_1 = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <newImage>
-  <imageId>%s</imageId>
-  <imageName>aaa-bbb</imageName>
-  <imageDescription>AAA-BBB</imageDescription>
+<imageId>%s</imageId>
+<imageName>aaa-bbb</imageName>
+<imageDescription>AAA-BBB</imageDescription>
 </newImage>
 """
 
+xml_getAllVpcs1 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<DescribeVpcsResponse xmlns="http://ec2.amazonaws.com/doc/2014-05-01/">
+  <requestId>c9007dc3-0b40-4065-ae6f-1db7755c87c3</requestId>
+  <vpcSet>
+    <item>
+      <vpcId>vpc-aaaa0000</vpcId>
+      <state>available</state>
+      <cidrBlock>10.0.0.0/16</cidrBlock>
+      <dhcpOptionsId>dopt-3f89995d</dhcpOptionsId>
+      <tagSet>
+        <item>
+          <key>Name</key>
+          <value>pdttest-vpc</value>
+        </item>
+      </tagSet>
+      <instanceTenancy>default</instanceTenancy>
+      <isDefault>false</isDefault>
+    </item>
+    <item>
+      <vpcId>vpc-aaaa0001</vpcId>
+      <state>available</state>
+      <cidrBlock>172.16.0.0/16</cidrBlock>
+      <dhcpOptionsId>dopt-3f89995d</dhcpOptionsId>
+      <tagSet>
+        <item>
+          <key>AWSServiceAccount</key>
+          <value>697148468905</value>
+        </item>
+      </tagSet>
+      <instanceTenancy>default</instanceTenancy>
+      <isDefault>false</isDefault>
+    </item>
+  </vpcSet>
+</DescribeVpcsResponse>
+"""
+
+xml_getAllSecurityGroups3 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<DescribeSecurityGroupsResponse xmlns="http://ec2.amazonaws.com/doc/2014-05-01/">
+    <requestId>0e0ddced-1899-4b27-9081-5a2656713360</requestId>
+    <securityGroupInfo>
+        <item>
+            <ownerId>675450633870</ownerId>
+            <groupId>sg-ccc00000</groupId>
+            <groupName>bf8788a9-2b59-9b62-4f1c-93cbf73c2fe0</groupName>
+            <groupDescription>Generated Security Group</groupDescription>
+            <ipPermissions>
+                <item>
+                    <ipProtocol>tcp</ipProtocol>
+                    <fromPort>22</fromPort>
+                    <toPort>22</toPort>
+                    <groups/>
+                    <ipRanges>
+                        <item>
+                            <cidrIp>0.0.0.0/0</cidrIp>
+                        </item>
+                    </ipRanges>
+                </item>
+            </ipPermissions>
+            <ipPermissionsEgress/>
+        </item>
+        <item>
+            <ownerId>675450633870</ownerId>
+            <groupId>sg-cccc0000</groupId>
+            <groupName>bf8788a9-2b59-9b62-4f1c-93cbf73c2fe0</groupName>
+            <groupDescription>Generated Security Group</groupDescription>
+            <vpcId>vpc-aaaa0000</vpcId>
+            <ipPermissions>
+                <item>
+                    <ipProtocol>tcp</ipProtocol>
+                    <fromPort>22</fromPort>
+                    <toPort>22</toPort>
+                    <groups/>
+                    <ipRanges>
+                        <item>
+                            <cidrIp>0.0.0.0/0</cidrIp>
+                        </item>
+                    </ipRanges>
+                </item>
+            </ipPermissions>
+            <ipPermissionsEgress/>
+        </item>
+        <item>
+            <ownerId>675450633870</ownerId>
+            <groupId>sg-cccc0001</groupId>
+            <groupName>bf8788a9-2b59-9b62-4f1c-93cbf73c2fe0</groupName>
+            <groupDescription>Generated Security Group</groupDescription>
+            <vpcId>vpc-aaaa0001</vpcId>
+            <ipPermissions>
+                <item>
+                    <ipProtocol>tcp</ipProtocol>
+                    <fromPort>22</fromPort>
+                    <toPort>22</toPort>
+                    <groups/>
+                    <ipRanges>
+                        <item>
+                            <cidrIp>0.0.0.0/0</cidrIp>
+                        </item>
+                    </ipRanges>
+                </item>
+            </ipPermissions>
+            <ipPermissionsEgress/>
+        </item>
+    </securityGroupInfo>
+</DescribeSecurityGroupsResponse>
+"""
+
+xml_getAllSubnets1 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<DescribeSubnetsResponse xmlns="http://ec2.amazonaws.com/doc/2014-05-01/">
+  <requestId>768be3fc-557c-4860-8061-9c9d3a53a775</requestId>
+  <subnetSet>
+    <item>
+      <subnetId>subnet-bbbb0000</subnetId>
+      <state>available</state>
+      <vpcId>vpc-aaaa0000</vpcId>
+      <cidrBlock>10.0.0.0/24</cidrBlock>
+      <availableIpAddressCount>251</availableIpAddressCount>
+      <availabilityZone>us-east-1c</availabilityZone>
+      <defaultForAz>false</defaultForAz>
+      <mapPublicIpOnLaunch>true</mapPublicIpOnLaunch>
+      <tagSet>
+        <item>
+          <key>Name</key>
+          <value>garyko-subnet-1 with Public IP</value>
+        </item>
+        <item>
+          <key>Creator</key>
+          <value>garyko</value>
+        </item>
+      </tagSet>
+    </item>
+    <item>
+      <subnetId>subnet-bbbb0001</subnetId>
+      <state>available</state>
+      <vpcId>vpc-aaaa0001</vpcId>
+      <cidrBlock>172.16.1.0/24</cidrBlock>
+      <availableIpAddressCount>249</availableIpAddressCount>
+      <availabilityZone>us-east-1b</availabilityZone>
+      <defaultForAz>false</defaultForAz>
+      <mapPublicIpOnLaunch>false</mapPublicIpOnLaunch>
+      <tagSet>
+        <item>
+          <key>AWSServiceAccount</key>
+          <value>697148468905</value>
+        </item>
+      </tagSet>
+    </item>
+  </subnetSet>
+</DescribeSubnetsResponse>
+"""
 
 xml_newInstanceEuca1 = xml_newInstance6.replace(
     '</instanceType>',

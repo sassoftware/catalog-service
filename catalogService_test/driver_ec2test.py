@@ -308,6 +308,12 @@ class EC2Test(testbase.TestCase):
             f.close()
             return f.name
         self.mock(drv, '_getFilesystemImage', getFilesystemImageFunc)
+        def writeDiskImageFunc(job, internalDev, stream, imageSize):
+            f = file(internalDev, "w")
+            f.seek(1024 * 1024 - 1)
+            f.write('\0')
+            f.close()
+        self.mock(drv, '_writeDiskImage', writeDiskImageFunc)
 
         class FakeGetInstanceId(object):
             retval = None
@@ -347,7 +353,7 @@ class EC2Test(testbase.TestCase):
             architecture='x86')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
-        imageData['attributes.installed_size'] = 14554925
+        imageData['attributes.uncompressed_size'] = 14554925
         img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
                                     imageData=imageData)
         self.assertEquals(img.getArchitecture(), 'x86')
@@ -385,7 +391,7 @@ class EC2Test(testbase.TestCase):
             architecture='x86')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
-        imageData['attributes.installed_size'] = 14554925
+        imageData['attributes.uncompressed_size'] = 14554925
         img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
                                     imageData=imageData)
         descriptorDataXml = """\
@@ -411,13 +417,16 @@ class EC2Test(testbase.TestCase):
             CreateSecurityGroup=mockedData.xml_createSecurityGroupSuccess,
             AuthorizeSecurityGroupIngress=mockedData.xml_authorizeSecurityGroupSuccess,
             RunInstances=mockedData.xml_ec2RunInstances,
+            DescribeSecurityGroups = mockedData.xml_getAllSecurityGroups3,
+            DescribeSubnets = mockedData.xml_getAllSubnets1,
+            DescribeVpcs = mockedData.xml_getAllVpcs1,
         ))
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
             architecture='x86')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
-        imageData['attributes.installed_size'] = 14554925
+        imageData['attributes.uncompressed_size'] = 14554925
         img = drv.imageFromFileInfo(imageFileInfo, imageDownloadUrl,
                                     imageData=imageData)
         descriptorDataXml = """\
@@ -427,6 +436,10 @@ class EC2Test(testbase.TestCase):
   <minCount>2</minCount>
   <maxCount>2</maxCount>
   <freeSpace>20</freeSpace>
+  <network>vpc-aaaa0000</network>
+  <subnet-vpc-aaaa0000>subnet-bbbb0000</subnet-vpc-aaaa0000>
+  <autoAssignPublicIp-subnet-bbbb0000>Enable</autoAssignPublicIp-subnet-bbbb0000>
+  <securityGroups-vpc-aaaa0000><item>sg-cccc0000</item></securityGroups-vpc-aaaa0000>
 </descriptor_data>
 """
         ret = drv.launchSystemSynchronously(job, img, descriptorDataXml)
@@ -483,7 +496,9 @@ class EC2Test(testbase.TestCase):
             DescribeKeyPairs = mockedData.xml_getAllKeyPairs1,
             DescribeRegions = mockedData.xml_getAllRegions1,
             DescribeAvailabilityZones = mockedData.xml_getAllZones1,
-            DescribeSecurityGroups = mockedData.xml_getAllSecurityGroups1,
+            DescribeSecurityGroups = mockedData.xml_getAllSecurityGroups3,
+            DescribeSubnets = mockedData.xml_getAllSubnets1,
+            DescribeVpcs = mockedData.xml_getAllVpcs1,
         )
 
         descr = drv.getLaunchDescriptor()
