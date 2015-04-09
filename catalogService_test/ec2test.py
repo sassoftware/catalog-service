@@ -29,6 +29,7 @@ import pickle
 import StringIO
 import tempfile
 
+from conary import conarycfg
 from conary.lib import util
 
 import testbase
@@ -46,6 +47,9 @@ from catalogService.utils import x509
 
 from catalogService_test import mockedData
 
+from testutils import mock
+import weakref
+from collections import namedtuple
 
 class HandlerTest(testbase.TestCase):
     TARGETS = [
@@ -769,6 +773,140 @@ proxy_pass = pass
                     [{'constraintName': 'length', 'value': 255}],
                     ])
 
+    def testGetLaunchDescriptor_EBS(self):
+        cfg = baseDriver.storage.StorageConfig(self.storagePath)
+        taskHandler = mock.MockObject()
+        restdb = RestDatabase(taskHandler)
+        restdb.auth.auth = mock.MockObject()
+        drv = dec2.driver(cfg, driverName='ec2', db=restdb)
+        drv._cloudCredentials = dict(publicAccessKeyId='pub',
+                secretAccessKey='sec')
+        cli = drv._cloudClient = mock.MockObject()
+        Subnet = namedtuple("Subnet", "id tags cidr_block availability_zone vpc_id available_ip_address_count mapPublicIpOnLaunch")
+        cli.get_all_subnets._mock.setDefaultReturn([
+            Subnet('subnet-bbb00', dict(Name='My Subnet 00'), '10.1.0.0/24',
+                'us-1-east', 'vpc-aaa00', 250, "true"),
+            Subnet('subnet-bbb01', {}, '10.1.1.0/24',
+                'us-1-east', 'vpc-missing', 250, "false"),
+            Subnet('subnet-bbb11', {}, '10.1.1.0/24',
+                'us-1-west', 'vpc-aaa11', 249, "false"),
+            ])
+        VPC = namedtuple("VPC", "id tags cidr_block")
+        cli.get_all_vpcs._mock.setDefaultReturn([
+            VPC('vpc-aaa00', dict(Name='My VPC 00'), '10.1.0.0/24'),
+            VPC('vpc-aaa11', {}, '10.1.1.0/24'),
+            ])
+        SecGrp = namedtuple("SecGrp", "id name description vpc_id")
+        cli.get_all_security_groups._mock.setDefaultReturn([
+            SecGrp('sg-00000', 'sg 00000', 'My Security Group 00000', None),
+            SecGrp('sg-ccc00', 'sg ccc00', 'My Security Group ccc00', 'vpc-aaa00'),
+            SecGrp('sg-ccc11', 'sg ccc11', 'My Security Group ccc11', 'vpc-aaa11'),
+            SecGrp('sg-ccc12', 'sg ccc12', 'My Security Group ccc12', 'vpc-missing'),
+            ])
+        dsc = drv.getLaunchDescriptor(extraArgs=dict(imageData=dict(ebsBacked=True)))
+        self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
+            ['imageId', 'instanceName', 'instanceDescription', 'instanceType',
+                'network', 'subnet-vpc-aaa00',
+                'autoAssignPublicIp-subnet-bbb00', 'securityGroups-vpc-aaa00',
+                'subnet-vpc-aaa11', 'autoAssignPublicIp-subnet-bbb11',
+                'securityGroups-vpc-aaa11', 'freeSpace',
+                'deleteRootVolumeOnTermination', 'shutdownBehavior',
+                'minCount', 'maxCount', 'keyName', 'userData', 'tags'])
+        field = dsc.getDataField('network')
+        self.assertEquals(field.descriptions.asDict(), {None : 'Network'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('vpc-aaa00', {None: 'vpc-aaa00 (10.1.0.0/24) | My VPC 00'}),
+                ('vpc-aaa11', {None: 'vpc-aaa11 (10.1.1.0/24)'})]
+            )
+        field = dsc.getDataField('subnet-vpc-aaa00')
+        self.assertEquals(field.descriptions.asDict(), {None : 'Subnet'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('subnet-bbb00', {None: 'subnet-bbb00 (10.1.0.0/24) | My Subnet 00 | us-1-east | (250 IP addresses available)'})]
+            )
+        field = dsc.getDataField('autoAssignPublicIp-subnet-bbb00')
+        self.assertEquals(field.descriptions.asDict(), {None : 'Auto-assign Public IP'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('subnet-Enable', {None: 'Use subnet setting (Enable)'}),
+                ('Enable', {None: 'Enable'}), ('Disable', {None: 'Disable'})]
+            )
+        field = dsc.getDataField('securityGroups-vpc-aaa11')
+        self.assertEquals(field.descriptions.asDict(),
+                {None : 'Security Groups',
+                    'fr_FR': u'Groupes de s\xe9curit\xe9'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('sg-ccc11', {None: 'sg-ccc11 | sg ccc11 (My Security Group ccc11)'})]
+            )
+
+        field = dsc.getDataField('subnet-vpc-aaa11')
+        self.assertEquals(field.descriptions.asDict(), {None : 'Subnet'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('subnet-bbb11', {None: 'subnet-bbb11 (10.1.1.0/24) | us-1-west | (249 IP addresses available)'})]
+            )
+        field = dsc.getDataField('autoAssignPublicIp-subnet-bbb11')
+        self.assertEquals(field.descriptions.asDict(), {None : 'Auto-assign Public IP'})
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [('subnet-Disable', {None: 'Use subnet setting (Disable)'}),
+                ('Enable', {None: 'Enable'}), ('Disable', {None: 'Disable'})]
+            )
+
+        field = dsc.getDataField('instanceType')
+        self.assertEquals(
+            [ (x.key, x.descriptions.asDict())
+                    for x in field.enumeratedType.describedValue ],
+            [
+                ('t2.micro', {None: 'T2 Micro'}),
+                ('t2.small', {None: 'T2 Small'}),
+                ('t2.medium', {None: 'T2 Medium'}),
+                ('t1.micro', {None: 'T1 Micro'}),
+                ('c4.large', {None: 'C4 Compute Optimized Large'}),
+                ('c4.xlarge', {None: 'C4 Compute Optimized Extra Large'}),
+                ('c4.2xlarge', {None: 'C4 Compute Optimized Double Extra Large'}),
+                ('c4.4xlarge', {None: 'C4 Compute Optimized Quadruple Extra Large'}),
+                ('c4.8xlarge', {None: 'C4 Compute Optimized Eight Extra Large'}),
+                ('m3.medium', {None: 'M3 Medium'}),
+                ('m3.large', {None: 'M3 Large'}),
+                ('m3.xlarge', {None: 'M3 Extra Large'}),
+                ('m3.2xlarge', {None: 'M3 Double Extra Large'}),
+                ('c3.large', {None: 'C3 Compute Optimized Large'}),
+                ('c3.xlarge', {None: 'C3 Compute Optimized Extra Large'}),
+                ('c3.2xlarge', {None: 'C3 Compute Optimized Double Extra Large'}),
+                ('c3.4xlarge', {None: 'C3 Compute Optimized Quadruple Extra Large'}),
+                ('c3.8xlarge', {None: 'C3 Compute Optimized Eight Extra Large'}),
+                ('g2.2xlarge', {None: 'G2 GPU-Optimized Double Extra Large'}),
+                ('r3.xlarge', {None: 'R3 Memory Optimized Extra Large'}),
+                ('r3.2xlarge', {None: 'R3 Memory Optimized Double Extra Large'}),
+                ('r3.4xlarge', {None: 'R3 Memory Optimized Quadruple Extra Large'}),
+                ('r3.8xlarge', {None: 'R3 Memory Optimized Eight Extra Large'}),
+                ('i2.xlarge', {None: 'I2 Storage Optimized Extra Large'}),
+                ('i2.2xlarge', {None: 'I2 Storage Optimized Double Extra Large'}),
+                ('i2.4xlarge', {None: 'I2 Storage Optimized Quadruple Extra Large'}),
+                ('i2.8xlarge', {None: 'I2 Storage Optimized Eight Extra Large'}),
+                ('hs1.8xlarge', {None: 'High Storage Eight Extra Large'}),
+                ('m1.small', {None: '(OLD) M1 Small'}),
+                ('m1.medium', {None: '(OLD) M1 Medium'}),
+                ('m1.large', {None: '(OLD) M1 Large'}),
+                ('m1.xlarge', {None: '(OLD) M1 Extra Large'}),
+                ('m2.xlarge', {None: '(OLD) M2 High Memory Extra Large'}),
+                ('m2.2xlarge', {None: '(OLD) M2 High Memory Double Extra Large'}),
+                ('m2.4xlarge', {None: '(OLD) M2 High Memory Quadruple Extra Large'}),
+                ('c1.medium', {None: '(OLD) C1 High-CPU Medium'}),
+                ('c1.xlarge', {None: '(OLD) C1 High-CPU Extra Large'}),
+                ('hi1.4xlarge', {None: '(OLD) High I/O Quadruple Extra Large'}),
+                ]
+            )
+
     class InstancesHandler(instances.Handler):
         instanceClass = dec2.driver.Instance
 
@@ -1138,6 +1276,7 @@ conary-proxies=%s
                 ('us-east-1', {None: 'US East 1 (Northern Virginia) Region'}),
                 ('us-west-1', {None: 'US West 1 (Northern California)'}),
                 ('us-west-2', {None: 'US West 2 (Oregon)'}),
+                ('eu-central-1', {None: 'EU (Frankfurt)'}),
                 ('eu-west-1', {None: 'EU (Ireland)'}),
                 ('sa-east-1', {None: 'South America (Sao Paulo)'}),
                 ('ap-northeast-1', {None: 'Asia Pacific NorthEast (Tokyo)'}),
@@ -1368,6 +1507,28 @@ _xmlNewEC2Creds = """
   <secretAccessKey>Supr sikrt</secretAccessKey>
 </descriptorData>
 """
+
+class RestDatabase(object):
+    __slots__ = [ 'auth', 'taskHandler', 'targetMgr', ]
+    class Auth(object):
+        __slots__ = [ 'auth', ]
+
+    class TargetManager(object):
+        def __init__(self, taskHandler):
+            self.taskHandler = taskHandler
+
+        def linkTargetImageToImage(self, targetTypeName, targetName,
+                rbuilderImageId, targetImageId):
+            self.taskHandler.linkTargetImageToImage(rbuilderImageId, targetImageId)
+
+    # Class attribute. We only want to read the conary config once, when
+    # the module is loaded.
+    cfg = conarycfg.ConaryConfiguration(readConfigFiles=False)
+
+    def __init__(self, taskHandler):
+        self.taskHandler = weakref.proxy(taskHandler)
+        self.auth = self.Auth()
+        self.targetMgr = self.TargetManager(self.taskHandler)
 
 if __name__ == "__main__":
     testsuite.main()

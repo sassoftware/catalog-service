@@ -26,7 +26,8 @@ import tempfile
 import time
 from amiconfig import AMIConfig, errors as amierrors
 from boto import ec2 as bec2
-from boto.ec2 import EC2Connection
+from boto.ec2 import networkinterface
+from boto.vpc import VPCConnection as EC2Connection
 from boto.s3.connection import S3Connection, Location
 from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 from conary.lib import util
@@ -154,38 +155,42 @@ class Regions(object):
         XRegionInfo(name="us-east-1", endpoint="ec2.us-east-1.amazonaws.com",
             s3Endpoint="s3.amazonaws.com", s3Location=Location.DEFAULT,
             description="US East 1 (Northern Virginia) Region",
-            kernelMap={'x86_64': 'aki-88aa75e1', 'i386': 'aki-b6aa75df'}),
+            kernelMap={'x86_64': 'aki-919dcaf8', 'i386': 'aki-8f9dcae6'}),
         XRegionInfo(name="us-west-1", endpoint="ec2.us-west-1.amazonaws.com",
             s3Endpoint="s3-us-west-1.amazonaws.com", s3Location='us-west-1',
             description="US West 1 (Northern California)",
-            kernelMap={'x86_64': 'aki-f77e26b2', 'i386': 'aki-f57e26b0'}),
+            kernelMap={'x86_64': 'aki-880531cd', 'i386': 'aki-8e0531cb'}),
         XRegionInfo(name="us-west-2", endpoint="ec2.us-west-2.amazonaws.com",
             s3Endpoint="s3-us-west-2.amazonaws.com", s3Location='us-west-2',
             description="US West 2 (Oregon)",
-            kernelMap={'x86_64': 'aki-fc37bacc', 'i386': 'aki-fa37baca'}),
+            kernelMap={'x86_64': 'aki-fc8f11cc', 'i386': 'aki-f08f11c0'}),
+        XRegionInfo(name="eu-central-1", endpoint="ec2.eu-central-1.amazonaws.com",
+            s3Endpoint="s3-eu-central-1.amazonaws.com", s3Location='eu-central-1',
+            description="EU (Frankfurt)",
+            kernelMap={'x86_64': 'aki-184c7a05', 'i386': 'aki-3e4c7a23'}),
         XRegionInfo(name="eu-west-1", endpoint="ec2.eu-west-1.amazonaws.com",
-            s3Endpoint="s3-eu-west-1.amazonaws.com", s3Location='EU',
+            s3Endpoint="s3-eu-west-1.amazonaws.com", s3Location='eu-west-1',
             description="EU (Ireland)",
-            kernelMap={'x86_64': 'aki-71665e05', 'i386': 'aki-75665e01'}),
+            kernelMap={'x86_64': 'aki-52a34525', 'i386': 'aki-68a3451f'}),
         XRegionInfo(name="sa-east-1", endpoint="ec2.sa-east-1.amazonaws.com",
             s3Endpoint="s3-sa-east-1.amazonaws.com", s3Location='sa-east-1',
             description="South America (Sao Paulo)",
-            kernelMap={'x86_64': 'aki-c48f51d9', 'i386': 'aki-ca8f51d7'}),
+            kernelMap={'x86_64': 'aki-5553f448', 'i386': 'aki-5b53f446'}),
         XRegionInfo(name="ap-northeast-1", endpoint="ec2.ap-northeast-1.amazonaws.com",
             s3Endpoint="s3-ap-northeast-1.amazonaws.com",
             s3Location='ap-northeast-1',
             description="Asia Pacific NorthEast (Tokyo)",
-            kernelMap={'x86_64': 'aki-44992845', 'i386': 'aki-42992843'}),
+            kernelMap={'x86_64': 'aki-176bf516', 'i386': 'aki-136bf512'}),
         XRegionInfo(name="ap-southeast-1", endpoint="ec2.ap-southeast-1.amazonaws.com",
             s3Endpoint="s3-ap-southeast-1.amazonaws.com",
             s3Location='ap-southeast-1',
             description="Asia Pacific 1 (Singapore)",
-            kernelMap={'x86_64': 'aki-fe1354ac', 'i386': 'aki-f81354aa'}),
+            kernelMap={'x86_64': 'aki-503e7402', 'i386': 'aki-ae3973fc'}),
         XRegionInfo(name="ap-southeast-2", endpoint="ec2.ap-southeast-2.amazonaws.com",
             s3Endpoint="s3-ap-southeast-2.amazonaws.com",
             s3Location='ap-southeast-2',
             description="Asia Pacific 2 (Sydney)",
-            kernelMap={'x86_64': 'aki-31990e0b', 'i386': 'aki-33990e09'}),
+            kernelMap={'x86_64': 'aki-c362fff9', 'i386': 'aki-cd62fff7'}),
     ]
 
     @classmethod
@@ -686,6 +691,20 @@ conary-proxies=%s
         params['userData'] = getField('userData')
         params['instanceType'] = getField('instanceType')
         params['availabilityZone'] = getField('availabilityZone')
+        if hasattr(image, '_imageData') and image._imageData.get('ebsBacked'):
+            params['vpc'] = vpcId = getField('network')
+            params['subnet'] = subnetId = getField('subnet-%s' % vpcId)
+            val = getField('autoAssignPublicIp-%s' % subnetId)
+            if val.startswith('subnet-'):
+                val = val[7:]
+            params['autoAssignPublicIp'] = True if val == 'Enable' else False
+            params['securityGroups'] = getField('securityGroups-%s' % vpcId)
+            netif = networkinterface.NetworkInterfaceSpecification(
+                    subnet_id=subnetId,
+                    associate_public_ip_address=params['autoAssignPublicIp'],
+                    groups=params['securityGroups'],
+                    )
+            params['networkInterfaces'] =  networkinterface.NetworkInterfaceCollection(netif)
 
         return params
 
@@ -760,7 +779,6 @@ conary-proxies=%s
                 min_count=launchParams.get('minCount'),
                 max_count=launchParams.get('maxCount'),
                 key_name=launchParams.get('keyName'),
-                security_groups=launchParams.get('securityGroups'),
                 user_data=self.createUserData(launchParams.get('userData')),
                 instance_type=launchParams.get('instanceType'),
                 placement=launchParams.get('availabilityZone'))
@@ -775,7 +793,10 @@ conary-proxies=%s
             runInstancesParams.update(
                 instance_initiated_shutdown_behavior=launchParams.get('shutdownBehavior'),
                 block_device_map=img.block_device_mapping,
+                network_interfaces=launchParams.get('networkInterfaces'),
             )
+        else:
+            runInstancesParams.update(security_groups=launchParams.get('securityGroups'))
         try:
             reservation = self.client.run_instances(imageId, **runInstancesParams)
         except EC2ResponseError, e:
@@ -860,6 +881,33 @@ conary-proxies=%s
         return [ (x, EC2_DEVPAY_OFFERING_BASE_URL % x)
             for x in image.product_codes ]
 
+    @classmethod
+    def _formatVPC(cls, obj):
+        tmpl = [obj.id, "(%s)" % obj.cidr_block]
+        name = obj.tags.get('Name')
+        if name:
+            tmpl.append('|')
+            tmpl.append(name)
+        return ' '.join(tmpl)
+
+    @classmethod
+    def _formatSubnet(cls, obj):
+        tmpl = [obj.id, "(%s)" % obj.cidr_block]
+        name = obj.tags.get('Name')
+        if name:
+            tmpl.append('|')
+            tmpl.append(name)
+        tmpl.append('|')
+        tmpl.append(obj.availability_zone)
+        tmpl.append('|')
+        tmpl.append("(%s IP addresses available)" %
+                obj.available_ip_address_count)
+        return ' '.join(tmpl)
+
+    @classmethod
+    def _formatSecurityGroup(cls, obj):
+        return "%s | %s (%s)" % (obj.id, obj.name, obj.description)
+
     def drvPopulateLaunchDescriptor(self, descr, extraArgs=None):
         imageData = self._getImageData(extraArgs)
         title = "Amazon EC2 System Launch Parameters"
@@ -889,6 +937,92 @@ conary-proxies=%s
             default = instanceTypeMap[0][0],
             )
         if imageData.ebsBacked:
+            subnets = self.client.get_all_subnets()
+            vpcToSubnet = {}
+            for subnet in subnets:
+                if not subnet.available_ip_address_count:
+                    continue
+                vpcToSubnet.setdefault(subnet.vpc_id, []).append(subnet)
+            vpcToSecurityGroups = {}
+            for sg in self._getAllSecurityGroups():
+                vpcToSecurityGroups.setdefault(sg.vpc_id, []).append(sg)
+            vpcs = self.client.get_all_vpcs()
+            vpcList = [ (x.id, self._formatVPC(x)) for x in vpcs
+                    if x.id in vpcToSubnet ]
+            descr.addDataField("network",
+                descriptions = [
+                    ("Network", None),
+                    ],
+                help = [
+                    ("launch/network_vpc.html", None)],
+                default = vpcList[0][0],
+                required = True,
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x[0], descriptions = x[1])
+                    for x in vpcList
+                ))
+            for vpc in vpcs:
+                subnetList = [ (x.id, self._formatSubnet(x))
+                        for x in vpcToSubnet[vpc.id] ]
+                descr.addDataField("subnet-%s" % vpc.id,
+                    descriptions = [
+                        ("Subnet", None),
+                        ],
+                    help = [
+                        ("launch/subnet.html", None)],
+                    required = True,
+                    type = descr.EnumeratedType(
+                        descr.ValueWithDescription(x[0], descriptions = x[1])
+                        for x in subnetList
+                    ),
+                    default=subnetList[0][0],
+                    conditional = descr.Conditional(
+                        fieldName='network',
+                        operator='eq',
+                        fieldValue=vpc.id),
+                    )
+                for subnet in vpcToSubnet[vpc.id]:
+                    subnetDefault = "Enable" if subnet.mapPublicIpOnLaunch == "true" else "Disable"
+                    label = "Use subnet setting (%s)" % subnetDefault
+                    autoAssignPublicIPOptions = [
+                            ("subnet-%s" % subnetDefault, label),
+                            ("Enable", "Enable"),
+                            ("Disable", "Disable"),]
+                    descr.addDataField("autoAssignPublicIp-%s" % subnet.id,
+                        descriptions = [
+                            ("Auto-assign Public IP", None),
+                            ],
+                        help = [
+                            ("launch/auto_assign_public_ip.html", None)],
+                        required = True,
+                        type = descr.EnumeratedType(
+                            descr.ValueWithDescription(x[0], descriptions = x[1])
+                            for x in autoAssignPublicIPOptions
+                        ),
+                        default=autoAssignPublicIPOptions[0][0],
+                        conditional = descr.Conditional(
+                            fieldName='subnet-%s' % vpc.id,
+                            operator='eq',
+                            fieldValue=subnet.id),
+                        )
+
+                sgList = [ (x.id, self._formatSecurityGroup(x))
+                        for x in vpcToSecurityGroups[vpc.id] ]
+                descr.addDataField("securityGroups-%s" % vpc.id,
+                    descriptions = [("Security Groups", None),
+                        (u"Groupes de sécurité", "fr_FR")],
+                    help = [
+                        ("launch/securityGroups.html", None)
+                    ],
+                    required = True, multiple = True,
+                    type = descr.EnumeratedType(
+                        descr.ValueWithDescription(x[0], descriptions = x[1])
+                        for x in sgList),
+                    conditional = descr.Conditional(
+                        fieldName='network',
+                        operator='eq',
+                        fieldValue=vpc.id),
+                    )
             defaultFreeSpace = int(
                 (freeSpace +  self._computePadding(freeSpace, 1024)) / 1024)
             descr.addDataField("freeSpace",
@@ -912,16 +1046,17 @@ conary-proxies=%s
                     for x in self.ShutdownBehavior
                 ),
                 default = self.ShutdownBehavior[-1][0])
-        descr.addDataField("availabilityZone",
-            descriptions = [
-                ("Availability Zone", None),
-                (u"Zone de disponibilit\u00e9", "fr_FR")],
-            help = [
-                ("launch/availabilityZones.html", None)],
-            type = descr.EnumeratedType(
-                descr.ValueWithDescription(x[0], descriptions = x[0])
-                for x in self._cliGetAvailabilityZones()
-            ))
+        if not imageData.ebsBacked:
+            descr.addDataField("availabilityZone",
+                descriptions = [
+                    ("Availability Zone", None),
+                    (u"Zone de disponibilit\u00e9", "fr_FR")],
+                help = [
+                    ("launch/availabilityZones.html", None)],
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x[0], descriptions = x[0])
+                    for x in self._cliGetAvailabilityZones()
+                ))
 
         descr.addDataField("minCount",
             descriptions = [
@@ -952,23 +1087,24 @@ conary-proxies=%s
                 descr.ValueWithDescription(x[0], descriptions = x[0])
                 for x in self._cliGetKeyPairs()
             ))
-        sgList = self._cliGetSecurityGroups()
-        descr.addDataField("securityGroups",
-            descriptions = [("Security Groups", None),
-                (u"Groupes de sécurité", "fr_FR")],
-            help = [
-                ("launch/securityGroups.html", None)
-            ],
-            required = True, multiple = True,
-            type = descr.EnumeratedType(
-                descr.ValueWithDescription(x[0], descriptions = x[1])
-                for x in sgList),
-            default = sgList[0][0],
-            )
-        descr.addDataField("remoteIp",
-            descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
-            type = "str", hidden = True,
-            constraints = dict(constraintName = 'length', value = 128))
+        if not imageData.ebsBacked:
+            sgList = self._cliGetSecurityGroups()
+            descr.addDataField("securityGroups",
+                descriptions = [("Security Groups", None),
+                    (u"Groupes de sécurité", "fr_FR")],
+                help = [
+                    ("launch/securityGroups.html", None)
+                ],
+                required = True, multiple = True,
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x[0], descriptions = x[1])
+                    for x in sgList),
+                default = sgList[0][0],
+                )
+            descr.addDataField("remoteIp",
+                descriptions = "Remote IP address allowed to connect (if security group is catalog-default)",
+                type = "str", hidden = True,
+                constraints = dict(constraintName = 'length', value = 128))
         descr.addDataField("userData",
             descriptions = [("User Data", None),
                 ("Data utilisateur", "fr_FR")],
@@ -1143,15 +1279,17 @@ conary-proxies=%s
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
         return [ (x.name, getattr(x, 'regionName', x.name)) for x in rs ]
 
-    def _getUnfilteredSecurityGroups(self, groupNames = None):
-        ret = []
+    def _getAllSecurityGroups(self, groupNames=None):
         try:
             rs = self.client.get_all_security_groups(groupnames = groupNames)
         except EC2ResponseError, e:
             raise errors.ResponseError(e.status, self._getErrorMessage(e),
                 e.body)
+        return rs
 
-        for sg in rs:
+    def _getUnfilteredSecurityGroups(self, groupNames = None):
+        ret = []
+        for sg in self._getAllSecurityGroups(groupNames=groupNames):
             rules = [(x.grants, x.ip_protocol, x.from_port, x.to_port) for x in sg.rules]
             entry =(sg.name, sg.description, sg.owner_id, rules)
             ret.append(entry)
@@ -1376,7 +1514,11 @@ conary-proxies=%s
 
     def _deployImageFromStream_EBS(self, job, image, stream):
         imageData = image._imageData
-        fsSize = imageData.get('attributes.installed_size')
+
+        fsSize = imageData.get('attributes.uncompressed_size')
+        if not fsSize:
+            raise RuntimeError('Please rebuild EBS-backed image')
+
         # Moderate amount of free space necessary, we'll resize at
         # launch time
         totalSize = 64 * 1024 * 1024 + self._extFilesystemSize(fsSize)
@@ -1399,7 +1541,7 @@ conary-proxies=%s
                     "Writing filesystem image")
             try:
                 self._waitForBlockDevice(job, internalDev)
-                self._writeFilesystemImage(internalDev, stream, compressed='z')
+                self._writeDiskImage(job, internalDev, stream, fsSize)
             finally:
                 self._detachVolume(job, vol)
             snapshot = self._createSnapshot(job, vol)
@@ -1439,7 +1581,7 @@ conary-proxies=%s
         self._msg(job, "Registering EBS-backed image")
         conn = self.client
         bdm = bec2.blockdevicemapping.BlockDeviceMapping()
-        devName = "/dev/sda"
+        devName = "/dev/sda1"
         # Add snapshot hash to image name as well, in case we want to
         # re-register later
         snapshotHash = snapshot.id.rsplit('-', 1)[-1]
@@ -1451,10 +1593,10 @@ conary-proxies=%s
         architecture = image.getArchitecture() or "x86"
         if architecture == 'x86':
             architecture = 'i386'
-        aki = self.kernelMap.get(architecture)
         amiId = conn.register_image(name=name, description=name,
-                kernel_id=aki,  block_device_map=bdm,
-                root_device_name=devName, architecture=architecture)
+                block_device_map=bdm,
+                root_device_name=devName, architecture=architecture,
+                virtualization_type='hvm')
         self._msg(job, "Registered image %s" % amiId)
         return amiId
 
@@ -1567,7 +1709,14 @@ conary-proxies=%s
             os.unlink(imageF.name)
             raise
 
-        return imageF.name
+    def _writeDiskImage(self, job, internalDev, stream, diskSize):
+        imageF = file(internalDev, "wb")
+        util.copyfileobj(util.GzipFile(fileobj=stream), imageF)
+        finalSize = imageF.tell()
+        imageF.close()
+        if finalSize != diskSize:
+            raise RuntimeError("Expected an image of %s bytes; got %s" % (
+                diskSize, finalSize))
 
     @classmethod
     def _extFilesystemSize(cls, fsSize):
