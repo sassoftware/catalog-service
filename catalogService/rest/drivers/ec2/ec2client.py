@@ -1709,6 +1709,8 @@ conary-proxies=%s
             os.unlink(imageF.name)
             raise
 
+        return imageF.name
+
     def _writeDiskImage(self, job, internalDev, stream, diskSize):
         imageF = file(internalDev, "wb")
         util.copyfileobj(util.GzipFile(fileobj=stream), imageF)
