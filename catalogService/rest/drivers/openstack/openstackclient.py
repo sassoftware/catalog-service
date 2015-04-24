@@ -76,6 +76,12 @@ _configurationDescriptorXmlData = """<?xml version='1.0' encoding='UTF-8'?>
         <desc>Nova Port</desc>
       </descriptions>
       <type>int</type>
+      <constraints>
+        <descriptions>
+          <desc>Valid ports are integers between 1 and 65535</desc>
+        </descriptions>
+        <range><min>1</min><max>65535</max></range>
+      </constraints>
       <required>true</required>
       <default>%(nova_port)s</default>
       <help href='configuration/novaPortNumber.html'/>
