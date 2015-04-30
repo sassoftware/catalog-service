@@ -1613,7 +1613,7 @@ conary-proxies=%s
             raise RuntimeError("Failed to create volume")
 
     def _waitForBlockDevice(self, job, internalDev):
-        for i in range(120):
+        for i in range(1000):
             if os.path.exists(internalDev):
                 return
             self._msg(job, "Waiting for volume to become available")
@@ -1646,7 +1646,7 @@ conary-proxies=%s
         self._msg(job, "Detaching volume %s" % volumeId)
         conn.detach_volume(volumeId)
         volume.update(validate=True)
-        for i in range(120):
+        for i in range(1000):
             if volume.status == "available":
                 return True
             self._msg(job, "Waiting for volume to be detached")
