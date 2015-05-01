@@ -1534,6 +1534,8 @@ conary-proxies=%s
         instance = instances[0].instances[0]
 
         vol = self._createVolume(job, size=volumeSize, zone=instance.placement)
+        self._tagResource(job, vol, 'Name',
+                'appeng-image-deployment-%s' % myInstanceId)
         self._msg(job, "Created EBS volume %s" % vol.id)
         try:
             internalDev = self._attachVolume(job, instance, vol)
@@ -1543,7 +1545,7 @@ conary-proxies=%s
                 self._waitForBlockDevice(job, internalDev)
                 self._writeDiskImage(job, internalDev, stream, fsSize)
             finally:
-                self._detachVolume(job, vol)
+                self._detachVolume(job, vol, internalDev)
             snapshot = self._createSnapshot(job, vol)
             amiId = self._registerEBSBackedImage(job, image, snapshot)
             return amiId
@@ -1640,19 +1642,23 @@ conary-proxies=%s
             conn.delete_snapshot(snapshotId)
             raise RuntimeError("Failed to create snapshot")
 
-    def _detachVolume(self, job, volume):
+    def _detachVolume(self, job, volume, dev):
         volumeId = volume.id
         conn = self.client
+        self._flushDevice(dev)
         self._msg(job, "Detaching volume %s" % volumeId)
         conn.detach_volume(volumeId)
         volume.update(validate=True)
         for i in range(1000):
             if volume.status == "available":
                 return True
-            self._msg(job, "Waiting for volume to be detached")
+            self._msg(job, "Waiting for volume to be detached; state=%s" % volume.status)
             time.sleep(self.TIMEOUT_VOLUME)
             volume.update(validate=True)
         return None
+
+    def _flushDevice(self, dev):
+        subprocess.call(['/sbin/blockdev', '--flushbufs', dev])
 
     def _findMyInstanceId(self):
         ac = AMIConfig()
@@ -1713,9 +1719,11 @@ conary-proxies=%s
 
     def _writeDiskImage(self, job, internalDev, stream, diskSize):
         imageF = file(internalDev, "wb")
-        util.copyfileobj(util.GzipFile(fileobj=stream), imageF)
-        finalSize = imageF.tell()
-        imageF.close()
+        try:
+            util.copyfileobj(util.GzipFile(fileobj=stream), imageF)
+            finalSize = imageF.tell()
+        finally:
+            imageF.close()
         if finalSize != diskSize:
             raise RuntimeError("Expected an image of %s bytes; got %s" % (
                 diskSize, finalSize))

@@ -344,6 +344,8 @@ class EC2Test(testbase.TestCase):
         drv.TIMEOUT_SNAPSHOT = 0.1
         drv.TIMEOUT_VOLUME = 0.1
 
+        self.mock(drv, '_flushDevice', lambda *args, **kwargs: None)
+
         return drv
 
     def testDeployImageEBS(self):
@@ -371,8 +373,8 @@ class EC2Test(testbase.TestCase):
             ('Attaching EBS volume as /dev/sdf',),
             ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
-            ('Waiting for volume to be detached',),
-            ('Waiting for volume to be detached',),
+            ('Waiting for volume to be detached; state=in-use',),
+            ('Waiting for volume to be detached; state=in-use',),
             ('Creating snapshot: 0%',),
             ('Creating snapshot: 9%',),
             ('Snapshot created',),
@@ -450,8 +452,8 @@ class EC2Test(testbase.TestCase):
             ('Attaching EBS volume as /dev/sdf',),
             ('Writing filesystem image: 0%',),
             ('Detaching volume vol-decafbad',),
-            ('Waiting for volume to be detached',),
-            ('Waiting for volume to be detached',),
+            ('Waiting for volume to be detached; state=in-use',),
+            ('Waiting for volume to be detached; state=in-use',),
             ('Creating snapshot: 0%',),
             ('Creating snapshot: 9%',),
             ('Snapshot created',),
