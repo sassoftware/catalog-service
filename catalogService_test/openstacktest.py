@@ -624,6 +624,24 @@ class HandlerTest(testbase.TestCase):
                 [],
             ])
 
+    def testGetLaunchDescriptorNoKeys(self):
+        noKeys = lambda args: None
+        self.mock(dopenstack.openstackclient.OpenStackClient, '_cliGetKeyPairs', noKeys)
+        srv = self.newService()
+        uri = self._baseCloudUrl + '/descriptor/launch'
+
+        client = self.newClient(srv, uri)
+        response = self.failUnlessRaises(ResponseError, client.request, 'GET')
+
+    def testGetLaunchDescriptorEmptyKeys(self):
+        emptyKeys = lambda args: []
+        self.mock(dopenstack.openstackclient.OpenStackClient, '_cliGetKeyPairs', emptyKeys)
+        srv = self.newService()
+        uri = self._baseCloudUrl + '/descriptor/launch'
+
+        client = self.newClient(srv, uri)
+        response = self.failUnlessRaises(ResponseError, client.request, 'GET')
+
     def testNewInstances(self):
         srv = self.newService()
         uri = self._baseCloudUrl + '/instances'

@@ -266,6 +266,14 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _drvPopulateDescriptorFromTarget(self, descr):
         pass
 
+    def _retriveSSHKeyPairs(self, descr):
+        keyPairs = [ descr.ValueWithDescription(x[0], descriptions = x[1])
+                for x in self._cliGetKeyPairs() ]
+        if not keyPairs:
+            raise errors.CatalogError("No OpenStack SSH key pairs defined, please create one")
+
+        return keyPairs
+
     def _launchSpecificDescriptorFields(self, descr, extraArgs=None):
         targetFlavors = self._get_flavors()
         if not targetFlavors:
@@ -285,10 +293,8 @@ class OpenStackClient(baseDriver.BaseDriver):
             help = [
                 ("launch/keyPair.html", None)
             ],
-            type = descr.EnumeratedType(
-                descr.ValueWithDescription(x[0], descriptions = x[1])
-                for x in self._cliGetKeyPairs()
-            ))
+            type = descr.EnumeratedType(self._retriveSSHKeyPairs(descr))
+            )
         fpList = self._cliGetFloatingIps()
         descr.addDataField('floatingIp',
             descriptions = 'Floating IP',
