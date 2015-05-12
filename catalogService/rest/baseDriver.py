@@ -483,6 +483,15 @@ class BaseDriver(object):
     def drvVerifyCloudConfiguration(self, config):
         pass
 
+    def _verifyServerPort(self, name, port):
+        server = 'http://{0}:{1}'.format(name, port)
+
+        try:
+            requests.head(server, timeout=5)
+        except (requests.exception.ConnectionError, requests.exceptions.Timeout) as e:
+            raise errors.ResponseError(401, 
+                    "Error connecting to %s: %s" % (server, e, ), 'body')
+
     @classmethod
     def _strip(cls, obj):
         if not isinstance(obj, basestring):
