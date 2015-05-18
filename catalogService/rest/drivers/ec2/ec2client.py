@@ -17,6 +17,7 @@
 
 
 import base64
+import gzip
 import logging
 import os
 import re
@@ -42,6 +43,7 @@ from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import securityGroups
+from catalogService.utils.progress import StreamWithProgress, PercentageCallback
 
 log = logging.getLogger(__name__)
 
@@ -1519,10 +1521,7 @@ conary-proxies=%s
         if not fsSize:
             raise RuntimeError('Please rebuild EBS-backed image')
 
-        # Moderate amount of free space necessary, we'll resize at
-        # launch time
-        totalSize = 64 * 1024 * 1024 + self._extFilesystemSize(fsSize)
-        # EBS volumes come in 1G increments
+        totalSize = fsSize
         GiB = 1024 * 1024 * 1024
         totalSize += self._computePadding(totalSize, GiB)
         volumeSize = int(totalSize / GiB)
@@ -1540,7 +1539,7 @@ conary-proxies=%s
         try:
             internalDev = self._attachVolume(job, instance, vol)
             stream = self.streamProgressWrapper(job, stream,
-                    "Writing filesystem image")
+                    "Downloading compressed disk image")
             try:
                 self._waitForBlockDevice(job, internalDev)
                 self._writeDiskImage(job, internalDev, stream, fsSize)
@@ -1567,7 +1566,8 @@ conary-proxies=%s
                 # This will queue up image deployments
                 self._msg(job, "No available device found; waiting %s seconds" % timeout)
                 time.sleep(timeout)
-                timeout *= 2
+                if timeout < 128:
+                    timeout *= 2
                 instance = self.client.get_all_instances(
                         instance_ids=[instance.id])[0].instances[0]
                 devNum = 0
@@ -1603,8 +1603,16 @@ conary-proxies=%s
         return amiId
 
     def _createVolume(self, job, size, zone):
-        self._msg(job, "Creating EBS volume")
-        vol = self.client.create_volume(size=size, zone=zone)
+        self._msg(job, "Creating EBS volume of %d GiB" % size)
+        # io1 has a min size of 4G and 30 IOPS/G
+        if size < 4:
+            volType = 'gp2'
+            iops = None
+        else:
+            volType = 'io1'
+            iops = size * 25
+        vol = self.client.create_volume(size=size, zone=zone,
+            volume_type=volType, iops=iops)
         while vol.status == 'creating':
             time.sleep(self.TIMEOUT_BLOCKDEV)
             vol.update(validate=True)
@@ -1673,7 +1681,7 @@ conary-proxies=%s
     @classmethod
     def _findOpenBlockDevice(cls, instance, start):
         bmap = instance.block_device_mapping
-        for i in range(start, 15):
+        for i in range(start, 5):
             devName = "/dev/sd%s" % chr(ord('f') + i)
             if devName not in bmap:
                 return devName, '/dev/xvd%s' % chr(ord('j') + i), i
@@ -1689,7 +1697,7 @@ conary-proxies=%s
                     "Computing filesystem image size")
             imageFile = tempfile.TemporaryFile()
             blockSize = 1024 * 1024
-            fsSize = util.copyfileobj(util.GzipFile(fileobj=stream), imageFile)
+            fsSize = util.copyfileobj(gzip.GzipFile(fileobj=stream), imageFile)
             fsSize = (fsSize + blockSize - 1) / blockSize * blockSize
             imageFile.seek(0)
             stream = imageFile
@@ -1718,15 +1726,46 @@ conary-proxies=%s
         return imageF.name
 
     def _writeDiskImage(self, job, internalDev, stream, diskSize):
+        def callback(percent):
+            self._msg(job, "%s: %d%%" % ("Uncompressing image", percent))
+        callback = PercentageCallback(diskSize, callback)
+
         imageF = file(internalDev, "wb")
+        blockSize = 1024 * 128
         try:
-            util.copyfileobj(util.GzipFile(fileobj=stream), imageF)
-            finalSize = imageF.tell()
+            tmpf = tempfile.TemporaryFile()
+            util.copyfileobj(stream, tmpf)
+            tmpf.seek(0)
+            fobj = StreamWithProgress(gzip.GzipFile(fileobj=tmpf, mode="r"),
+                    callback)
+            fobj.interval = 10
+            toSeek = 0
+            while 1:
+                buf = fobj.read(blockSize)
+                if not buf:
+                    break
+                # Don't bother writing zeros; hopefully the EBS volume is
+                # zeroed out already
+                if self.isZero(buf):
+                    toSeek += len(buf)
+                else:
+                    if toSeek:
+                        imageF.seek(toSeek, os.SEEK_CUR)
+                        toSeek = 0
+                    imageF.write(buf)
+            finalSize = imageF.tell() + toSeek
         finally:
             imageF.close()
         if finalSize != diskSize:
             raise RuntimeError("Expected an image of %s bytes; got %s" % (
                 diskSize, finalSize))
+
+    @classmethod
+    def isZero(cls, block):
+        for b in block:
+            if b != '\0':
+                return False
+        return True
 
     @classmethod
     def _extFilesystemSize(cls, fsSize):

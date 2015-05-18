@@ -368,10 +368,10 @@ class EC2Test(testbase.TestCase):
         ret = drv.deployImageFromUrl(job, img, descriptorDataXml)
         self.assertEquals(ret.id, "ami-decafbad")
         self.assertListsEqual(job._accumulator, [
-            ('Creating EBS volume',),
+            ('Creating EBS volume of 1 GiB',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume as /dev/sdf',),
-            ('Writing filesystem image: 0%',),
+            ('Downloading compressed disk image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached; state=in-use',),
             ('Waiting for volume to be detached; state=in-use',),
@@ -447,10 +447,10 @@ class EC2Test(testbase.TestCase):
         ret = drv.launchSystemSynchronously(job, img, descriptorDataXml)
         self.assertEquals(ret, ["i-decafbad0", "i-decafbad1", ])
         self.assertListsEqual(job._accumulator, [
-            ('Creating EBS volume',),
+            ('Creating EBS volume of 1 GiB',),
             ('Created EBS volume vol-decafbad',),
             ('Attaching EBS volume as /dev/sdf',),
-            ('Writing filesystem image: 0%',),
+            ('Downloading compressed disk image: 0%',),
             ('Detaching volume vol-decafbad',),
             ('Waiting for volume to be detached; state=in-use',),
             ('Waiting for volume to be detached; state=in-use',),
