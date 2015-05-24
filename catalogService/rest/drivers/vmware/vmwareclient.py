@@ -234,6 +234,12 @@ class VMwareClient(baseDriver.BaseDriver):
         return self._vicfg
     vicfg = property(_getVIConfig)
 
+    def drvVerifyCloudConfiguration(self, dataDict):
+        serverName = dataDict['name']
+        serverPort = 443 # viclient is hardcoded to use https on default port
+
+        self._verifyServerPort(serverName, serverPort)
+
     def getDeployImageParameters(self, image, descriptorData):
         params = baseDriver.BaseDriver.getDeployImageParameters(self,
             image, descriptorData)

@@ -487,8 +487,8 @@ class BaseDriver(object):
         server = 'http://{0}:{1}'.format(name, port)
 
         try:
-            requests.head(server, timeout=5)
-        except (requests.exception.ConnectionError, requests.exceptions.Timeout) as e:
+            requests.head(server, timeout=5, verify=False)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             raise errors.ResponseError(401, 
                     "Error connecting to %s: %s" % (server, e, ), 'body')
 
