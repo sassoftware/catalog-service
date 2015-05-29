@@ -151,14 +151,6 @@ class HandlerTest(BaseTest):
     supportedCloudTypes = ['ec2', 'eucalyptus', 'openstack',
         'vcloud', 'vmware', 'xen-enterprise']
 
-    def testGetCrossdomain(self):
-        raise testsuite.SkipTestException("Need to provide an absolute path")
-        srv = self.newService()
-        client = self.newClient(srv,
-            'http://localhost:%(port)s/crossdomain.xml' % dict(port=srv.port))
-        response = client.request('GET')
-        self.failUnlessEqual(response.read(), crossdomainXml)
-
     def testMalformedURI(self):
         # pass a uri that doesn't have an ID (it should) to see if the system
         # tips over or not.
@@ -620,16 +612,6 @@ class HandlerTest(BaseTest):
 
         contents = resp.read()
 
-crossdomainXml = """\
-<?xml version="1.0"?>
-<!DOCTYPE cross-domain-policy
-          SYSTEM "http://www.adobe.com/xml/dtds/cross-domain-policy.dtd">
-<cross-domain-policy>
-  <site-control permitted-cross-domain-policies="all" />
-  <allow-access-from domain="*" secure="false"/>
-  <allow-http-request-headers-from domain="*" headers="*" />
-</cross-domain-policy>
-"""
 
 _xmlNewCloud = """
 <descriptorData>
