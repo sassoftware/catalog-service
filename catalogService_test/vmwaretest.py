@@ -31,6 +31,7 @@ from conary.lib import util
 import testbase
 
 from catalogService.restClient import ResponseError
+from catalogService.errors import ResponseError as DriverResponseError
 
 from catalogService import instanceStore
 from catalogService import storage
@@ -442,6 +443,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(e.status, 404)
 
     def testNewCloud(self):
+        self.mock(vmware.driver, '_verifyServerPort', lambda self,host,port: None)
         srv = self.newService()
         uri = 'clouds/vmware/instances'
         client = self.newClient(srv, uri)
@@ -487,6 +489,38 @@ class VMwareTest(testbase.TestCase):
         resp = self.failUnlessRaises(ResponseError, client.request, 'GET')
         self.failUnlessEqual(resp.status, 400)
         self.assertXMLEquals(resp.contents, '<?xml version="1.0" encoding="UTF-8"?>\n<fault>\n  <code>400</code>\n  <message>Target credentials not set for user</message>\n</fault>')
+
+    def testVerifyCloudHostPort(self):
+        def raiseException(self, server, port):
+            raise DriverResponseError(401, "Error connecting to %s:%s" % (server, port), '')
+        self.mock(vmware.driver, '_verifyServerPort', raiseException)
+        srv = self.newService()
+        uri = 'clouds/vmware/instances'
+        client = self.newClient(srv, uri)
+
+        reqData = _xmlNewCloud
+
+        # Should fail
+        response = self.failUnlessRaises(ResponseError,
+            client.request, 'POST', reqData)
+        self.failUnlessEqual(response.status, 401)
+        self.assertXMLEquals(response.contents, """
+<?xml version='1.0' encoding='UTF-8'?>
+<fault>
+  <code>401</code>
+  <message>Error connecting to newbie.eng.rpath.com:443</message>
+</fault>""")
+
+        # Enumerate clouds - we should have still 1
+        uri = 'clouds/vmware/instances'
+        client = self.newClient(srv, uri)
+
+        response = client.request('GET')
+        hndl = clouds.Handler()
+        nodes = hndl.parseString(response.read())
+        self.failUnlessEqual(len(nodes), 1)
+        node = nodes[0]
+        self.failUnlessEqual(node.getCloudAlias(), 'virtcenter')
 
 
     def testSetCredentials(self):
