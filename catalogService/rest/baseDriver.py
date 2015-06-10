@@ -1135,7 +1135,7 @@ class BaseDriver(object):
         return None, None
 
     def openUrl(self, url, headers):
-        resp = Request(url, headers=headers)
+        resp = Request(url, headers=headers, log=self.log_info)
         if resp.headers['Content-Type'].startswith("text/html"):
             # We should not get HTML content out of rbuilder - most likely
             # a private project to which we don't have access
@@ -1726,8 +1726,11 @@ class Archive(object):
 
 class Request(object):
     __slots__ = ['session', '_resp', '_bytesRead', '_url',
-            '_lastRangeResp', ]
-    def __init__(self, url, headers=None):
+            '_lastRangeResp', '_contentLength', 'log']
+    def __init__(self, url, headers=None, log=None):
+        if log is None:
+            log = lambda *args, **kwargs: None
+        self.log = log
         self.session = requests.Session()
         self.session.stream = True
         self.session.verify = False
@@ -1736,6 +1739,7 @@ class Request(object):
         self._url = url
         self._lastRangeResp = None
         self._resp = self.session.get(self._url)
+        self._contentLength = None
 
     @property
     def headers(self):
@@ -1743,8 +1747,17 @@ class Request(object):
         # to know the content length anymore
         return self._resp.headers
 
+    @property
+    def contentLength(self):
+        if self._contentLength is None:
+            self._contentLength = int(self._resp.headers['Content-Length'])
+        return self._contentLength
+
     def read(self, amt=None, **kwargs):
         if amt == 0:
+            return ''
+        clen = self.contentLength
+        if self._bytesRead >= clen:
             return ''
         if self._lastRangeResp is not None:
             # Once we've switched to range requests, we stay with them
@@ -1753,12 +1766,17 @@ class Request(object):
         fp = self._resp.raw
         if amt is None:
             # No benefit from range requests here
-            ret = fp.read(amt=amt, **kwargs)
-            self._bytesRead += len(ret)
+            ret = self._readFromObj(fp, amt, **kwargs)
             return ret
+        # Simulating short read
+        #if self._bytesRead > 16384 * 100:
+        #    self.log("Switching to range requests")
+        #    return self._rangeRead(amt)
         try:
-            ret = fp.read(amt=amt, **kwargs)
-            self._bytesRead += len(ret)
+            ret = self._readFromObj(fp, amt, **kwargs)
+            if not ret and self._bytesRead != clen:
+                # Short read; switch to range reads
+                return self._rangeRead(amt)
             return ret
         except requests.exceptions.RequestException:
             # XXX Qualify exception that should trigger a content range req
@@ -1766,11 +1784,18 @@ class Request(object):
 
     def _rangeRead(self, amt):
         self._resp = None
-        amtToRead = amt
+        if self._lastRangeResp is not None:
+            ret = self._readFromObj(self._lastRangeResp.raw, amt)
+            if ret:
+                # Simulating short read
+                #if int(self._bytesRead / 16384) % 10000 == 0:
+                #    self._lastRangeResp.raw.read()
+                return ret
+        clen = self.contentLength
         timeout = 1.1
         while 1:
-            headers = dict(Range="bytes=%d-%d" % (self._bytesRead,
-                self._bytesRead + amtToRead - 1))
+            headers = dict(Range="bytes=%d-%d" % (self._bytesRead, clen))
+            self.log("Range request; Headers: %s" % headers)
             resp = self._lastRangeResp = self.session.get(self._url,
                     headers=headers)
             if resp.status_code == 200:
@@ -1780,16 +1805,18 @@ class Request(object):
                 raise ValueError("Expected Partial Content, got %d" %
                         resp.status_code)
             try:
-                ret = resp.raw.read(amtToRead)
-                self._bytesRead += len(ret)
+                ret = self._readFromObj(resp.raw, amt)
                 return ret
             except requests.exceptions.RequestException:
-                # Decrease number of bytes to read, and try again
-                amtToRead = amtToRead // 2
-                if not amtToRead:
-                    raise
+                # Try again
                 time.sleep(timeout)
                 timeout **= 2
+
+    def _readFromObj(self, obj, amt, **kwargs):
+        ret = obj.read(amt, **kwargs)
+        self._bytesRead += len(ret)
+        return ret
+
 
     def close(self):
         return self._resp.raw.close()
