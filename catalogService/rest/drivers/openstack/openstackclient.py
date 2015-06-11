@@ -227,8 +227,9 @@ class OpenStackClient(baseDriver.BaseDriver):
     def drvVerifyCloudConfiguration(self, dataDict):
         serverName = dataDict['name']
         serverPort = dataDict['nova_port']
+        serverUrl = "http://%s:%s" % (serverName, serverPort)
 
-        self._verifyServerPort(serverName, serverPort)
+        self._verifyServerUrl(serverUrl)
 
     def terminateInstances(self, instanceIds):
         running_instances = self.getInstances(instanceIds)
