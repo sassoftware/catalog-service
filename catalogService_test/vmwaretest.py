@@ -443,7 +443,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(e.status, 404)
 
     def testNewCloud(self):
-        self.mock(vmware.driver, '_verifyServerPort', lambda self,host,port: None)
+        self.mock(vmware.driver, '_verifyServerUrl', lambda self,url: None)
         srv = self.newService()
         uri = 'clouds/vmware/instances'
         client = self.newClient(srv, uri)
@@ -491,9 +491,9 @@ class VMwareTest(testbase.TestCase):
         self.assertXMLEquals(resp.contents, '<?xml version="1.0" encoding="UTF-8"?>\n<fault>\n  <code>400</code>\n  <message>Target credentials not set for user</message>\n</fault>')
 
     def testVerifyCloudHostPort(self):
-        def raiseException(self, server, port):
-            raise DriverResponseError(401, "Error connecting to %s:%s" % (server, port), '')
-        self.mock(vmware.driver, '_verifyServerPort', raiseException)
+        def raiseException(self, serverUrl):
+            raise DriverResponseError(401, "Error connecting to %s" % (serverUrl), '')
+        self.mock(vmware.driver, '_verifyServerUrl', raiseException)
         srv = self.newService()
         uri = 'clouds/vmware/instances'
         client = self.newClient(srv, uri)
@@ -508,7 +508,7 @@ class VMwareTest(testbase.TestCase):
 <?xml version='1.0' encoding='UTF-8'?>
 <fault>
   <code>401</code>
-  <message>Error connecting to newbie.eng.rpath.com:443</message>
+  <message>Error connecting to https://newbie.eng.rpath.com</message>
 </fault>""")
 
         # Enumerate clouds - we should have still 1
