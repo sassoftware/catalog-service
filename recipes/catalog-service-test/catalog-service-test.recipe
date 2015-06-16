@@ -15,8 +15,6 @@ class CatalogServiceTest(TestPackageRecipe, CPackageRecipe):
     # testpackage configuration
     testDir = '.'
 
-    testsuite = "catalogService_test/testsuite.py"
-
     buildRequires = [
         'catalog-service:python',
         'conary-build:python',

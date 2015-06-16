@@ -29,8 +29,9 @@ class Suite(suite.TestSuite):
 
     def setupSpecific(self):
         from catalogService_test import mockedModules
-        self.pathManager.updatePaths(
+        sys.path.insert(0,
                 os.path.dirname(os.path.abspath(mockedModules.__file__)))
+
 
     def getCoverageDirs(self, handler, environ):
         import catalogService
