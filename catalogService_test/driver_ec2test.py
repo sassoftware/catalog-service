@@ -352,7 +352,7 @@ class EC2Test(testbase.TestCase):
         drv = self._setupMocking()
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
-            architecture='x86')
+            architecture='x86', name='img-64bit.vmdk')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
         imageData['attributes.uncompressed_size'] = 14554925
@@ -390,7 +390,7 @@ class EC2Test(testbase.TestCase):
         drv = self._setupMocking()
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
-            architecture='x86')
+            architecture='x86', name='img-64bit.vmdk')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
         imageData['attributes.uncompressed_size'] = 14554925
@@ -425,7 +425,7 @@ class EC2Test(testbase.TestCase):
         ))
         job = self.Job(list())
         imageFileInfo = dict(fileId=5145, baseFileName="img-64bit",
-            architecture='x86')
+            architecture='x86', name='img-64bit.vmdk')
         imageDownloadUrl = "http://localhost/blah"
         imageData = dict(freespace=1234, ebsBacked=True)
         imageData['attributes.uncompressed_size'] = 14554925

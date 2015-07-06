@@ -33,7 +33,9 @@ class BaseImage(xmlNode.BaseNode):
                   'internalTargetId', 'architecture',
                   'downloadUrl', 'buildPageUrl', 'baseFileName',
                   'checksum', 'size',
-                  '_xmlNodeHash', '_fileId', '_targetImageId', '_imageType', ]
+                  '_xmlNodeHash', '_fileId', '_targetImageId', '_imageType',
+                  'imageSuffix',
+                  ]
     _slotAttributes = set([ 'id' ])
     _slotTypeMap = dict(isPublic = bool, isPrivate_rBuilder = bool,
                         is_rBuilderImage = bool, isDeployed = bool,

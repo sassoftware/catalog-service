@@ -672,6 +672,11 @@ class BaseDriver(object):
         image.setSize(imageFileInfo.get('size'))
         image.setArchitecture(imageFileInfo.get('architecture'))
         image.setDownloadUrl(imageDownloadUrl)
+        parts = imageFileInfo['name'].split('.')
+        if parts[-2] in ['gz', 'bz2', 'xz', 'lzo']:
+            image.setImageSuffix('.'.join(parts[-2:]))
+        else:
+            image.setImageSuffix(parts[-1])
         image._fileId = imageFileInfo['fileId']
         image._imageData = imageData
         return image

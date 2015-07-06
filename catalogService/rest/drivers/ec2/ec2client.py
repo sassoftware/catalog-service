@@ -43,7 +43,8 @@ from catalogService.rest.models import clouds
 from catalogService.rest.models import images
 from catalogService.rest.models import instances
 from catalogService.rest.models import securityGroups
-from catalogService.utils.progress import StreamWithProgress, PercentageCallback
+from catalogService.utils import vmdk_extract
+from catalogService.utils.progress import PercentageCallback
 
 log = logging.getLogger(__name__)
 
@@ -1520,6 +1521,8 @@ conary-proxies=%s
         fsSize = imageData.get('attributes.uncompressed_size')
         if not fsSize:
             raise RuntimeError('Please rebuild EBS-backed image')
+        if image.getImageSuffix() != 'vmdk':
+            raise RuntimeError('Please rebuild EBS-backed image')
 
         totalSize = fsSize
         GiB = 1024 * 1024 * 1024
@@ -1730,33 +1733,11 @@ conary-proxies=%s
             self._msg(job, "%s: %d%%" % ("Uncompressing image", percent))
         callback = PercentageCallback(diskSize, callback)
 
-        imageF = file(internalDev, "wb")
-        blockSize = 1024 * 128
-        try:
-            tmpf = tempfile.TemporaryFile()
-            util.copyfileobj(stream, tmpf)
-            tmpf.seek(0)
-            fobj = StreamWithProgress(gzip.GzipFile(fileobj=tmpf, mode="r"),
-                    callback)
-            fobj.interval = 10
-            toSeek = 0
-            while 1:
-                buf = fobj.read(blockSize)
-                if not buf:
-                    break
-                # Don't bother writing zeros; hopefully the EBS volume is
-                # zeroed out already
-                if self.isZero(buf):
-                    toSeek += len(buf)
-                else:
-                    if toSeek:
-                        imageF.seek(toSeek, os.SEEK_CUR)
-                        toSeek = 0
-                    imageF.write(buf)
-            finalSize = imageF.tell() + toSeek
-        finally:
-            imageF.close()
-        if finalSize != diskSize:
+        with open(internalDev, 'wb') as f_dev:
+            reader = vmdk_extract.VMDKReader(stream, f_dev)
+            reader.process()
+            finalSize = reader.header.capacity * 512
+        if reader.header.capacity * 512 != diskSize:
             raise RuntimeError("Expected an image of %s bytes; got %s" % (
                 diskSize, finalSize))
 
