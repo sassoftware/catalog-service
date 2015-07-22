@@ -753,11 +753,13 @@ conary-proxies=%s
         reqInstName = launchParams.get('instanceName')
         reqInstDescription = launchParams.get('instanceDescription')
         for i in range(60):
-            reservations = self.client.get_all_instances(instanceIds)
-            if reservations:
+            try:
+                reservations = self._getInstanceReservations(instanceIds)
+            except errors.HttpNotFound:
+                self._msg(job, "Waiting for reservation")
+                time.sleep(1)
+            else:
                 break
-            self._msg(job, "Waiting for reservation")
-            time.sleep(1)
         instCount = len(instanceIds)
         suffix = ""
         # All instances should be part of the same reservation
@@ -816,15 +818,18 @@ conary-proxies=%s
     def terminateInstance(self, instanceId):
         return self.terminateInstances([instanceId])[0]
 
-    def drvGetInstances(self, instanceIds, force=False):
+    def _getInstanceReservations(self, instanceIds):
         try:
-            resultSet = self.client.get_all_instances(instance_ids = instanceIds)
+            resultSet = self.client.get_all_instances(instance_ids=instanceIds)
         except EC2ResponseError, e:
             if self._getErrorCode(e) in ['InvalidInstanceID.NotFound',
                                          'InvalidInstanceID.Malformed']:
                 raise errors.HttpNotFound()
             raise errors.ResponseError(e.status, self._getErrorMessage(e), e.body)
+        return resultSet
 
+    def drvGetInstances(self, instanceIds, force=False):
+        resultSet = self._getInstanceReservations(instanceIds)
         insts = instances.BaseInstances()
         for reservation in resultSet:
             insts.extend(self._getInstancesFromReservation(reservation))
