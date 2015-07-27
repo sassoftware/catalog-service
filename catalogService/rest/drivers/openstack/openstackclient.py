@@ -16,6 +16,7 @@
 
 
 import os
+import sys
 import time
 
 from catalogService import errors
@@ -187,27 +188,56 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     getImageIdFromMintImage = baseDriver.BaseDriver._getImageIdFromMintImage_local
 
+    def _authUrl(self, server, port, secure=True):
+        return "%s://%s:%s" % ('https' if secure else 'http', server, port)
+
+    def _secureToInsecureFallback(self, callback, *args, **kwargs):
+        kwSecure = kwargs.copy()
+        kwSecure['secure'] = True
+
+        try:
+            # try calling the callback with secure=True
+            return callback(self, *args, **kwSecure)
+        except Exception, eSecure:
+            eSecure_type, eSecure_val, eSecure_trace = sys.exc_info()
+            kwInsecure = kwargs.copy()
+            kwInsecure['secure'] = False
+
+            # try calling the callback with secure=False
+            try:
+                return callback(self, *args, **kwInsecure)
+            except Exception, eInsecure:
+                # if insecure version also fails, transparently raise the secure exception
+                raise eSecure_type, eSecure_val, eSecure_trace
+
     def drvCreateCloudClient(self, credentials):
         cloudConfig = self.getTargetConfiguration()
         server = cloudConfig['name']
         port = cloudConfig['nova_port']
-        authUrl = "http://%s:%s" % (server, port)
         projectName = cloudConfig['project_name']
         try:
             session = KeystoneSession()
-            keystoneCli = KeystoneClient(self.KEYSTONE_API_VERSION,
-                    tenant_name=projectName,
-                    auth_url=authUrl,
-                    username=credentials['username'],
-                    password=credentials['password'],
-                    session=session)
-            auth = v2_auth.Password(
-                    keystoneCli.auth_url,
-                    username=credentials['username'],
-                    password=credentials['password'])
-            session.auth = auth
-            keystoneCli.authenticate()
-            auth.auth_ref = keystoneCli.auth_ref
+
+            def authenticate(self, **kwargs):
+                secure = kwargs.pop('secure')
+                authUrl = self._authUrl(server, port, secure=secure)
+                keystoneCli = KeystoneClient(self.KEYSTONE_API_VERSION,
+                        tenant_name=projectName,
+                        auth_url=authUrl,
+                        username=credentials['username'],
+                        password=credentials['password'],
+                        session=session)
+                auth = v2_auth.Password(
+                        keystoneCli.auth_url,
+                        username=credentials['username'],
+                        password=credentials['password'])
+                session.auth = auth
+                keystoneCli.authenticate()
+                auth.auth_ref = keystoneCli.auth_ref
+
+                return keystoneCli
+
+            keystoneCli = self._secureToInsecureFallback(authenticate)
             novaCli = self.NovaClientClass(auth_token=keystoneCli.auth_token,
                     project_id=projectName,
                     auth_url=keystoneCli.auth_url,
@@ -227,9 +257,11 @@ class OpenStackClient(baseDriver.BaseDriver):
     def drvVerifyCloudConfiguration(self, dataDict):
         serverName = dataDict['name']
         serverPort = dataDict['nova_port']
-        serverUrl = "http://%s:%s" % (serverName, serverPort)
 
-        self._verifyServerUrl(serverUrl)
+        def verify(self, **kwargs):
+            secure = kwargs.pop('secure')
+            self._verifyServerUrl(self._authUrl(serverName, serverPort, secure=secure))
+        self._secureToInsecureFallback(verify)
 
     def terminateInstances(self, instanceIds):
         running_instances = self.getInstances(instanceIds)
