@@ -194,6 +194,9 @@ class BaseTaskHandler(bfp.BaseTaskHandler):
         try:
             self._initTarget()
             self._run()
+        except errors.ParameterError, e:
+            self.sendStatus(C.ERR_BAD_ARGS,
+                    "Error in target call: %s" % str(e))
         except:
             typ, value, tb = sys.exc_info()
             out = StringIO.StringIO()

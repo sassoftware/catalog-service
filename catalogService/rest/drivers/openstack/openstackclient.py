@@ -182,7 +182,7 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     NovaClientClass = NovaClient
     KEYSTONE_API_VERSION = '2.0'
-    GLANCE_CLIENT_VERSION = '1'
+    GLANCE_CLIENT_VERSION = '2'
 
     @classmethod
     def isDriverFunctional(cls):
@@ -281,8 +281,13 @@ class OpenStackClient(baseDriver.BaseDriver):
         return self.terminateInstances([instanceId])
 
     def _get_flavors(self):
-        client = self.client.nova
-        return sorted(client.flavors.list(), key=self.sortKey)
+        objlist = self.client.nova.flavors.list()
+        return sorted(objlist, key=lambda x: (x.vcpus, x.ram, x.disk))
+
+    def _get_availability_zones(self):
+        objlist = self.client.nova.availability_zones.list(detailed=False)
+        objlist = [ x for x in objlist if x.zoneState.get('available') ]
+        return sorted(objlist, key=lambda x: x.zoneName)
 
     def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("OpenStack Launch Parameters")
@@ -305,15 +310,29 @@ class OpenStackClient(baseDriver.BaseDriver):
         keyPairs = [ descr.ValueWithDescription(x[0], descriptions = x[1])
                 for x in self._cliGetKeyPairs() ]
         if not keyPairs:
-            raise errors.CatalogError("No OpenStack SSH key pairs defined, please create one")
+            raise errors.ParameterError("No OpenStack SSH key pairs defined, please create one")
 
         return keyPairs
 
     def _launchSpecificDescriptorFields(self, descr, extraArgs=None):
+        avzones = self._get_availability_zones()
+        descr.addDataField("availabilityZone",
+                descriptions = [
+                    ("Availability Zone", None),
+                    (u"Zone de disponibilit\u00e9", "fr_FR")],
+                help = [
+                    ("launch/availabilityZones.html", None)],
+                default = [ avzones[0].zoneName ],
+                required=True,
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x.zoneName, descriptions = x.zoneName)
+                    for x in avzones,
+                ))
         targetFlavors = self._get_flavors()
         if not targetFlavors:
-            raise errors.CatalogError("No instance flavors defined")
-        flavors = [ descr.ValueWithDescription(str(f.id), descriptions = f.name) for f in targetFlavors ]
+            raise errors.ParameterError("No instance flavors defined")
+        flavors = [ descr.ValueWithDescription(str(f.id),
+            descriptions = "%s (VCPUs: %d, RAM: %d MB)" % (f.name, f.vcpus, f.ram)) for f in targetFlavors ]
         descr.addDataField('flavor',
                             descriptions = 'Flavor',
                             required = True,
@@ -323,6 +342,18 @@ class OpenStackClient(baseDriver.BaseDriver):
                             type = descr.EnumeratedType(flavors),
                             default=flavors[0].key,
                             )
+        networks = self._cliGetNetworks()
+        descr.addDataField('network',
+                descriptions = 'Network',
+                required = True,
+                help = [
+                    ('launch/network.html', None)
+                ],
+                type = descr.EnumeratedType(
+                    descr.ValueWithDescription(x.id, descriptions = x.label)
+                    for x in networks),
+                default=[networks[0].id],
+            )
         descr.addDataField("keyName",
             descriptions = [ ("SSH Key Pair", None), ("Paire de clefs", "fr_FR") ],
             help = [
@@ -371,6 +402,12 @@ class OpenStackClient(baseDriver.BaseDriver):
             raise
         return [ (x.id, x.name) for x in rs ]
 
+    def _cliGetNetworks(self):
+        networks = sorted(self.client.nova.networks.list(),
+                key=lambda x: x.label.lower())
+        if not networks:
+            raise errors.ParameterError("No networks defined, please create one")
+        return networks
 
     def _imageDeploymentSpecifcDescriptorFields(self, descr, **kwargs):
         pass
@@ -472,6 +509,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         instanceName = ppop('instanceName')
         instanceDescription = ppop('instanceDescription')
         flavorRef = ppop('flavor')
+        networkRef = ppop('network')
+        zoneRef = ppop('availabilityZone')
         floatingIp = ppop('floatingIp')
         if floatingIp.startswith(CATALOG_NEW_FLOATING_IP):
             poolName = floatingIp[len(CATALOG_NEW_FLOATING_IP):]
@@ -493,7 +532,7 @@ class OpenStackClient(baseDriver.BaseDriver):
 
         job.addHistoryEntry('Launching')
         instId = self._launchInstanceOnTarget(job, instanceName, imageId,
-                flavorRef, keyName, floatingIp)
+                flavorRef, keyName, floatingIp, zoneRef, networkRef)
         return [ instId ]
 
     @classmethod
@@ -541,14 +580,11 @@ class OpenStackClient(baseDriver.BaseDriver):
     def _getImageContainerFormat(self):
         return 'bare'
 
-    def _getImagePublic(self):
-        return True
-
     def _importImage(self, job, imageMetadata, fileObj):
         job.addHistoryEntry('Creating image')
         glanceImage = self.client.glance.images.create(**imageMetadata)
         job.addHistoryEntry('Uploading image content')
-        glanceImage.update(data=fileObj)
+        self.client.glance.images.upload(glanceImage.id, fileObj)
         return str(glanceImage.id)
 
     def _deployImageFromFile(self, job, image, path, *args, **kwargs):
@@ -565,18 +601,18 @@ class OpenStackClient(baseDriver.BaseDriver):
             job.addHistoryEntry('Importing image')
             imageDiskFormat = self._getImageDiskFormat()
             imageContainerFormat = self._getImageContainerFormat()
-            imagePublic = self._getImagePublic()
             imageMetadata = {'name':imageName, 'disk_format':imageDiskFormat, 
-                    'container_format':imageContainerFormat, 'is_public':imagePublic}
+                    'container_format':imageContainerFormat}
             imageId = self._importImage(job, imageMetadata, fobj)
         finally:
             pass
         return imageId
 
-    def _launchInstanceOnTarget(self, job, name, imageRef, flavorRef, keyName, floatingIp):
+    def _launchInstanceOnTarget(self, job, name, imageRef, flavorRef, keyName, floatingIp, zoneRef, networkRef):
         client = self.client.nova
         server = client.servers.create(name, imageRef, flavorRef,
-                key_name=keyName) # ipGroup, etc
+                key_name=keyName, nics=[{'net-id' : networkRef}],
+                availability_zone=zoneRef)
         for i in range(20):
             if server.status == 'ACTIVE':
                 break
