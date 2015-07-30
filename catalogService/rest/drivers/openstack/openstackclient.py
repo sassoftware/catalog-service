@@ -30,6 +30,8 @@ try:
     from keystoneclient.session import Session as KeystoneSession
     from novaclient.v1_1.client import Client as NovaClient
     from glanceclient import Client as GlanceClient
+    import logging
+    logging.getLogger('iso8601.iso8601').setLevel(logging.ERROR)
 except ImportError:
     NovaClient = None #pyflakes=ignore
 
