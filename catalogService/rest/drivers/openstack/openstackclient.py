@@ -282,12 +282,14 @@ class OpenStackClient(baseDriver.BaseDriver):
 
     def _get_flavors(self):
         objlist = self.client.nova.flavors.list()
-        return sorted(objlist, key=lambda x: (x.vcpus, x.ram, x.disk))
+        objlist.sort(key=lambda x: (x.vcpus, x.ram, x.disk))
+        return objlist
 
     def _get_availability_zones(self):
         objlist = self.client.nova.availability_zones.list(detailed=False)
         objlist = [ x for x in objlist if x.zoneState.get('available') ]
-        return sorted(objlist, key=lambda x: x.zoneName)
+        objlist.sort(key=lambda x: x.zoneName)
+        return objlist
 
     def drvPopulateImageDeploymentDescriptor(self, descr, extraArgs=None):
         descr.setDisplayName("OpenStack Launch Parameters")
@@ -324,9 +326,9 @@ class OpenStackClient(baseDriver.BaseDriver):
                     ("launch/availabilityZones.html", None)],
                 default = [ avzones[0].zoneName ],
                 required=True,
-                type = descr.EnumeratedType(
+                type = descr.EnumeratedType([
                     descr.ValueWithDescription(x.zoneName, descriptions = x.zoneName)
-                    for x in avzones,
+                    for x in avzones ]
                 ))
         targetFlavors = self._get_flavors()
         if not targetFlavors:
@@ -403,8 +405,8 @@ class OpenStackClient(baseDriver.BaseDriver):
         return [ (x.id, x.name) for x in rs ]
 
     def _cliGetNetworks(self):
-        networks = sorted(self.client.nova.networks.list(),
-                key=lambda x: x.label.lower())
+        networks = self.client.nova.networks.list()
+        networks.sort(key=lambda x: x.label.lower())
         if not networks:
             raise errors.ParameterError("No networks defined, please create one")
         return networks
