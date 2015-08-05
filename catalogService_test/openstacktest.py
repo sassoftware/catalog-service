@@ -108,6 +108,37 @@ class HandlerTest(testbase.TestCase):
         KeystoneSession.setData(MockedClientData())
         self.mock(requests, 'Session', lambda: KeystoneSession._Sess.Session)
 
+    def testSecureToInsecureFallback(self):
+        def callbackSecurePasses(self, **kwargs):
+            secure = kwargs.pop('secure')
+            if secure:
+                return 'secure passed'
+            else:
+                raise Exception("shouldn't get here")
+        def callbackInsecurePasses(self, **kwargs):
+            secure = kwargs.pop('secure')
+
+            if secure:
+                raise Exception("secure doesn't work")
+            else:
+                return 'insecure passed'
+        def callbackBothFail(self, **kwargs):
+            secure = kwargs.pop('secure')
+            raise Exception("%s doesn't work" % ('secure' if secure else 'insecure'))
+
+        # Mock the client init to allow testing of the fallback method
+        self.mock(dopenstack.openstackclient.OpenStackClient, '__init__', lambda self: None)
+        client = dopenstack.openstackclient.OpenStackClient()
+
+        self.assertEquals('secure passed',
+                client._secureToInsecureFallback(callbackSecurePasses))
+        self.assertEquals('insecure passed',
+                client._secureToInsecureFallback(callbackInsecurePasses))
+        # when both secure and insecure fail, the secure exception should be raised
+        ex = self.failUnlessRaises(Exception, client._secureToInsecureFallback,
+                callbackBothFail)
+        self.assertEquals("secure doesn't work", str(ex))
+
     def testUtctime(self):
         from catalogService.rest import baseDriver
         func = baseDriver.BaseDriver.utctime
@@ -763,8 +794,8 @@ class CannedData(object):
             u'vary': u'X-Auth-Token'},
         body={"versions":
             {"values": [
-                {"status": "stable", "updated": "2013-03-06T00:00:00Z", "media-types": [{"base": "application/json", "type": "application/vnd.openstack.identity-v3+json"}, {"base": "application/xml", "type": "application/vnd.openstack.identity-v3+xml"}], "id": "v3.0", "links": [{"href": "http://openstack1.eng.rpath.com:5000/v3/", "rel": "self"}]},
-                {"status": "stable", "updated": "2014-04-17T00:00:00Z", "media-types": [{"base": "application/json", "type": "application/vnd.openstack.identity-v2.0+json"}, {"base": "application/xml", "type": "application/vnd.openstack.identity-v2.0+xml"}], "id": "v2.0", "links": [{"href": "http://openstack1.eng.rpath.com:5000/v2.0/", "rel": "self"}, ]}
+                {"status": "stable", "updated": "2013-03-06T00:00:00Z", "media-types": [{"base": "application/json", "type": "application/vnd.openstack.identity-v3+json"}, {"base": "application/xml", "type": "application/vnd.openstack.identity-v3+xml"}], "id": "v3.0", "links": [{"href": "https://openstack1.eng.rpath.com:5000/v3/", "rel": "self"}]},
+                {"status": "stable", "updated": "2014-04-17T00:00:00Z", "media-types": [{"base": "application/json", "type": "application/vnd.openstack.identity-v2.0+json"}, {"base": "application/xml", "type": "application/vnd.openstack.identity-v2.0+xml"}], "id": "v2.0", "links": [{"href": "https://openstack1.eng.rpath.com:5000/v2.0/", "rel": "self"}, ]}
                 ]}}
             ))
     authenticate = (200, dict(headers={
@@ -778,18 +809,18 @@ class CannedData(object):
                     'roles': ['9fe2ff9ee4384b1894a90878d3e92bab']},
 
                 'serviceCatalog': [
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'id': '1884140635164bf69d6d0f5cdfd1a98c', 'internalURL': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'nova', 'type': 'compute'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:9696/', 'id': '581dcd45918d4f1285f86f66ba81bb63', 'internalURL': 'http://openstack1.eng.rpath.com:9696/', 'publicURL': 'http://openstack1.eng.rpath.com:9696/', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'neutron', 'type': 'network'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'id': '2899953f4d4a43c4852dfc9b0e8a5c94', 'internalURL': 'http://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'http://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'cinder_v2', 'type': 'volumev2'}, 
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8080', 'id': '09165a102946414492faa7cc7d77c7e3', 'internalURL': 'http://openstack1.eng.rpath.com:8080', 'publicURL': 'http://openstack1.eng.rpath.com:8080', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'swift_s3', 'type': 's3'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:9292', 'id': '344144550996447198eb11c4e5b6bab9', 'internalURL': 'http://openstack1.eng.rpath.com:9292', 'publicURL': 'http://openstack1.eng.rpath.com:9292', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'glance', 'type': 'image'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8777', 'id': '3166ece0b2a24e338b998b2382e5c958', 'internalURL': 'http://openstack1.eng.rpath.com:8777', 'publicURL': 'http://openstack1.eng.rpath.com:8777', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'ceilometer', 'type': 'metering'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8000/v1/', 'id': '0be1ad10b0584cd28c70fccb742386ad', 'internalURL': 'http://openstack1.eng.rpath.com:8000/v1/', 'publicURL': 'http://openstack1.eng.rpath.com:8000/v1/', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'heat-cfn', 'type': 'cloudformation'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'id': '2fe7e8ec6a0b4a49915d0fde8707a507', 'internalURL': 'http://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'http://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'cinder', 'type': 'volume'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8773/services/Admin', 'id': '3a5120493aac4268893016bac46bd67b', 'internalURL': 'http://openstack1.eng.rpath.com:8773/services/Cloud', 'publicURL': 'http://openstack1.eng.rpath.com:8773/services/Cloud', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'nova_ec2', 'type': 'ec2'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'id': '71b396582d394cd1ade54fed2cf0d255', 'internalURL': 'http://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'http://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'heat', 'type': 'orchestration'}, 
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:8080/', 'id': '11140882b89b45828b18dac762d1767a', 'internalURL': 'http://openstack1.eng.rpath.com:8080/v1/AUTH_44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'http://openstack1.eng.rpath.com:8080/v1/AUTH_44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'swift', 'type': 'object-store'},
-                    {'endpoints': [{'adminURL': 'http://openstack1.eng.rpath.com:35357/v2.0', 'id': '36faa60b5cd446c1b3c991fae6475130', 'internalURL': 'http://openstack1.eng.rpath.com:5000/v2.0', 'publicURL': 'http://openstack1.eng.rpath.com:5000/v2.0', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'keystone', 'type': 'identity'}],
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'id': '1884140635164bf69d6d0f5cdfd1a98c', 'internalURL': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'nova', 'type': 'compute'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:9696/', 'id': '581dcd45918d4f1285f86f66ba81bb63', 'internalURL': 'https://openstack1.eng.rpath.com:9696/', 'publicURL': 'https://openstack1.eng.rpath.com:9696/', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'neutron', 'type': 'network'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'id': '2899953f4d4a43c4852dfc9b0e8a5c94', 'internalURL': 'https://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'https://openstack1.eng.rpath.com:8776/v2/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'cinder_v2', 'type': 'volumev2'}, 
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8080', 'id': '09165a102946414492faa7cc7d77c7e3', 'internalURL': 'https://openstack1.eng.rpath.com:8080', 'publicURL': 'https://openstack1.eng.rpath.com:8080', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'swift_s3', 'type': 's3'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:9292', 'id': '344144550996447198eb11c4e5b6bab9', 'internalURL': 'https://openstack1.eng.rpath.com:9292', 'publicURL': 'https://openstack1.eng.rpath.com:9292', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'glance', 'type': 'image'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8777', 'id': '3166ece0b2a24e338b998b2382e5c958', 'internalURL': 'https://openstack1.eng.rpath.com:8777', 'publicURL': 'https://openstack1.eng.rpath.com:8777', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'ceilometer', 'type': 'metering'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8000/v1/', 'id': '0be1ad10b0584cd28c70fccb742386ad', 'internalURL': 'https://openstack1.eng.rpath.com:8000/v1/', 'publicURL': 'https://openstack1.eng.rpath.com:8000/v1/', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'heat-cfn', 'type': 'cloudformation'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'id': '2fe7e8ec6a0b4a49915d0fde8707a507', 'internalURL': 'https://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'https://openstack1.eng.rpath.com:8776/v1/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'cinder', 'type': 'volume'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8773/services/Admin', 'id': '3a5120493aac4268893016bac46bd67b', 'internalURL': 'https://openstack1.eng.rpath.com:8773/services/Cloud', 'publicURL': 'https://openstack1.eng.rpath.com:8773/services/Cloud', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'nova_ec2', 'type': 'ec2'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'id': '71b396582d394cd1ade54fed2cf0d255', 'internalURL': 'https://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'https://openstack1.eng.rpath.com:8004/v1/44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'heat', 'type': 'orchestration'}, 
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:8080/', 'id': '11140882b89b45828b18dac762d1767a', 'internalURL': 'https://openstack1.eng.rpath.com:8080/v1/AUTH_44a04a897db842a49ff3f13cf5759a97', 'publicURL': 'https://openstack1.eng.rpath.com:8080/v1/AUTH_44a04a897db842a49ff3f13cf5759a97', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'swift', 'type': 'object-store'},
+                    {'endpoints': [{'adminURL': 'https://openstack1.eng.rpath.com:35357/v2.0', 'id': '36faa60b5cd446c1b3c991fae6475130', 'internalURL': 'https://openstack1.eng.rpath.com:5000/v2.0', 'publicURL': 'https://openstack1.eng.rpath.com:5000/v2.0', 'region': 'RegionOne'}], 'endpoints_links': [], 'name': 'keystone', 'type': 'identity'}],
                 'token': {'expires': '2020-09-24T16:41:23Z', 'id': 'SuperSecretToken123', 'issued_at': '2014-09-24T15:41:23.659449', 'tenant': {'description': 'Platform Development Technologies', 'enabled': True, 'id': '44a04a897db842a49ff3f13cf5759a97', 'name': 'MyProject123'}},
                 'user': {'id': 'Mihai Ibanescu', 'name': 'miiban', 'roles': [{'name': '_member_'}], 'roles_links': [], 'username': 'miiban'}
                 }
@@ -804,11 +835,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 12592820224,
               'created': '2014-09-23T23:52:46Z',
               'id': '34229a3f-f7cd-4a29-ac9e-0321186e7557',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/34229a3f-f7cd-4a29-ac9e-0321186e7557',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {'description': 'vhf'},
@@ -821,11 +852,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 12462981120,
               'created': '2014-09-23T23:35:22Z',
               'id': '9401325c-4dac-436f-936b-4af7a49431fd',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/9401325c-4dac-436f-936b-4af7a49431fd',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {'description': 'w2k12 r2'},
@@ -838,11 +869,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 0,
               'created': '2014-09-22T15:54:34Z',
               'id': '04afdb08-90a2-48a1-a6ba-de54940679ad',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/04afdb08-90a2-48a1-a6ba-de54940679ad',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {},
@@ -855,11 +886,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 255590912,
               'created': '2014-09-11T02:17:49Z',
               'id': '215854b1-e1fb-4de4-8557-701254768315',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/215854b1-e1fb-4de4-8557-701254768315',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {},
@@ -872,11 +903,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 322830336,
               'created': '2014-09-02T15:57:13Z',
               'id': '9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/9b16fb4a-8e3c-4b85-abe4-60b4c6d0975f',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {'description': 'Red Hat Enterprise Linux 6.5 Cloud Image'},
@@ -889,11 +920,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 13167616,
               'created': '2014-09-02T15:50:30Z',
               'id': '2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/2f0bb8a4-8da1-44d2-b2f8-c0bad9e79e0f',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {},
@@ -906,11 +937,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 435131904,
               'created': '2014-08-27T15:48:12Z',
               'id': '710c1a84-7867-4b04-bdbd-dc585e29c48e',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/710c1a84-7867-4b04-bdbd-dc585e29c48e',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {'description': 'Red Hat Enterprise Linux 7.0 Cloud Image'},
@@ -981,17 +1012,17 @@ class CannedData(object):
                'config_drive': '',
                'created': '2014-09-30T13:31:58Z',
                'flavor': {'id': '2',
-                           'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
+                           'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
                                        'rel': 'bookmark'}]},
                'hostId': '07d94005d463e0fbaeb2dd75bdc36762f93eaea4e6dd92354441aea0',
                'id': '37208896-004b-4291-bab7-5cd89fcf71b9',
                'image': {'id': 'a17f23b5-15e8-48f0-974f-fd0e6b659739',
-                          'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
+                          'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
                                       'rel': 'bookmark'}]},
                'key_name': None,
-               'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+               'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
                            'rel': 'self'},
-                          {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+                          {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
                            'rel': 'bookmark'}],
                'metadata': {},
                'name': 'jules1',
@@ -1025,17 +1056,17 @@ class CannedData(object):
                'config_drive': '',
                'created': '2014-09-30T13:49:19Z',
                'flavor': {'id': '2',
-                           'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
+                           'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
                                        'rel': 'bookmark'}]},
                'hostId': '07d94005d463e0fbaeb2dd75bdc36762f93eaea4e6dd92354441aea0',
                'id': '22b896bf-af13-420b-a7db-2fadff3b3279',
                'image': {'id': 'a17f23b5-15e8-48f0-974f-fd0e6b659739',
-                          'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
+                          'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
                                       'rel': 'bookmark'}]},
                'key_name': None,
-               'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/22b896bf-af13-420b-a7db-2fadff3b3279',
+               'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/22b896bf-af13-420b-a7db-2fadff3b3279',
                            'rel': 'self'},
-                          {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/22b896bf-af13-420b-a7db-2fadff3b3279',
+                          {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/22b896bf-af13-420b-a7db-2fadff3b3279',
                            'rel': 'bookmark'}],
                'metadata': {},
                'name': 'vincent1',
@@ -1072,17 +1103,17 @@ class CannedData(object):
                'config_drive': '',
                'created': '2014-09-30T13:31:58Z',
                'flavor': {'id': '2',
-                           'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
+                           'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2',
                                        'rel': 'bookmark'}]},
                'hostId': '07d94005d463e0fbaeb2dd75bdc36762f93eaea4e6dd92354441aea0',
                'id': '37208896-004b-4291-bab7-5cd89fcf71b9',
                'image': {'id': 'a17f23b5-15e8-48f0-974f-fd0e6b659739',
-                          'links': [{'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
+                          'links': [{'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/a17f23b5-15e8-48f0-974f-fd0e6b659739',
                                       'rel': 'bookmark'}]},
                'key_name': None,
-               'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+               'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
                            'rel': 'self'},
-                          {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
+                          {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9',
                            'rel': 'bookmark'}],
                'metadata': {},
                'name': 'jules1',
@@ -1116,8 +1147,8 @@ class CannedData(object):
                'disk': 1,
                'id': '1',
                'links': [
-                    {'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/1', 'rel': 'self'},
-                    {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/1', 'rel': 'bookmark'}],
+                    {'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/1', 'rel': 'self'},
+                    {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/1', 'rel': 'bookmark'}],
                'name': 'm1.tiny',
                'os-flavor-access:is_public': True,
                'ram': 512,
@@ -1130,8 +1161,8 @@ class CannedData(object):
                'disk': 20,
                'id': '2',
                'links': [
-                   {'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/2', 'rel': 'self'},
-                   {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2', 'rel': 'bookmark'}],
+                   {'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/2', 'rel': 'self'},
+                   {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/2', 'rel': 'bookmark'}],
                'name': 'm1.small',
                'os-flavor-access:is_public': True,
                'ram': 2048,
@@ -1144,8 +1175,8 @@ class CannedData(object):
                'disk': 40,
                'id': '3',
                'links': [
-                   {'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/3', 'rel': 'self'},
-                   {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/3', 'rel': 'bookmark'}],
+                   {'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/3', 'rel': 'self'},
+                   {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/3', 'rel': 'bookmark'}],
                'name': 'm1.medium',
                'os-flavor-access:is_public': True,
                'ram': 4096,
@@ -1158,8 +1189,8 @@ class CannedData(object):
                'disk': 80,
                'id': '4',
                'links': [
-                   {'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/4', 'rel': 'self'},
-                   {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/4', 'rel': 'bookmark'}],
+                   {'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/4', 'rel': 'self'},
+                   {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/4', 'rel': 'bookmark'}],
                'name': 'm1.large',
                'os-flavor-access:is_public': True,
                'ram': 8192,
@@ -1172,8 +1203,8 @@ class CannedData(object):
                'disk': 160,
                'id': '5',
                'links': [
-                   {'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/5', 'rel': 'self'},
-                   {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/5', 'rel': 'bookmark'}],
+                   {'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/5', 'rel': 'self'},
+                   {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/flavors/5', 'rel': 'bookmark'}],
                'name': 'm1.xlarge',
                'os-flavor-access:is_public': True,
                'ram': 16384,
@@ -1217,11 +1248,11 @@ class CannedData(object):
              {'OS-EXT-IMG-SIZE:size': 12592820224,
               'created': '2014-09-23T23:52:46Z',
               'id': 'b6001727-0029-4e9b-afa0-e7aaba8d733b',
-              'links': [{'href': 'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
+              'links': [{'href': 'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
                           'rel': 'self'},
-                         {'href': 'http://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
+                         {'href': 'https://openstack1.eng.rpath.com:8774/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
                           'rel': 'bookmark'},
-                         {'href': 'http://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
+                         {'href': 'https://openstack1.eng.rpath.com:9292/44a04a897db842a49ff3f13cf5759a97/images/b6001727-0029-4e9b-afa0-e7aaba8d733b',
                           'rel': 'alternate',
                           'type': 'application/vnd.openstack.image'}],
               'metadata': {'description': 'vhf'},
@@ -1239,19 +1270,19 @@ class CannedData(object):
 
 class MockedClientData(object):
     data = {
-        'http://openstack1.eng.rpath.com:5001/' : dict(
+        'https://openstack1.eng.rpath.com:5001/' : dict(
             GET = CannedData.discovery,
         ),
-        'http://openstack1.eng.rpath.com:5000/v2.0/tokens' : dict(
+        'https://openstack1.eng.rpath.com:5000/v2.0/tokens' : dict(
             POST = CannedData.authenticate,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/detail' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/images/detail' : dict(
             GET = CannedData.images_listDetailed,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9/action' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9/action' : dict(
             POST = CannedData.servers_add_floating_ip,
             ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/detail' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/detail' : dict(
             GET = mockedData.MultiResponse([
                 CannedData.servers_listDetailed,
                 CannedData.servers_listDetailed,
@@ -1260,29 +1291,29 @@ class MockedClientData(object):
                 CannedData.servers_listDetailedWithNetwork,
             ]),
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/detail' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/flavors/detail' : dict(
             GET = CannedData.flavors_listDetailed,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-keypairs' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-keypairs' : dict(
             GET = CannedData.keypairs_list,
             ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ips' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ips' : dict(
             GET = CannedData.floatingIps_list,
             POST = CannedData.floatingIps_create,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ip-pools' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/os-floating-ip-pools' : dict(
             GET = CannedData.floatingIpPools_list,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers' : dict(
             POST = CannedData.server_create,
         ),
-        'http://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9' : dict(
+        'https://openstack1.eng.rpath.com:8774/v2/44a04a897db842a49ff3f13cf5759a97/servers/37208896-004b-4291-bab7-5cd89fcf71b9' : dict(
             GET = CannedData.server_get,
             ),
-        'http://openstack1.eng.rpath.com:9292/v1/images' : dict(
+        'https://openstack1.eng.rpath.com:9292/v1/images' : dict(
             POST = CannedData.glance_images_create,
             ),
-        'http://openstack1.eng.rpath.com:9292/v1/images/b6001727-0029-4e9b-afa0-e7aaba8d733b' : dict(
+        'https://openstack1.eng.rpath.com:9292/v1/images/b6001727-0029-4e9b-afa0-e7aaba8d733b' : dict(
             GET = CannedData.glance_image1,
             HEAD = '',
             PUT = CannedData.glance_image1_update),
@@ -1366,7 +1397,7 @@ class KeystoneSession(KeystoneSessionBase):
                 return
             sess = self.__class__.Session = RSession()
             adapter = self.__class__.Adapter = TestAdapter()
-            sess.mount("http://", adapter)
+            sess.mount("https://", adapter)
         def request(self, *args, **kwargs):
             self.Calls.append((args, kwargs))
             return self.Session.request(*args, **kwargs)
