@@ -26,7 +26,8 @@ import zlib
 log = logging.getLogger(__name__)
 
 class VMDKReader(object):
-    __slots__ = ['_streamIn', '_streamOut', '_pos', 'header', 'descriptor', 'callback' ]
+    __slots__ = ['_streamIn', '_streamOut', '_pos', 'header', 'descriptor',
+            'callback', '_gdSize', '_numGTs', ]
     _SECT = 512
     _HEADER = namedtuple('Header', 'magicNumber version flags capacity '
         'grainSize descriptorOffset descriptorSize numGTEsPerGT rgdOffset '
@@ -109,19 +110,17 @@ class VMDKReader(object):
             return True
 
     class GrainDirectory(BaseGrainTable):
-        __slots__ = []
+        __slots__ = ['_gdSize', ]
         GD_AT_END = 0xffffffffffffffff
+
+        def __init__(self, gdSize=None):
+            self._gdSize = gdSize
+            VMDKReader.BaseGrainTable.__init__(self)
 
         def add(self, grainTable):
             if grainTable.isEmpty():
                 return
             idx = grainTable.lba
-            mapLen = len(self.map)
-            # We may have skipped some tables, but we need to add a full
-            # block of 128
-            while mapLen <= idx:
-                self.map.extend([ 0 ] * 128)
-                mapLen += 128
             self.map[idx] = grainTable.offset
 
         @classmethod
@@ -131,7 +130,9 @@ class VMDKReader(object):
             return metadata
 
         def empty(self):
-            return []
+            if self._gdSize is None:
+                return []
+            return [0] * self._gdSize
 
     def __init__(self, fobj, outputStream, callback=None):
         self._streamIn = fobj
@@ -141,6 +142,8 @@ class VMDKReader(object):
         if callback is None:
             callback = lambda *args, **kwargs: None
         self.callback = callback
+        self._gdSize = None
+        self._numGTs = None
 
     def _read(self, count):
         data = self._streamIn.read(count)
@@ -163,6 +166,13 @@ class VMDKReader(object):
         self.header = self._HEADER(*struct.unpack("<4sIIQQQQIQQQBccccI431s", headerData))
         self.assertEquals(self.header.magicNumber, 'KDMV')
         log.debug("Header: %s", self.header)
+
+        # Compute size of GD
+        self._numGTs = math.ceil(self.header.capacity / float(self.header.grainSize))
+        gdSize = int(math.ceil(self._numGTs / self.header.numGTEsPerGT))
+        # gd is aligned to a sector size, which is 512, with each entry
+        # being 4 bytes
+        self._gdSize = gdSize = self.pad(gdSize, 512/4)
         fout.seek(self.header.capacity * self._SECT)
         try:
             fout.truncate()
@@ -181,7 +191,7 @@ class VMDKReader(object):
         # skip over the overhead
         self._seek(self.header.overHead * self._SECT, 0)
         grainTable = self.GrainTable()
-        grainDirectory = self.GrainDirectory()
+        grainDirectory = self.GrainDirectory(self._gdSize)
         while 1:
             marker = self._readMarker()
             self._align()
@@ -217,12 +227,7 @@ class VMDKReader(object):
         fout = self.outputStream
         grainDirectory = self.GrainDirectory()
 
-        # Compute size of GD
-        numGTs = math.ceil(self.header.capacity / float(self.header.grainSize))
-        gdSize = int(math.ceil(numGTs / self.header.numGTEsPerGT))
-        # gd is aligned to a sector size, which is 512, with each entry
-        # being 4 bytes
-        gdSize = self.pad(gdSize, 512/4)
+        gdSize = self._gdSize
 
         self._seek(self.header.gdOffset * self._SECT, 0)
         grainDirectory = self.GrainDirectory.fromData(self._read(gdSize * 4))
@@ -241,7 +246,7 @@ class VMDKReader(object):
 
             for (gteNum, gte) in enumerate(gt.map):
                 pos = gtNum * self.header.numGTEsPerGT + gteNum
-                if pos >= numGTs:
+                if pos >= self._numGTs:
                     break
                 self.assertEquals(gte, rgt.map[gteNum])
 
@@ -257,7 +262,7 @@ class VMDKReader(object):
                     assert len(data) == grainSizeBytes
                     fout.write(data)
 
-            if (gtNum + 1) * self.header.numGTEsPerGT > numGTs:
+            if (gtNum + 1) * self.header.numGTEsPerGT > self._numGTs:
                 break
 
 
