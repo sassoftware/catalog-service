@@ -775,7 +775,13 @@ class VMwareClient(baseDriver.BaseDriver):
             self.log_exception("Exception cloning template: %s" % e)
             raise
 
-    def _findUniqueName(self, inventoryPrefix, startName):
+    def _findUniqueName(self, dc, vmFolderPath, startName):
+        dcName = dc.properties["name"]
+        if self.client.vmwareVersion >= (6, 0, 0):
+            dcFolderName = self.vicfg.dcFolders[dc.properties['parent']]['name']
+            inventoryPrefix = "%s/%s/%s/" % (dcFolderName, dcName, vmFolderPath)
+        else:
+            inventoryPrefix = "/%s/%s/" % (dcName, vmFolderPath)
         # make sure that the vm name is not used in the inventory
         testName = startName
         x = 0
@@ -867,12 +873,11 @@ class VMwareClient(baseDriver.BaseDriver):
             vmFolderMor = dc.properties['vmFolder']
         else:
             vmFolderMor = self.vicfg.getMOR(vmFolder)
-        dcName_, vmFolderPath = self.vicfg.getVmFolderLabelPath(vmFolderMor)
-        if dcName_ is None:
+        dc_, vmFolderPath = self.vicfg.getVmFolderLabelPath(vmFolderMor)
+        if dc_ is None:
             # Requested a folder with no path to the top level
             raise errors.ParameterError()
-        inventoryPrefix = '/%s/%s/' %(dcName_, vmFolderPath)
-        vmName = self._findUniqueName(inventoryPrefix, vmName)
+        vmName = self._findUniqueName(dc_, vmFolderPath, vmName)
         # FIXME: make sure that there isn't something in the way on
         # the data store
 

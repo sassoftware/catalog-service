@@ -27,6 +27,7 @@ import StringIO
 import tarfile
 
 from conary.lib import util
+from testutils import mock
 
 import testbase
 
@@ -45,6 +46,121 @@ from catalogService.rest.models import instances
 from catalogService.utils.progress import StreamWithProgress
 
 from catalogService_test import mockedData
+
+
+class VMwareUnitTest(testbase.TestCase):
+    TARGETS = [
+        ('vmware', 'vcent', dict(
+            alias = 'vcent',
+            description = 'vCenter Deployment',
+        )),
+    ]
+
+    USER_TARGETS = [
+        ('JeanValjean', 'vmware', 'vcent', dict(
+                username = 'jean_valjean',
+                password = 'coSette',
+            )),
+    ]
+    cloudType = 'vmware'
+    cloudName = 'vcent'
+
+    def setUp(self):
+        testbase.TestCase.setUp(self)
+        baseDriver.CatalogJobRunner.preFork = lambda *args: None
+        os.makedirs(os.path.join(self.workDir, "data"))
+ 
+    def _createNodeFactory(self):
+        return self._createDriver()._nodeFactory
+
+    def _createDriver(self):
+        rBuilderUrl = "http://mumbo.jumbo.com"
+        from catalogService import config
+        cfg = config.BaseConfig()
+        cfg.rBuilderUrl = 'http://adf'
+        cfg.storagePath = "%s/storage" % self.workDir
+        driver = vmware.vmwareclient.VMwareClient(cfg, self.cloudName, db=self.restdb)
+        class Request(object):pass
+
+        class Authorization(object):
+            authorized = True
+        self.restdb.auth.auth = Authorization()
+
+        request = Request()
+        request.auth = ('JeanValjean', 'sekrit')
+        request.baseUrl = 'http://mumbo.jumbo.com/bottom'
+        request.logger = None
+        driver = driver(request, self.cloudType)
+        driver.db = self.restdb
+        # Initialize client
+        driver._cloudClient = mock.MockObject()
+        driver.zoneAddresses =  [ '1.2.3.4:5678', '2.3.4.5:6789' ]
+ 
+        return driver
+
+    def _fakeMakeRequest(self, drv, **kw):
+        self._invocations = []
+        def fakeMakeRequest(methodName, params, *args, **kwargs):
+            #response = origMakeRequest(methodName, params, *args, **kwargs)
+            self._invocations.append((methodName, params, args, kwargs))
+            data = kw[methodName]
+            if isinstance(data, mockedData.MultiResponse):
+                return data.getData()
+            resp = mockedData.MockedResponse(data)
+            return resp
+        self.mock(drv.client, 'make_request', fakeMakeRequest)
+
+    def testCloud(self):
+        # Try to create a cloud with id, name, type that are not the default
+        # ones
+        drv = self._createDriver()
+        x = drv._nodeFactory.newCloud(id = 'aaa', cloudName = 'bbb',
+            description = 'Cloud Description', cloudAlias='ccc')
+
+        self.failUnlessEqual(x.getId(),
+                'http://mumbo.jumbo.com/bottom/clouds/vmware/instances/bbb')
+        self.failUnlessEqual(x.getType().getText(), self.cloudType)
+        self.failUnlessEqual(x.getType().getHref(),
+                'http://mumbo.jumbo.com/bottom/clouds/%s' % self.cloudType)
+        self.failUnlessEqual(x.getCloudName(), 'bbb')
+        self.failUnlessEqual(x.getCloudAlias(), 'ccc')
+        self.failUnlessEqual(x.getDescription(), 'Cloud Description')
+
+    def test_findUniqueName_pre_6(self):
+        drv = self._createDriver()
+        drv = self._createDriver()
+        dc = mock.MockObject()
+        dc._mock.set(properties=dict(
+            name='datacenter-1',
+            ))
+        cli = drv._cloudClient
+        cli._mock.set(vmwareVersion=(5, 5, 0))
+        cli.findVMByInventoryPath._mock.setDefaultReturn(None)
+        cli.findVMByInventoryPath._mock.setReturn(
+            'object', '/datacenter-1/vm/foo/object')
+        cli.findVMByInventoryPath._mock.setReturn(
+            'object-1', '/datacenter-1/vm/foo/object-1')
+        name = drv._findUniqueName(dc, "vm/foo", "object")
+        self.assertEquals('object-2', name)
+
+    def test_findUniqueName_6(self):
+        drv = self._createDriver()
+        dc = mock.MockObject()
+        dc._mock.set(properties=dict(
+            name='datacenter-1',
+            parent='group-d01',
+            ))
+        drv._vicfg = mock.MockObject()
+        drv._vicfg._mock.set(dcFolders={'group-d01': dict(name="Datacenters")})
+        cli = drv._cloudClient
+        cli._mock.set(vmwareVersion=(6, 0, 0))
+        cli.findVMByInventoryPath._mock.setDefaultReturn(None)
+        cli.findVMByInventoryPath._mock.setReturn(
+            'object', 'Datacenters/datacenter-1/vm/foo/object')
+        cli.findVMByInventoryPath._mock.setReturn(
+            'object-1', 'Datacenters/datacenter-1/vm/foo/object-1')
+        name = drv._findUniqueName(dc, "vm/foo", "object")
+        self.assertEquals('object-2', name)
 
 
 class FakeSocket(StringIO.StringIO):
@@ -581,7 +697,8 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(dsc.getDisplayName(), "VMware Image Upload Parameters")
         self.failUnlessEqual(dsc.getDescriptions(), {None : 'VMware Image Upload Parameters'})
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
-            ['imageId', 'imageName', 'imageDescription', 'updateOnBoot', 'dataCenter',
+            ['imageId', 'imageName', 'imageDescription', 'updateOnBoot',
+                'diskProvisioning', 'dataCenter',
                 'vmfolder-datacenter-2', 'cr-datacenter-2',
                 'network-datacenter-2',
                 'dataStoreSelection-domain-c5',
@@ -594,6 +711,7 @@ class VMwareTest(testbase.TestCase):
                 [{'max': 32, 'constraintName': 'range', 'min': 1}],
                 [{'constraintName': 'length', 'value': 76}],
                 [{'constraintName': 'length', 'value': 128}],
+                [],
                 [],
                 [],
                 [],
@@ -620,7 +738,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
             ['imageId', 'instanceName', 'instanceDescription',
                 'vmCPUs', 'vmMemory', 'rootSshKeys',
-                'updateOnBoot', 'dataCenter',
+                'updateOnBoot', 'diskProvisioning', 'dataCenter',
                 'vmfolder-datacenter-2',
                 'cr-datacenter-2', 'network-datacenter-2',
                 'dataStoreSelection-domain-c5',
@@ -631,19 +749,31 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(ftypes[:7],
             ['str', 'str', 'str', 'int', 'int', 'str', 'bool', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
-            for ftype in [ ftypes[7] ] ],
-            [[(u'datacenter-2', {None: u'rPath'})]])
+            for ftype in [ ftypes[7], ftypes[8] ] ],
+            [
+                [
+                    ('sparse', {None: 'Monolithic Sparse or Thin'}),
+                    ('flat', {None: 'Monolithic Flat or Thick'}),
+                    ('thin', {None: 'Thin (Allocated on demand)'}),
+                    ('thick', {None: 'Thick (Preallocated)'}),
+                    ('monolithicSparse', {None: 'Monolithic Sparse (Allocated on demand)'}),
+                    ('monolithicFlat', {None: 'Monolithic Flat (Preallocated)'}),
+                    ('twoGbMaxExtentSparse', {None: 'Sparse 2G Maximum Extent'}),
+                    ('twoGbMaxExtentFlat', {None: 'Flat 2G Maximum Extent'}),
+                    ],
+                [('datacenter-2', {None: 'rPath'})]
+                ])
         expMultiple = [None] * len(dsc.getDataFields())
         self.failUnlessEqual([ df.multiple for df in dsc.getDataFields() ],
             expMultiple)
         self.failUnlessEqual([ df.required for df in dsc.getDataFields() ],
-            [ True, True, None, True, True, None, None, True, True, True, True, True,
+            [ True, True, None, True, True, None, None, True, True, True, True, True, True,
                 True, True, True, True, ] )
         self.failUnlessEqual([ df.hidden for df in dsc.getDataFields() ],
-            [ True, None, None, None, None, None, None, None, None, None, None,
+            [ True, None, None, None, None, None, None, None, None, None, None, None,
                 None, None, None, None, None, ] )
         self.failUnlessEqual([ df.multiline for df in dsc.getDataFields() ],
-            [ None, None, None, None, None, True, None, None, None, None, None,
+            [ None, None, None, None, None, True, None, None, None, None, None, None,
                 None, None, None, None, None, ] )
         self.failUnlessEqual([ df.descriptions.asDict()
                 for df in dsc.getDataFields() ],
@@ -655,6 +785,7 @@ class VMwareTest(testbase.TestCase):
                 {None: 'RAM (Megabytes)'},
                 {None: 'Root SSH keys'},
                 {None: 'Update on boot'},
+                {None: 'Disk Provisioning'},
                 {None: 'Data Center'},
                 {None: 'VM Folder'},
                 {None: 'Compute Resource'},
@@ -684,11 +815,14 @@ class VMwareTest(testbase.TestCase):
                 [],
                 [],
                 [],
+                [],
             ])
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 1, 1024, None, False, 'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
-             'dataStoreFreeSpace-domain-c5', '*', '*',
-             'group-p00002', 'resgroup-50'])
+            [
+                None, None, None, 1, 1024, None, False, 'twoGbMaxExtentSparse',
+                'datacenter-2', 'group-v3', 'domain-c5', 'dvportgroup-9987',
+                'dataStoreFreeSpace-domain-c5', '*', '*',
+                'group-p00002', 'resgroup-50'])
         df = dsc.getDataField('network-datacenter-2')
         self.failUnlessEqual( [ x.descriptions.asDict() for x in df.type ],
             [ {None : 'Engineering lab'} ] )
@@ -723,6 +857,7 @@ class VMwareTest(testbase.TestCase):
                 'vmMemory.html',
                 'rootSshKeys.html',
                 'updateOnBoot.html',
+                'diskProvisioning.html',
                 'dataCenter.html',
                 'vmfolder.html',
                 'computeResource.html',
@@ -773,6 +908,7 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
             ['imageId', 'instanceName', 'instanceDescription',
                 'vmCPUs', 'vmMemory', 'rootSshKeys', 'updateOnBoot',
+                'diskProvisioning',
                 'dataCenter', 'vmfolder-datacenter-10', 'cr-datacenter-10',
                 'vmfolder-datacenter-20', 'cr-datacenter-20',
                 'network-datacenter-10', 'network-datacenter-20',
@@ -786,6 +922,18 @@ class VMwareTest(testbase.TestCase):
             ['str', 'str', 'str', 'int', 'int', 'str', 'bool', ])
         self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
             for ftype in [ ftypes[7] ] ],
+                [[
+                    ('sparse', {None: 'Monolithic Sparse or Thin'}),
+                    ('flat', {None: 'Monolithic Flat or Thick'}),
+                    ('thin', {None: 'Thin (Allocated on demand)'}),
+                    ('thick', {None: 'Thick (Preallocated)'}),
+                    ('monolithicSparse', {None: 'Monolithic Sparse (Allocated on demand)'}),
+                    ('monolithicFlat', {None: 'Monolithic Flat (Preallocated)'}),
+                    ('twoGbMaxExtentSparse', {None: 'Sparse 2G Maximum Extent'}),
+                    ('twoGbMaxExtentFlat', {None: 'Flat 2G Maximum Extent'}),
+                    ]])
+        self.failUnlessEqual([ [ (x.key, x.descriptions.asDict()) for x in ftype ]
+            for ftype in [ ftypes[8] ] ],
                 [[('datacenter-10', {None: 'rPath 1'}),
                   ('datacenter-20', {None: 'rPath 2'})]])
         expMultiple = [None] * len(dsc.getDataFields())
@@ -805,6 +953,7 @@ class VMwareTest(testbase.TestCase):
                 {None: 'RAM (Megabytes)'},
                 {None: 'Root SSH keys'},
                 {None: 'Update on boot'},
+                {None: 'Disk Provisioning'},
                 {None: 'Data Center'},
                 {None: 'VM Folder'},
                 {None: 'Compute Resource'},
@@ -834,7 +983,7 @@ class VMwareTest(testbase.TestCase):
                 [{'constraintName': 'length', 'value': 4096}],
             ] + [ [] ] * (len(dsc.getDataFields()) - 6))
         self.failUnlessEqual([ df.getDefault() for df in dsc.getDataFields() ],
-            [None, None, None, 1, 1024, None, False,
+            [None, None, None, 1, 1024, None, False, 'twoGbMaxExtentSparse',
             'datacenter-10', 'group-v10', 'domain-c10', 'group-v20', 'domain-c20',
             'network-10', 'network-20',
             'dataStoreFreeSpace-domain-c10', '*', '*',
@@ -852,6 +1001,16 @@ class VMwareTest(testbase.TestCase):
         self.failUnlessEqual(
             [ _descr(df) for df in dfields ],
             [
+                [
+                    ('sparse', {None: 'Monolithic Sparse or Thin'}),
+                    ('flat', {None: 'Monolithic Flat or Thick'}),
+                    ('thin', {None: 'Thin (Allocated on demand)'}),
+                    ('thick', {None: 'Thick (Preallocated)'}),
+                    ('monolithicSparse', {None: 'Monolithic Sparse (Allocated on demand)'}),
+                    ('monolithicFlat', {None: 'Monolithic Flat (Preallocated)'}),
+                    ('twoGbMaxExtentSparse', {None: 'Sparse 2G Maximum Extent'}),
+                    ('twoGbMaxExtentFlat', {None: 'Flat 2G Maximum Extent'}),
+                ],
                 [
                     ('datacenter-10', {None: 'rPath 1'}),
                     ('datacenter-20', {None: 'rPath 2'}),
@@ -907,7 +1066,7 @@ class VMwareTest(testbase.TestCase):
                 ],
             ])
 
-        dfields = dsc.getDataFields()[8:]
+        dfields = dsc.getDataFields()[9:]
         self.failUnlessEqual([
             (df.conditional.fieldName, df.conditional.value)
                 for df in dfields ],
@@ -1145,11 +1304,15 @@ class VMwareTest(testbase.TestCase):
     def testNewInstancesESX_1(self):
         cloudName = 'virtcenter.eng.rpath.com'
         cloudType = vmware.driver.cloudType
+        vmwareCreateImportSpecRequest = mockedData.vmwareCreateImportSpecRequest2.replace(
+            '<ns1:diskProvisioning>thin</ns1:diskProvisioning>',
+            '<ns1:diskProvisioning>twoGbMaxExtentSparse</ns1:diskProvisioning>')
 
         # Mock RetrieveServiceContent to force ESX
         self._replaceVmwareData({
             mockedData.vmwareRetrieveServiceContentRequest :
-            mockedData.vmwareRetrieveServiceContentResponseESX})
+            mockedData.vmwareRetrieveServiceContentResponseESX,
+            vmwareCreateImportSpecRequest : mockedData.vmwareCreateImportSpecResponse1})
 
         imageId = 'aaaaaabb-bbbb-bbbc-cccc-ccccccdddddd'
         srv, client, job, response = self._setUpNewInstanceTest(
@@ -1222,10 +1385,13 @@ class VMwareTest(testbase.TestCase):
 
     def testDeployImageVsphere50(self, diskProvisioning='thin'):
         vmwareCreateImportSpecRequestThin = mockedData.vmwareCreateImportSpecRequest2.replace(
-            '</networkMapping>',
-            '</networkMapping><ns1:diskProvisioning>%s</ns1:diskProvisioning>' % diskProvisioning)
+            '<ns1:diskProvisioning>thin</ns1:diskProvisioning>',
+            '<ns1:diskProvisioning>%s</ns1:diskProvisioning>' % diskProvisioning)
 
+        req6 = mockedData.vmwareFindByInventoryPathReq3
+        x = req6.replace('Datacenters/', '/')
         self._replaceVmwareData({
+            x : mockedData.vmwareSoapData[req6],
             vmwareCreateImportSpecRequestThin : mockedData.vmwareCreateImportSpecResponse1,
             mockedData.vmwareRetrieveServiceContentRequest :
                 mockedData.vmwareRetrieveServiceContentResponse50})
@@ -1353,7 +1519,7 @@ class VMwareTest(testbase.TestCase):
             # The data store should no longer be there (if we had multiple one
             # of them should show up)
             self.failUnlessEqual([ df.name for df in dsc.getDataFields() ],
-                ['imageId', 'instanceName', 'instanceDescription', 'vmCPUs', 'vmMemory', 'rootSshKeys', 'updateOnBoot', 'dataCenter',])
+                ['imageId', 'instanceName', 'instanceDescription', 'vmCPUs', 'vmMemory', 'rootSshKeys', 'updateOnBoot', 'diskProvisioning', 'dataCenter',])
         finally:
             pass
 

@@ -295,6 +295,7 @@ class VIConfig(object):
         self.props = {}
         self.networks = {}
         self.distributedVirtualSwitches = {}
+        self.dcFolders = {}
         self.vmFolders = {}
         self.vmFolderTree = {}
 
@@ -368,12 +369,11 @@ class VIConfig(object):
         # Hash datacenters
         topFolders = dict((dc.properties['vmFolder'], dc)
             for dc in self.datacenters)
-        dcName = None
+        dc = None
         while 1:
             morProps = self.vmFolders[node]
             dc = topFolders.get(node)
             if dc is not None:
-                dcName = dc.properties['name']
                 stack.append(self._escapeFolderName(morProps['name']))
                 break
 
@@ -384,7 +384,7 @@ class VIConfig(object):
             stack.append(self._escapeFolderName(morProps['name']))
             node = morProps['parent']
         stack.reverse()
-        return dcName, '/'.join(stack)
+        return dc, '/'.join(stack)
 
     @classmethod
     def _escapeFolderName(cls, folderName):
@@ -1446,7 +1446,8 @@ class VimService(object):
                                                     'vmFolder',
                                                     'datastore',
                                                     'datastoreFolder',
-                                                    'network' ],
+                                                    'network',
+                                                    'parent', ],
                                     'Folder': ['name', 'parent', 'childType', ],
                                     'HostSystem': [ 'name',
                                                     'datastore',
@@ -1477,6 +1478,7 @@ class VimService(object):
         vmFolders = {}
         vmFolderTree = {}
         crFolders = {}
+        dcFolders = {}
         for mor, morProps in props.iteritems():
             # this is ClusterComputeResource in case of DRS
             objType = mor.get_attribute_type()
@@ -1513,6 +1515,8 @@ class VimService(object):
                     vmFolderTree.setdefault(parent, []).append(mor)
                 elif 'ComputeResource' in childTypes:
                     crFolders[mor] = morProps
+                elif 'Datacenter' in childTypes:
+                    dcFolders[mor] = morProps
 
         networksNotInFolder = [ x for (x, y) in networks.items()
             if y is None and x not in incompleteNetworks ]
@@ -1535,6 +1539,7 @@ class VimService(object):
             nameMap.update((mor, p['name']) for (mor, p) in networks.items())
 
         vicfg = VIConfig()
+        vicfg.dcFolders = dcFolders
         vicfg.vmFolders = vmFolders
         vicfg.vmFolderTree = vmFolderTree
         for cr in crs:

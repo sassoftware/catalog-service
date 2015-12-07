@@ -3949,7 +3949,11 @@ Content-Length: 31987
 </soapenv:Envelope>
 """
 
-vmwareFindByInventoryPathReq = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:FindByInventoryPath><_this type="SearchIndex">SearchIndex</_this><ns1:inventoryPath>/rPath/vm/%s</ns1:inventoryPath></ns1:FindByInventoryPath></SOAP-ENV:Body></SOAP-ENV:Envelope>'
+vmwareFindByInventoryPathReq = '<SOAP-ENV:Envelope xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/" xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ZSI="http://www.zolera.com/schemas/ZSI/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><SOAP-ENV:Header></SOAP-ENV:Header><SOAP-ENV:Body xmlns:ns1="urn:vim25"><ns1:FindByInventoryPath><_this type="SearchIndex">SearchIndex</_this><ns1:inventoryPath>Datacenters/rPath/vm/%s</ns1:inventoryPath></ns1:FindByInventoryPath></SOAP-ENV:Body></SOAP-ENV:Envelope>'
+
+vmwareFindByInventoryPathReq1 =  vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86'
+vmwareFindByInventoryPathReq2 = vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86-1'
+vmwareFindByInventoryPathReq3 = vmwareFindByInventoryPathReq % 'instance-foo'
 
 vmwareFindByInventoryPathResp = """\
 HTTP/1.1 200 OK
@@ -4574,6 +4578,7 @@ vmwareRetrievePropertiesReq1 = vmwareReqGetVirtualMachineProps1.replace(
     '<ns1:pathSet>datastore</ns1:pathSet>'
     '<ns1:pathSet>datastoreFolder</ns1:pathSet>'
     '<ns1:pathSet>network</ns1:pathSet>'
+    '<ns1:pathSet>parent</ns1:pathSet>'
    '</propSet>'
    '<propSet xsi:type="ns1:PropertySpec">'
     '<ns1:type>ResourcePool</ns1:type>'
@@ -4627,6 +4632,7 @@ vmwareRetrievePropertiesReq35 = vmwareReqGetVirtualMachineProps1.replace(
     '<ns1:pathSet>datastore</ns1:pathSet>'
     '<ns1:pathSet>datastoreFolder</ns1:pathSet>'
     '<ns1:pathSet>network</ns1:pathSet>'
+    '<ns1:pathSet>parent</ns1:pathSet>'
    '</propSet>'
    '<propSet xsi:type="ns1:PropertySpec">'
     '<ns1:type>Folder</ns1:type>'
@@ -4914,6 +4920,10 @@ vmwareRetrievePropertiesResp2 = HTTPResponse('<?xml version="1.0" encoding="UTF-
         '<propSet>'
           '<name>datastoreFolder</name>'
           '<val type="Folder" xsi:type="ManagedObjectReference">group-s00001</val>'
+        '</propSet>'
+        '<propSet>'
+          '<name>parent</name>'
+          '<val type="Folder" xsi:type="ManagedObjectReference">group-d00001</val>'
         '</propSet>'
         '<propSet>'
           '<name>hostFolder</name>'
@@ -5321,6 +5331,10 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
           '<val type="Folder" xsi:type="ManagedObjectReference">group-s24</val>'
         '</propSet>'
         '<propSet>'
+          '<name>parent</name>'
+          '<val type="Folder" xsi:type="ManagedObjectReference">group-d00001</val>'
+        '</propSet>'
+        '<propSet>'
           '<name>hostFolder</name>'
           '<val type="Folder" xsi:type="ManagedObjectReference">group-h4</val>'
         '</propSet>'
@@ -5472,6 +5486,26 @@ vmwareRetrievePropertiesResp1 = HTTPResponse('<?xml version="1.0" encoding="UTF-
           '<val type="Folder" xsi:type="ManagedObjectReference">group-v31</val>'
         '</propSet>'
       '</returnval>'
+      '''
+      <returnval>
+        <obj type="Folder">group-d00001</obj>
+        <propSet>
+          <name>childType</name>
+          <val xsi:type="ArrayOfString">
+            <string xsi:type="xsd:string">Folder</string>
+            <string xsi:type="xsd:string">Datacenter</string>
+          </val>
+        </propSet>
+        <propSet>
+          <name>name</name>
+          <val xsi:type="xsd:string">Datacenters</val>
+        </propSet>
+        <propSet>
+          <name>parent</name>
+          <val type="Folder" xsi:type="ManagedObjectReference">group-d1</val>
+        </propSet>
+      </returnval>
+      '''
     '</RetrievePropertiesResponse>'
   '</soapenv:Body>'
 '</soapenv:Envelope>'
@@ -5802,20 +5836,20 @@ vmwareRetrieveServiceContentResponse = HTTPResponse(
  '<rootFolder type="Folder">group-d1</rootFolder>'
  '<propertyCollector type="PropertyCollector">propertyCollector</propertyCollector>'
  '<viewManager type="ViewManager">ViewManager</viewManager>'
- '<about><name>VMware VirtualCenter</name>'
- '<fullName>VMware VMware vCenter Server 4.0.0 build-208111</fullName>'
+ '<about><name>VMware vCenter Server</name>'
+ '<fullName>VMware VMware vCenter Server 6.0.0 build-3018523</fullName>'
  '<vendor>VMware, Inc.</vendor>'
- '<version>4.0.0</version>'
- '<build>208111</build>'
+ '<version>6.0.0</version>'
+ '<build>3018523</build>'
  '<localeVersion>INTL</localeVersion>'
  '<localeBuild>000</localeBuild>'
- '<osType>win32-x86</osType>'
+ '<osType>linux-x64</osType>'
  '<productLineId>vpx</productLineId>'
  '<apiType>VirtualCenter</apiType>'
  '<instanceUuid>08263877-EAC1-4A69-974B-25B06D1785F1</instanceUuid>'
  '<licenseProductName>VMware VirtualCenter Server</licenseProductName>'
- '<licenseProductVersion>4.0</licenseProductVersion>'
- '<apiVersion>4.0</apiVersion>'
+ '<licenseProductVersion>6.0</licenseProductVersion>'
+ '<apiVersion>6.0</apiVersion>'
  '</about>'
  '<setting type="OptionManager">VpxSettings</setting>'
  '<userDirectory type="UserDirectory">UserDirectory</userDirectory>'
@@ -5853,7 +5887,7 @@ vmwareRetrieveServiceContentResponseESX = HTTPResponse(
 # ESX 3.5
 vmwareRetrieveServiceContentResponseESX35 = HTTPResponse(
     vmwareRetrieveServiceContentResponseESX.data.replace(
-        '<version>4.0.0</version>',
+        '<version>6.0.0</version>',
         '<version>2.5.0</version>'),
     extraHeaders = [ ('Set-Cookie' , 'vmware_soap_session="5213d175-09ff-8e02-485d-e500034010fa"; Path=/;') ]
 )
@@ -5861,7 +5895,7 @@ vmwareRetrieveServiceContentResponseESX35 = HTTPResponse(
 # vSphere 3.5
 vmwareRetrieveServiceContentResponse35 = HTTPResponse(
     vmwareRetrieveServiceContentResponse.data.replace(
-        '<version>4.0.0</version>',
+        '<version>6.0.0</version>',
         '<version>2.5.0</version>'),
     extraHeaders = [ ('Set-Cookie' , 'vmware_soap_session="5213d175-09ff-8e02-485d-e500034010fa"; Path=/;') ]
 )
@@ -5869,7 +5903,7 @@ vmwareRetrieveServiceContentResponse35 = HTTPResponse(
 # vSphere 5.0
 vmwareRetrieveServiceContentResponse50 = HTTPResponse(
     vmwareRetrieveServiceContentResponse.data.replace(
-        '<version>4.0.0</version>',
+        '<version>6.0.0</version>',
         '<version>5.0.0</version>'),
     extraHeaders = [ ('Set-Cookie' , 'vmware_soap_session="5213d175-09ff-8e02-485d-e500034010fa"; Path=/;') ]
 )
@@ -6047,6 +6081,7 @@ vmwareCreateImportSpecRequestTemplate = (
          '<ns1:name>bridged</ns1:name>'
          '<network type="DistributedVirtualPortgroup">dvportgroup-9987</network>'
        '</networkMapping>'
+       '<ns1:diskProvisioning>thin</ns1:diskProvisioning>'
      '</cisp>'
    '</ns1:CreateImportSpec>'
  '</SOAP-ENV:Body>'
@@ -6058,6 +6093,10 @@ vmwareCreateImportSpecRequest1 = vmwareCreateImportSpecRequestTemplate % \
 vmwareCreateImportSpecRequest2 = vmwareCreateImportSpecRequest1.replace(
     '<ns1:entityName>template-some-file-6-1-x86-1</ns1:entityName>',
     '<ns1:entityName>instance-foo</ns1:entityName>')
+
+vmwareCreateImportSpecRequest3 = vmwareCreateImportSpecRequest1.replace(
+    '<ns1:diskProvisioning>thin</ns1:diskProvisioning>',
+    '<ns1:diskProvisioning>twoGbMaxExtentSparse</ns1:diskProvisioning>')
 
 vmwareConfigSpec1 = (
           '<configSpec>'
@@ -6879,6 +6918,7 @@ vmwareSoapData.update({
  vmwareParseDescriptorRequest1 : vmwareParseDescriptorResponse1,
  vmwareCreateImportSpecRequest1 : vmwareCreateImportSpecResponse1,
  vmwareCreateImportSpecRequest2 : vmwareCreateImportSpecResponse1,
+ vmwareCreateImportSpecRequest3 : vmwareCreateImportSpecResponse1,
  vmwareImportVAppRequest1 : vmwareImportVAppResponse1,
  vmwareCreateFilterForHttpNfcLeaseReq1 : vmwareCreateFilterForHttpNfcLeaseResp1,
  vmwareRetrievePropertiesHttpNfcLeaseReq : vmwareRetrievePropertiesHttpNfcLeaseResp,
@@ -7108,12 +7148,9 @@ vmwareReqGetFolderTraversal22 : vmwareResponseGetFolderTraversal22,
  vmwareRetrievePropertiesEnvBrowserReq : vmwareRetrievePropertiesEnvBrowserResp,
 
  vmwareRetrievePropertiesDatastoreSummaryReq : vmwareRetrievePropertiesDatastoreSummaryResponse,
- vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86' :
-     vmwareFindByInventoryPathResp % 'vm-4732',
- vmwareFindByInventoryPathReq % 'template-some-file-6-1-x86-1' :
-     vmwareFindByInventoryPathRespFail,
- vmwareFindByInventoryPathReq % 'instance-foo' :
-     vmwareFindByInventoryPathRespFail,
+ vmwareFindByInventoryPathReq1 : vmwareFindByInventoryPathResp % 'vm-4732',
+ vmwareFindByInventoryPathReq2 : vmwareFindByInventoryPathRespFail,
+ vmwareFindByInventoryPathReq3 : vmwareFindByInventoryPathRespFail,
  vmwareRegisterVMreq : vmwareRegisterVMresp,
  vmwareRegisterVMreq2 : vmwareRegisterVMresp,
  vmwareRetrievePropertiesHostReq : vmwareRetrievePropertiesHostResp,
