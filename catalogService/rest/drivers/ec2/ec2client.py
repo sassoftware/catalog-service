@@ -34,8 +34,8 @@ from boto.exception import EC2ResponseError, S3CreateError, S3ResponseError
 from conary.lib import util
 
 from mint import ec2, helperfuncs
-from jobslave.util import logCall
-from jobslave.generators import bootable_image
+from jobsubordinate.util import logCall
+from jobsubordinate.generators import bootable_image
 
 from catalogService import errors
 from catalogService.rest import baseDriver
