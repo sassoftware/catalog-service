@@ -51,7 +51,7 @@ class DummyTransportDefaults(object):
         },
         'pool.get_all' : mockedData.xenent_pool_get_all1,
         'pool.get_all_records' : mockedData.xenent_listPools1,
-        'pool.get_master' : mockedData.xenent_pool_get_master1,
+        'pool.get_main' : mockedData.xenent_pool_get_main1,
         'task.create' : mockedData.xenent_task_create1,
         'task.get_record' : mockedData.xenent_task_get_record1,
         'task.get_status' : mockedData.xenent_task_get_status1,
